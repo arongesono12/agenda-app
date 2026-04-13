@@ -1,0 +1,163 @@
+'use client'
+import { useState, useEffect, useCallback } from 'react'
+import { Bell, RefreshCw, AlertTriangle, Clock, Calendar } from 'lucide-react'
+import {
+  normalizarTareas,
+  SEMAFORO_PROXIMA,
+  SEMAFORO_URGENTE,
+  SEMAFORO_VENCIDA,
+  supabase,
+} from '@/lib/supabase'
+import type { Tarea } from '@/lib/types'
+import { formatDateShort } from '@/lib/utils'
+import PageHeader from '@/components/ui/PageHeader'
+import { PrioridadBadge, EstadoBadge } from '@/components/ui/Badge'
+import ProgressBar from '@/components/ui/ProgressBar'
+import KPICard from '@/components/ui/KPICard'
+
+export default function AlertasPage() {
+  const [tasks, setTasks] = useState<Tarea[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const fetch = useCallback(async () => {
+    setLoading(true)
+    const { data } = await supabase
+      .from('tareas')
+      .select('*')
+      .not('estado', 'in', '("Completado","Cancelado")')
+      .order('fecha_fin', { ascending: true })
+    setTasks(normalizarTareas(data as Tarea[] | null))
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetch()
+  }, [fetch])
+
+  const vencidas = tasks.filter((t) => t.semaforo === SEMAFORO_VENCIDA)
+  const urgentes = tasks.filter((t) => t.semaforo === SEMAFORO_URGENTE)
+  const proximas = tasks.filter((t) => t.semaforo === SEMAFORO_PROXIMA)
+
+  const AlertCard = ({ task, accent }: { task: Tarea; accent: string }) => (
+    <div className="surface-panel p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className={`inline-flex h-2.5 w-2.5 rounded-full ${accent}`} />
+            <PrioridadBadge value={task.prioridad} />
+            <EstadoBadge value={task.estado} />
+          </div>
+          <p className="line-clamp-2 text-sm font-semibold text-slate-900">{task.tarea}</p>
+          {(task.departamento || task.responsable) && (
+            <p className="mt-2 text-xs text-slate-500">
+              {[task.departamento, task.responsable].filter(Boolean).join(' · ')}
+            </p>
+          )}
+        </div>
+        <div className="rounded-[20px] border border-white/70 bg-white/70 px-3 py-2 text-right">
+          <p className="text-xs font-semibold text-slate-500">{formatDateShort(task.fecha_fin)}</p>
+          {task.dias_restantes !== null && task.dias_restantes !== undefined && (
+            <p className={task.dias_restantes < 0 ? 'mt-1 text-xs font-semibold text-rose-500' : task.dias_restantes <= 2 ? 'mt-1 text-xs font-semibold text-amber-500' : 'mt-1 text-xs font-semibold text-sky-600'}>
+              {task.dias_restantes < 0 ? `${Math.abs(task.dias_restantes)}d vencida` : `${task.dias_restantes}d restantes`}
+            </p>
+          )}
+        </div>
+      </div>
+      <ProgressBar value={task.porcentaje_avance} showLabel className="mt-4" size="md" />
+    </div>
+  )
+
+  const Section = ({
+    title,
+    subtitle,
+    items,
+    accent,
+    icon,
+  }: {
+    title: string
+    subtitle: string
+    items: Tarea[]
+    accent: string
+    icon: React.ReactNode
+  }) => (
+    <div className="space-y-3">
+      <div className="surface-panel p-4">
+        <div className="flex items-center gap-3">
+          <div className={`flex h-11 w-11 items-center justify-center rounded-[20px] ${accent}`}>
+            {icon}
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{title}</p>
+            <p className="text-xs text-slate-500">{subtitle}</p>
+          </div>
+          <span className="ml-auto rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">{items.length}</span>
+        </div>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="surface-panel p-8 text-center text-sm text-slate-500">Sin tareas en esta categoria.</div>
+      ) : (
+        <div className="space-y-3">
+          {items.map((task) => (
+            <AlertCard
+              key={task.id}
+              task={task}
+              accent={title === 'Vencidas' ? 'bg-rose-500' : title === 'Urgentes' ? 'bg-amber-500' : 'bg-sky-500'}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        title="Centro de alertas"
+        subtitle="Prioriza tareas con mayor riesgo operativo y detecta vencimientos antes de que afecten la ejecucion."
+        icon={<Bell size={22} />}
+        actions={
+          <button onClick={fetch} className="action-btn h-12 w-12 rounded-2xl p-0">
+            <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
+          </button>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <KPICard label="Vencidas" value={vencidas.length} icon={<AlertTriangle size={18} />} color="red" />
+        <KPICard label="Urgentes (<= 2 dias)" value={urgentes.length} icon={<Clock size={18} />} color="amber" />
+        <KPICard label="Proximas (<= 5 dias)" value={proximas.length} icon={<Calendar size={18} />} color="blue" />
+      </div>
+
+      {loading ? (
+        <div className="surface-panel py-24 text-center">
+          <RefreshCw size={24} className="mx-auto animate-spin text-teal-600" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Section
+            title="Vencidas"
+            subtitle="Atencion inmediata requerida"
+            items={vencidas}
+            accent="bg-rose-500/12 text-rose-600"
+            icon={<AlertTriangle size={18} />}
+          />
+          <Section
+            title="Urgentes"
+            subtitle="Vencen muy pronto"
+            items={urgentes}
+            accent="bg-amber-500/12 text-amber-600"
+            icon={<Clock size={18} />}
+          />
+          <Section
+            title="Proximas"
+            subtitle="Seguimiento preventivo"
+            items={proximas}
+            accent="bg-sky-500/12 text-sky-600"
+            icon={<Calendar size={18} />}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
