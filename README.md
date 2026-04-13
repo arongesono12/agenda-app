@@ -1,4 +1,4 @@
-# Control Automatizado - Agenda Empresarial
+# Control Automatizado - Plan de Trabajo
 
 Sistema de gestion de tareas y seguimiento operativo construido con Next.js y Supabase.
 

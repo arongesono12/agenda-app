@@ -49,7 +49,7 @@ function BrandMark({ className = '' }: { className?: string }) {
     >
       <Image
         src="/logo/Icon-S.png"
-        alt="Logo de Agenda empresarial"
+        alt="Logo de Plan de Trabajo"
         fill
         sizes="(max-width: 640px) 40px, (max-width: 1024px) 44px, 52px"
         className="object-contain p-1.5 sm:p-2"
@@ -108,7 +108,7 @@ function SidebarContent({
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-teal-700">
                 Control ejecutivo
               </p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">Agenda empresarial</p>
+              <p className="mt-1 text-lg font-semibold text-slate-900">Plan de Trabajo</p>
             </div>
           </div>
           {showClose && onClose && (
@@ -203,25 +203,29 @@ function SidebarContent({
 export default function Sidebar() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  const activeItem = useMemo(
+    () => navItems.find((item) => pathname === item.href)?.label ?? 'Panel',
+    [pathname]
+  )
 
   return (
     <>
-      <div className="no-print fixed left-4 right-4 top-4 z-40 lg:hidden">
-        <div className="surface-panel flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <BrandMark className="h-11 w-11 sm:h-12 sm:w-12" />
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-                Agenda empresarial
+      <div className="mobile-topbar no-print fixed inset-x-0 top-0 z-40 lg:hidden">
+        <div className="mobile-topbar-inner mx-auto flex w-full max-w-[1560px] items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.8rem)] sm:px-6">
+          <div className="min-w-0 flex items-center gap-3">
+            <BrandMark className="h-11 w-11 flex-shrink-0" />
+            <div className="min-w-0">
+              <p className="truncate text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Plan de Trabajo
               </p>
-              <p className="text-sm font-semibold text-slate-900">Control operativo</p>
+              <p className="truncate text-sm font-semibold text-slate-900">{activeItem}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <ThemeToggle className="h-11 w-11 rounded-2xl p-0 sm:w-auto sm:px-3" />
+            <ThemeToggle className="mobile-topbar-btn h-11 w-11 rounded-2xl p-0 sm:w-auto sm:px-3" />
             <button
               onClick={() => setOpen(true)}
-              className="action-btn h-11 w-11 rounded-2xl p-0"
+              className="mobile-topbar-btn flex h-11 w-11 items-center justify-center rounded-2xl"
               aria-label="Abrir menu"
             >
               <Menu size={18} />

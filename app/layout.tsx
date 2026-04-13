@@ -19,7 +19,7 @@ const poppinsDisplay = Poppins({
 })
 
 export const metadata: Metadata = {
-  title: 'Control Automatizado - Agenda Empresarial',
+  title: 'Control Automatizado - Plan de Trabajo',
   description: 'Sistema de gestion de tareas, alertas y seguimiento operativo.',
 }
 
