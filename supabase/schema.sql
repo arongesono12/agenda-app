@@ -187,9 +187,24 @@ CREATE INDEX IF NOT EXISTS idx_tareas_prioridad ON tareas(prioridad);
 CREATE INDEX IF NOT EXISTS idx_tareas_fecha_fin ON tareas(fecha_fin);
 CREATE INDEX IF NOT EXISTS idx_historial_fecha ON historial(fecha DESC);
 
--- RLS (Row Level Security) - habilitar si usas auth
--- ALTER TABLE tareas ENABLE ROW LEVEL SECURITY;
--- CREATE POLICY "Public access" ON tareas FOR ALL USING (true);
+-- RLS (Row Level Security) - acceso público sin autenticación
+ALTER TABLE tareas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE departamentos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE responsables ENABLE ROW LEVEL SECURITY;
+ALTER TABLE historial ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alertas ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public access tareas" ON tareas;
+DROP POLICY IF EXISTS "Public access departamentos" ON departamentos;
+DROP POLICY IF EXISTS "Public access responsables" ON responsables;
+DROP POLICY IF EXISTS "Public access historial" ON historial;
+DROP POLICY IF EXISTS "Public access alertas" ON alertas;
+
+CREATE POLICY "Public access tareas" ON tareas FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public access departamentos" ON departamentos FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public access responsables" ON responsables FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public access historial" ON historial FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public access alertas" ON alertas FOR ALL USING (true) WITH CHECK (true);
 
 -- Vista de estadísticas por departamento
 CREATE OR REPLACE VIEW stats_departamento AS
