@@ -1,11 +1,12 @@
 'use client'
 import { useState, useCallback } from 'react'
-import { Search, SlidersHorizontal, X, Loader2 } from 'lucide-react'
+import { Search, SlidersHorizontal, X, Loader2, History } from 'lucide-react'
 import { normalizarTareas, supabase } from '@/lib/supabase'
 import type { Tarea } from '@/lib/types'
 import { DEPARTAMENTOS, PRIORIDADES, ESTADOS, TIPOS_TAREA } from '@/lib/types'
 import { formatDateShort } from '@/lib/utils'
 import PageHeader from '@/components/ui/PageHeader'
+import TaskHistorialModal from '@/components/TaskHistorialModal'
 import { PrioridadBadge, EstadoBadge, TipoBadge, SemaforoBadge } from '@/components/ui/Badge'
 import ProgressBar from '@/components/ui/ProgressBar'
 
@@ -16,6 +17,7 @@ export default function BusquedaPage() {
   const [results, setResults] = useState<Tarea[]>([])
   const [searched, setSearched] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [historialTask, setHistorialTask] = useState<Tarea | null>(null)
 
   const set = (k: string, v: string) => setFilters((f) => ({ ...f, [k]: v }))
 
@@ -28,7 +30,17 @@ export default function BusquedaPage() {
     if (filters.estado) q = q.eq('estado', filters.estado)
     if (filters.tipo) q = q.eq('tipo_tarea', filters.tipo)
     if (filters.responsable) q = q.ilike('responsable', `%${filters.responsable}%`)
-    if (filters.q) q = q.ilike('tarea', `%${filters.q}%`)
+    if (filters.q) {
+      const term = filters.q.trim()
+      const numericId = Number(term)
+      if (!isNaN(numericId) && term !== '' && Number.isInteger(numericId)) {
+        // Si es número: buscar por descripción, id o codigo_id
+        q = q.or(`tarea.ilike.%${term}%,id.eq.${numericId},codigo_id.eq.${numericId}`)
+      } else {
+        // Si es texto: buscar por descripción
+        q = q.ilike('tarea', `%${term}%`)
+      }
+    }
     if (filters.fecha_desde) q = q.gte('fecha_fin', filters.fecha_desde)
     if (filters.fecha_hasta) q = q.lte('fecha_fin', filters.fecha_hasta)
     const { data } = await q.order('created_at', { ascending: false })
@@ -71,7 +83,7 @@ export default function BusquedaPage() {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="sm:col-span-2">
-            <label className="label-field">Buscar en descripcion</label>
+            <label className="label-field">Buscar por descripcion, ID o codigo</label>
             <div className="relative">
               <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -79,7 +91,7 @@ export default function BusquedaPage() {
                 value={filters.q}
                 onChange={(e) => set('q', e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && search()}
-                placeholder="Escribe texto de la tarea..."
+                placeholder="Descripcion de la tarea, ID (#42) o codigo manual..."
                 className="input-shell pl-11"
               />
             </div>
@@ -151,11 +163,51 @@ export default function BusquedaPage() {
               <p className="mt-3 text-sm text-slate-600">No se encontraron tareas con esos criterios.</p>
             </div>
           ) : (
+            <>
+            <div className="mobile-card-list p-4 md:hidden">
+              {results.map((t) => (
+                <article key={t.id} className="mobile-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="mobile-card-meta">ID #{t.codigo_id ?? t.id}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">{t.tarea}</p>
+                    </div>
+                    <PrioridadBadge value={t.prioridad} />
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <EstadoBadge value={t.estado} />
+                    <TipoBadge value={t.tipo_tarea} />
+                    <SemaforoBadge value={t.semaforo} />
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500">
+                    <div>
+                      <p className="font-semibold text-slate-700">Responsable</p>
+                      <p className="mt-1">{t.responsable ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-700">Fecha fin</p>
+                      <p className="mt-1">{formatDateShort(t.fecha_fin)}</p>
+                    </div>
+                  </div>
+
+                  <ProgressBar value={t.porcentaje_avance} showLabel className="mt-4" size="md" />
+
+                  <button onClick={() => setHistorialTask(t)} className="action-btn mt-4 w-full justify-center" title="Historial">
+                    <History size={14} />
+                    Historial
+                  </button>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden md:block">
             <div className="table-container">
               <table className="w-full min-w-[980px] text-sm">
                 <thead>
                   <tr className="border-b border-white/70 bg-white/40">
-                    {['Tarea', 'Prioridad', 'Departamento', 'Responsable', 'Fecha fin', 'Avance', 'Semaforo', 'Estado', 'Tipo'].map((h) => (
+                    {['ID', 'Tarea', 'Prioridad', 'Departamento', 'Responsable', 'Fecha fin', 'Avance', 'Semaforo', 'Estado', 'Tipo', 'Acciones'].map((h) => (
                       <th key={h} className="table-header-cell whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -163,6 +215,7 @@ export default function BusquedaPage() {
                 <tbody className="divide-y divide-slate-100/80">
                   {results.map((t, index) => (
                     <tr key={t.id} className={index % 2 === 0 ? 'bg-white/10 hover:bg-white/50' : 'bg-white/30 hover:bg-white/60'}>
+                      <td className="px-4 py-3 text-xs font-semibold text-slate-400">{t.codigo_id ?? t.id}</td>
                       <td className="px-4 py-3 max-w-xs">
                         <p className="line-clamp-2 text-sm font-semibold text-slate-800">{t.tarea}</p>
                       </td>
@@ -174,13 +227,28 @@ export default function BusquedaPage() {
                       <td className="px-4 py-3"><SemaforoBadge value={t.semaforo} /></td>
                       <td className="px-4 py-3"><EstadoBadge value={t.estado} /></td>
                       <td className="px-4 py-3"><TipoBadge value={t.tipo_tarea} /></td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => setHistorialTask(t)}
+                          className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-teal-600"
+                          title="Historial"
+                        >
+                          <History size={14} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+            </div>
+            </>
           )}
         </div>
+      )}
+
+      {historialTask && (
+        <TaskHistorialModal task={historialTask} onClose={() => setHistorialTask(null)} />
       )}
     </div>
   )

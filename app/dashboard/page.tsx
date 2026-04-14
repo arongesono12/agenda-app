@@ -134,7 +134,7 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-7">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-7">
         <KPICard label="Total tareas" value={kpis.total} icon={<Target size={18} />} color="slate" />
         <KPICard label="Completadas" value={kpis.completadas} icon={<CheckCircle2 size={18} />} color="teal" />
         <KPICard label="En proceso" value={kpis.enProceso} icon={<Clock size={18} />} color="blue" />

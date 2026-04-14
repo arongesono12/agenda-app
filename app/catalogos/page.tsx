@@ -105,17 +105,19 @@ export default function CatalogosPage() {
         }
       />
 
-      <div className="surface-panel inline-flex w-fit gap-2 p-2">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={tab === t.key ? 'action-btn-primary px-4 py-2.5' : 'action-btn border-transparent bg-transparent px-4 py-2.5 shadow-none'}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
+      <div className="surface-panel w-full overflow-x-auto p-2">
+        <div className="inline-flex min-w-full gap-2">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={tab === t.key ? 'action-btn-primary min-w-max px-4 py-2.5' : 'action-btn min-w-max border-transparent bg-transparent px-4 py-2.5 shadow-none'}
+            >
+              {t.icon}
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === 'deptos' && (

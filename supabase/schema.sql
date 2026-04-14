@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS historial (
 CREATE TABLE IF NOT EXISTS alertas (
   id BIGSERIAL PRIMARY KEY,
   tarea_id BIGINT REFERENCES tareas(id) ON DELETE CASCADE,
-  tipo_alerta TEXT NOT NULL CHECK (tipo_alerta IN ('Vencida', 'Urgente', U&'Pr\00F3xima')),
+  tipo_alerta TEXT NOT NULL CHECK (tipo_alerta IN ('Vencida', 'Urgente', 'Próxima')),
   fecha_alerta DATE DEFAULT CURRENT_DATE,
   leida BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -92,14 +92,14 @@ CREATE TABLE IF NOT EXISTS alertas (
 -- Insertar datos de catálogos
 INSERT INTO departamentos (nombre) VALUES
   ('Gabinete'),
-  (U&'Coordinaci\00F3n'),
-  (U&'Servicios T\00E9cnicos'),
+  (U&'Coordinación'),
+  (U&'Servicios Técnicos'),
   ('Servicios Comerciales'),
-  (U&'Asesor\00EDa Jur\00EDdica'),
+  (U&'Asesoría Jurídica'),
   ('Servicios Financieros'),
   ('RRHH'),
-  (U&'Suministro y Log\00EDstica'),
-  (U&'Servicios Inform\00E1ticos'),
+  (U&'Suministro y Logística'),
+  (U&'Servicios Informáticos'),
   ('Consejeros'),
   ('Asesores')
 ON CONFLICT (nombre) DO NOTHING;
@@ -117,7 +117,7 @@ BEGIN
     WHEN NEW.fecha_fin IS NULL THEN U&'\26AA Sin fecha'
     WHEN NEW.fecha_fin < CURRENT_DATE THEN U&'\+01F534 Vencida'
     WHEN NEW.fecha_fin <= CURRENT_DATE + 2 THEN U&'\+01F7E0 Urgente'
-    WHEN NEW.fecha_fin <= CURRENT_DATE + 5 THEN U&'\+01F7E1 Pr\00F3xima'
+    WHEN NEW.fecha_fin <= CURRENT_DATE + 5 THEN U&'\+01F7E1 Próxima'
     ELSE U&'\+01F7E2 A tiempo'
   END;
 
@@ -149,7 +149,7 @@ RETURNS TRIGGER AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     INSERT INTO historial (tarea_id, tarea_nombre, tipo_cambio, valor_nuevo)
-    VALUES (NEW.id, NEW.tarea, U&'Creaci\00F3n', NEW.estado);
+    VALUES (NEW.id, NEW.tarea, U&'Creación', NEW.estado);
   ELSIF TG_OP = 'UPDATE' THEN
     IF OLD.estado != NEW.estado THEN
       INSERT INTO historial (tarea_id, tarea_nombre, tipo_cambio, valor_anterior, valor_nuevo)
@@ -160,14 +160,14 @@ BEGIN
       VALUES (
         NEW.id,
         NEW.tarea,
-        U&'Actualizaci\00F3n % Avance',
+        U&'Actualización % Avance',
         OLD.porcentaje_avance::TEXT || '%',
         NEW.porcentaje_avance::TEXT || '%'
       );
     END IF;
   ELSIF TG_OP = 'DELETE' THEN
     INSERT INTO historial (tarea_nombre, tipo_cambio, valor_anterior)
-    VALUES (OLD.tarea, U&'Eliminaci\00F3n', OLD.estado);
+    VALUES (OLD.tarea, U&'Eliminación', OLD.estado);
   END IF;
   RETURN COALESCE(NEW, OLD);
 END;
@@ -199,12 +199,17 @@ DROP POLICY IF EXISTS "Public access departamentos" ON departamentos;
 DROP POLICY IF EXISTS "Public access responsables" ON responsables;
 DROP POLICY IF EXISTS "Public access historial" ON historial;
 DROP POLICY IF EXISTS "Public access alertas" ON alertas;
+DROP POLICY IF EXISTS "Authenticated access tareas" ON tareas;
+DROP POLICY IF EXISTS "Authenticated access departamentos" ON departamentos;
+DROP POLICY IF EXISTS "Authenticated access responsables" ON responsables;
+DROP POLICY IF EXISTS "Authenticated access historial" ON historial;
+DROP POLICY IF EXISTS "Authenticated access alertas" ON alertas;
 
-CREATE POLICY "Public access tareas" ON tareas FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access departamentos" ON departamentos FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access responsables" ON responsables FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access historial" ON historial FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public access alertas" ON alertas FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated access tareas" ON tareas FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated access departamentos" ON departamentos FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated access responsables" ON responsables FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated access historial" ON historial FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated access alertas" ON alertas FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Vista de estadísticas por departamento
 CREATE OR REPLACE VIEW stats_departamento AS

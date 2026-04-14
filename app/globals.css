@@ -188,7 +188,7 @@ body {
 
   @media (max-width: 1023px) {
     .page-shell {
-      padding-top: calc(env(safe-area-inset-top) + 5.75rem);
+      padding-top: calc(env(safe-area-inset-top) + 6.15rem);
     }
   }
 
@@ -289,6 +289,7 @@ body {
   .table-container {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable both-edges;
   }
 
   .table-header-cell {
@@ -363,6 +364,18 @@ body {
 
   .mobile-topbar-btn:hover {
     transform: translateY(-1px);
+  }
+
+  .mobile-card-list {
+    @apply space-y-3;
+  }
+
+  .mobile-card {
+    @apply rounded-[24px] border border-white/80 bg-white/75 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.06)];
+  }
+
+  .mobile-card-meta {
+    @apply text-xs text-slate-500;
   }
 
   .progress-bar {
@@ -441,7 +454,8 @@ html[data-theme='dark'] .logo-panel {
 html[data-theme='dark'] .bg-white\/70,
 html[data-theme='dark'] .bg-white\/60,
 html[data-theme='dark'] .bg-white\/55,
-html[data-theme='dark'] .bg-slate-50\/80 {
+html[data-theme='dark'] .bg-slate-50\/80,
+html[data-theme='dark'] .mobile-card {
   background-color: var(--soft-card-strong) !important;
   box-shadow: var(--soft-card-shadow) !important;
 }

@@ -1,6 +1,7 @@
 export type Prioridad = 'Alta' | 'Media' | 'Baja'
 export type Estado = 'Pendiente' | 'En Proceso' | 'Completado' | 'Cancelado'
 export type TipoTarea = string
+export type TipoOrden = 'Orden' | 'Nota' | 'Avance' | 'Cambio de Estado' | 'Incidencia' | 'Recordatorio'
 export type Semaforo =
   '\u{1F534} Vencida' |
   '\u{1F7E0} Urgente' |
@@ -73,6 +74,7 @@ export const DEPARTAMENTOS = [
 export const PRIORIDADES: Prioridad[] = ['Alta', 'Media', 'Baja']
 export const ESTADOS: Estado[] = ['Pendiente', 'En Proceso', 'Completado', 'Cancelado']
 export const TIPOS_TAREA: TipoTarea[] = ['Estrat\u00E9gica', 'T\u00E9cnica', 'Administrativa', 'Comercial', 'Operativa']
+export const TIPOS_ORDEN: TipoOrden[] = ['Orden', 'Nota', 'Avance', 'Cambio de Estado', 'Incidencia', 'Recordatorio']
 
 export const PRIORIDAD_COLORS: Record<Prioridad, string> = {
   Alta: 'bg-red-50 text-red-700 border-red-200',

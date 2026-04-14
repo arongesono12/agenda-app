@@ -71,7 +71,7 @@ export default function ResponsablePage() {
 
       {selected && (
         <>
-          <div className="grid grid-cols-2 gap-4 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <KPICard label="Total tareas" value={kpis.total} icon={<Target size={18} />} color="slate" />
             <KPICard label="En proceso" value={kpis.enProceso} icon={<Clock size={18} />} color="blue" />
             <KPICard label="Completadas" value={kpis.completadas} icon={<CheckCircle2 size={18} />} color="teal" />
@@ -88,6 +88,35 @@ export default function ResponsablePage() {
             {myTasks.length === 0 ? (
               <div className="py-20 text-center text-sm text-slate-500">Sin tareas asignadas.</div>
             ) : (
+              <>
+              <div className="mobile-card-list p-4 md:hidden">
+                {myTasks.map((t) => (
+                  <article key={t.id} className="mobile-card">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="min-w-0 text-sm font-semibold text-slate-800">{t.tarea}</p>
+                      <PrioridadBadge value={t.prioridad} />
+                    </div>
+                    {t.notas && <p className="mt-2 text-xs text-slate-500">{t.notas}</p>}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <EstadoBadge value={t.estado} />
+                      <SemaforoBadge value={t.semaforo} />
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500">
+                      <div>
+                        <p className="font-semibold text-slate-700">Departamento</p>
+                        <p className="mt-1">{t.departamento ?? '-'}</p>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-700">Fecha fin</p>
+                        <p className="mt-1">{formatDateShort(t.fecha_fin)}</p>
+                      </div>
+                    </div>
+                    <ProgressBar value={t.porcentaje_avance} showLabel className="mt-4" size="md" />
+                  </article>
+                ))}
+              </div>
+
+              <div className="hidden md:block">
               <div className="table-container">
                 <table className="w-full min-w-[900px] text-sm">
                   <thead>
@@ -115,6 +144,8 @@ export default function ResponsablePage() {
                   </tbody>
                 </table>
               </div>
+              </div>
+              </>
             )}
           </div>
         </>

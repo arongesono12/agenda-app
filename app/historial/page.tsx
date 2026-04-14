@@ -87,6 +87,36 @@ export default function HistorialPage() {
           </div>
         ) : (
           <>
+            <div className="mobile-card-list p-4 md:hidden">
+              {rows.map((row) => (
+                <article key={row.id} className="mobile-card">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`badge ${CHANGE_COLOR[row.tipo_cambio] ?? 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+                      {row.tipo_cambio}
+                    </span>
+                    <span className="text-xs text-slate-500">{formatDateTime(row.fecha)}</span>
+                  </div>
+                  <p className="mt-3 text-sm font-semibold text-slate-800">{row.tarea_nombre ?? '-'}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-500">
+                    <div>
+                      <p className="font-semibold text-slate-700">Usuario</p>
+                      <p className="mt-1">{row.usuario ?? 'Sistema'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-700">Módulo</p>
+                      <p className="mt-1">{row.modulo}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    <p><span className="font-semibold text-slate-700">Anterior:</span> {row.valor_anterior ?? '-'}</p>
+                    <p className="mt-1"><span className="font-semibold text-slate-700">Nuevo:</span> {row.valor_nuevo ?? '-'}</p>
+                  </div>
+                  <p className="mt-3 text-xs leading-6 text-slate-500">{row.observaciones ?? '-'}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden md:block">
             <div className="table-container">
               <table className="w-full min-w-[1180px] text-sm">
                 <thead>
@@ -126,6 +156,7 @@ export default function HistorialPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
             </div>
 
             {totalPages > 1 && (

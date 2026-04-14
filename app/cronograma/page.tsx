@@ -64,6 +64,7 @@ export default function CronogramaPage() {
   }
 
   const colW = 32
+  const visibleTasks = tasks.filter((task) => getBar(task))
 
   return (
     <div className="page-stack">
@@ -110,7 +111,43 @@ export default function CronogramaPage() {
             <RefreshCw size={24} className="mx-auto animate-spin text-teal-500" />
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="mobile-card-list p-4 md:hidden">
+            {visibleTasks.length === 0 ? (
+              <div className="mobile-card text-center text-sm text-slate-500">
+                No hay tareas con fechas asignadas para este mes.
+              </div>
+            ) : (
+              visibleTasks.map((task) => (
+                <article key={task.id} className="mobile-card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800">{task.tarea}</p>
+                      <p className="mt-1 text-xs text-slate-500">{task.responsable ?? 'Sin responsable'}</p>
+                    </div>
+                    <span className={`badge text-white ${STATUS_COLOR[task.estado] ?? 'bg-slate-300 text-slate-700'}`}>
+                      {task.estado}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500">
+                    <div>
+                      <p className="font-semibold text-slate-700">Inicio</p>
+                      <p className="mt-1">{task.fecha_inicio ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-700">Fin</p>
+                      <p className="mt-1">{task.fecha_fin ?? '-'}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    Avance programado: <span className="font-semibold text-slate-800">{task.porcentaje_avance}%</span>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <div style={{ minWidth: 240 + daysCount * colW }}>
               <div className="sticky top-0 z-10 flex border-b border-slate-200 bg-slate-50">
                 <div className="w-60 flex-shrink-0 border-r border-slate-200 px-4 py-2 text-xs font-semibold text-slate-500">
@@ -186,6 +223,7 @@ export default function CronogramaPage() {
               )}
             </div>
           </div>
+          </>
         )}
       </div>
     </div>

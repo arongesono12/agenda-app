@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Pencil,
   Trash2,
+  History,
   ChevronDown,
   Search,
   Filter,
@@ -30,6 +31,7 @@ import { PrioridadBadge, EstadoBadge, TipoBadge, SemaforoBadge } from '@/compone
 import ProgressBar from '@/components/ui/ProgressBar'
 import KPICard from '@/components/ui/KPICard'
 import TaskModal from '@/components/TaskModal'
+import TaskHistorialModal from '@/components/TaskHistorialModal'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -41,6 +43,7 @@ export default function AgendaDiariaPage() {
   const [filters, setFilters] = useState(INIT_FILTERS)
   const [showFilters, setShowFilters] = useState(false)
   const [modalTask, setModalTask] = useState<Tarea | null | undefined>(undefined)
+  const [historialTask, setHistorialTask] = useState<Tarea | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const today = format(new Date(), "EEEE d 'de' MMMM, yyyy", { locale: es })
 
@@ -106,7 +109,7 @@ export default function AgendaDiariaPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 xl:grid-cols-7">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-7">
         <KPICard label="Total" value={kpis.total} icon={<Target size={18} />} color="slate" />
         <KPICard label="Pendientes" value={kpis.pendientes} icon={<Clock3 size={18} />} color="slate" />
         <KPICard label="En proceso" value={kpis.enProceso} icon={<RefreshCw size={18} />} color="blue" />
@@ -198,6 +201,62 @@ export default function AgendaDiariaPage() {
             <p className="mt-1 text-xs text-slate-500">Prueba con otros filtros o crea una nueva tarea.</p>
           </div>
         ) : (
+          <>
+          <div className="mobile-card-list p-4 md:hidden">
+            {filtered.map((t) => (
+              <article key={t.id} className="mobile-card">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="mobile-card-meta">ID #{t.codigo_id ?? t.id}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">{t.tarea}</p>
+                    {t.seccion && <p className="mt-1 text-xs text-slate-500">{t.seccion}</p>}
+                  </div>
+                  <PrioridadBadge value={t.prioridad} />
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <EstadoBadge value={t.estado} />
+                  <TipoBadge value={t.tipo_tarea} />
+                  <SemaforoBadge value={t.semaforo} />
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500">
+                  <div>
+                    <p className="font-semibold text-slate-700">Responsable</p>
+                    <p className="mt-1">{t.responsable ?? '-'}</p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-700">Fecha fin</p>
+                    <p className="mt-1">{formatDateShort(t.fecha_fin)}</p>
+                  </div>
+                </div>
+
+                <ProgressBar value={t.porcentaje_avance} showLabel className="mt-4" size="md" />
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button onClick={() => setHistorialTask(t)} className="action-btn flex-1 justify-center" title="Historial">
+                    <History size={14} />
+                    Historial
+                  </button>
+                  <button onClick={() => setModalTask(t)} className="action-btn flex-1 justify-center" title="Editar">
+                    <Pencil size={14} />
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => handleDelete(t.id)}
+                    disabled={deletingId === t.id}
+                    className="action-btn flex-1 justify-center text-rose-600 disabled:opacity-40"
+                    title="Eliminar"
+                  >
+                    <Trash2 size={14} />
+                    Eliminar
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="hidden md:block">
           <div className="table-container">
             <table className="w-full min-w-[1100px] text-sm">
               <thead>
@@ -210,7 +269,7 @@ export default function AgendaDiariaPage() {
               <tbody className="divide-y divide-slate-100/80">
                 {filtered.map((t, i) => (
                   <tr key={t.id} className={i % 2 === 0 ? 'bg-white/10 transition-colors hover:bg-white/50' : 'bg-white/30 transition-colors hover:bg-white/60'}>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-400">#{t.codigo_id ?? t.id}</td>
+                    <td className="px-4 py-3 text-xs font-semibold text-slate-400">{t.codigo_id ?? t.id}</td>
                     <td className="px-4 py-3 max-w-xs">
                       <p className="line-clamp-2 text-sm font-semibold leading-6 text-slate-800">{t.tarea}</p>
                       {t.seccion && <p className="mt-1 text-xs text-slate-500">{t.seccion}</p>}
@@ -235,6 +294,13 @@ export default function AgendaDiariaPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
+                          onClick={() => setHistorialTask(t)}
+                          className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-teal-600"
+                          title="Historial"
+                        >
+                          <History size={14} />
+                        </button>
+                        <button
                           onClick={() => setModalTask(t)}
                           className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-sky-600"
                           title="Editar"
@@ -256,11 +322,16 @@ export default function AgendaDiariaPage() {
               </tbody>
             </table>
           </div>
+          </div>
+          </>
         )}
       </div>
 
       {modalTask !== undefined && (
         <TaskModal task={modalTask} onClose={() => setModalTask(undefined)} onSave={fetchTasks} />
+      )}
+      {historialTask && (
+        <TaskHistorialModal task={historialTask} onClose={() => setHistorialTask(null)} />
       )}
     </div>
   )

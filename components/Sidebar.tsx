@@ -1,7 +1,7 @@
 'use client'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useMemo, useState, useEffect } from 'react'
 import {
   supabase,
@@ -18,6 +18,7 @@ import {
   GanttChartSquare,
   History,
   LayoutDashboard,
+  LogOut,
   Menu,
   Search,
   Settings,
@@ -76,6 +77,9 @@ function SidebarContent({
   )
 
   const [alertCount, setAlertCount] = useState(0)
+  const [userEmail, setUserEmail] = useState('Cargando sesión...')
+  const [signingOut, setSigningOut] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     const fetchAlerts = async () => {
@@ -97,6 +101,34 @@ function SidebarContent({
     }
     fetchAlerts()
   }, [])
+
+  useEffect(() => {
+    const syncUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      setUserEmail(user?.email ?? 'Sesión activa')
+    }
+
+    syncUser()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUserEmail(session?.user?.email ?? 'Sesión activa')
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    await supabase.auth.signOut()
+    router.replace('/login')
+    router.refresh()
+    setSigningOut(false)
+  }
 
   return (
     <div className="surface-panel-strong flex h-full min-h-0 flex-col overflow-hidden p-4 text-slate-900">
@@ -182,9 +214,10 @@ function SidebarContent({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-              Vista actual
+              Sesión activa
             </p>
-            <p className="mt-1 truncate text-sm font-semibold text-slate-900">{activeItem}</p>
+            <p className="mt-1 truncate text-sm font-semibold text-slate-900">{userEmail}</p>
+            <p className="mt-1 truncate text-xs text-slate-500">Vista actual: {activeItem}</p>
           </div>
           <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/70">
             <User size={16} className="text-slate-700" />
@@ -195,6 +228,15 @@ function SidebarContent({
           Sistema activo y sincronizado
         </div>
         <ThemeToggle className="mt-4 w-full justify-center border-white/70 bg-white/70 text-slate-700 hover:bg-white hover:text-slate-900" />
+        <button
+          type="button"
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="action-btn-ghost mt-3 w-full justify-center disabled:opacity-60"
+        >
+          <LogOut size={16} />
+          {signingOut ? 'Cerrando sesión...' : 'Cerrar sesión'}
+        </button>
       </div>
     </div>
   )
