@@ -370,7 +370,7 @@ export default function AgendaDiariaPage() {
         <TaskModal task={modalTask} onClose={() => setModalTask(undefined)} onSave={fetchTasks} />
       )}
       {historialTask && (
-        <TaskHistorialModal task={historialTask} onClose={() => setHistorialTask(null)} />
+        <TaskHistorialModal task={historialTask} onClose={() => setHistorialTask(null)} onUpdate={fetchTasks} />
       )}
       <ConfirmDialog
         open={!!taskToDelete}

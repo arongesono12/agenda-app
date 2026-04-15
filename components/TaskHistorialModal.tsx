@@ -12,6 +12,7 @@ import { useUserSession } from '@/components/UserSessionProvider'
 interface TaskHistorialModalProps {
   task: Tarea
   onClose: () => void
+  onUpdate?: () => void
 }
 
 const CHANGE_COLOR: Record<string, string> = {
@@ -37,7 +38,7 @@ const EMPTY_FORM: { tipo_cambio: TipoOrden; observaciones: string; valor_nuevo: 
   valor_nuevo: '',
 }
 
-export default function TaskHistorialModal({ task, onClose }: TaskHistorialModalProps) {
+export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHistorialModalProps) {
   const { canEditAgenda } = useUserSession()
   const [rows, setRows] = useState<Historial[]>([])
   const [loading, setLoading] = useState(true)
@@ -111,6 +112,24 @@ export default function TaskHistorialModal({ task, onClose }: TaskHistorialModal
     setSubmitting(true)
     setError('')
 
+    let nuevoPorcentaje: number | null = null
+
+    const isFinalizado = valorNuevo.toLowerCase().includes('completado') || valorNuevo.toLowerCase().includes('finalizado')
+    const isChangeState = form.tipo_cambio === 'Cambio de Estado'
+
+    if (isChangeState && isFinalizado) {
+      nuevoPorcentaje = 100
+    } else if ((form.tipo_cambio === 'Avance' || form.tipo_cambio === 'Nota') && task.estado !== 'Completado') {
+      const parsed = parseInt(valorNuevo, 10)
+      if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+        nuevoPorcentaje = parsed
+      }
+    }
+
+    if (nuevoPorcentaje === null && task.porcentaje_avance < 100) {
+      nuevoPorcentaje = Math.min(task.porcentaje_avance + 10, 95)
+    }
+
     const payload = {
       fecha: new Date().toISOString(),
       usuario: 'Usuario',
@@ -129,6 +148,22 @@ export default function TaskHistorialModal({ task, onClose }: TaskHistorialModal
       setError(insertError.message)
       setSubmitting(false)
       return
+    }
+
+    if (nuevoPorcentaje !== null) {
+      await supabase.from('tareas').update({ 
+        porcentaje_avance: nuevoPorcentaje,
+        ultima_actualizacion: new Date().toISOString()
+      }).eq('id', task.id)
+      if (onUpdate) onUpdate()
+    }
+
+    if (isChangeState && isFinalizado) {
+      await supabase.from('tareas').update({ 
+        estado: 'Completado',
+        ultima_actualizacion: new Date().toISOString()
+      }).eq('id', task.id)
+      if (onUpdate) onUpdate()
     }
 
     setForm(EMPTY_FORM)
