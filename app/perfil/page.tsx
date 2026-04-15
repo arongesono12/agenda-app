@@ -18,6 +18,7 @@ import { supabase } from '@/lib/supabase'
 import type { PerfilUsuario, TipoUsuario } from '@/lib/types'
 import PageHeader from '@/components/ui/PageHeader'
 import UserAvatar from '@/components/ui/UserAvatar'
+import { useUserSession } from '@/components/UserSessionProvider'
 
 type PerfilQueryRow = Omit<PerfilUsuario, 'tipo_usuario'> & {
   tipo_usuario?: TipoUsuario | TipoUsuario[] | null
@@ -56,6 +57,7 @@ function getAvatarPath(userId: string, file: File) {
 
 export default function PerfilPage() {
   const router = useRouter()
+  const { refreshProfile } = useUserSession()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -284,6 +286,7 @@ export default function PerfilPage() {
         confirmPassword: '',
       }))
 
+      await refreshProfile()
       await loadProfile()
       router.refresh()
     } catch (submitError: unknown) {

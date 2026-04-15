@@ -6,6 +6,7 @@ import PageHeader from '@/components/ui/PageHeader'
 import { supabase } from '@/lib/supabase'
 import type { PerfilUsuario, PreferenciasUsuario } from '@/lib/types'
 import { useTheme } from '@/components/ThemeProvider'
+import { useUserSession } from '@/components/UserSessionProvider'
 import {
   DEFAULT_USER_PREFERENCES,
   normalizarPreferenciasUsuario,
@@ -14,6 +15,7 @@ import {
 type ConfigQueryRow = Pick<PerfilUsuario, 'id' | 'email' | 'nombre_completo' | 'preferencias'>
 
 export default function ConfiguracionPage() {
+  const { refreshProfile } = useUserSession()
   const { theme, setTheme, mounted } = useTheme()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -123,6 +125,7 @@ export default function ConfiguracionPage() {
       }
 
       setTheme(normalizedPreferences.theme ?? 'light')
+      await refreshProfile()
       setSuccess('Preferencias guardadas correctamente.')
       await loadSettings()
     } catch (submitError: unknown) {

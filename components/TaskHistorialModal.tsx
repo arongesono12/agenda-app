@@ -7,6 +7,7 @@ import { es } from 'date-fns/locale'
 import { supabase } from '@/lib/supabase'
 import { TIPOS_ORDEN } from '@/lib/types'
 import type { Historial, Tarea, TipoOrden } from '@/lib/types'
+import { useUserSession } from '@/components/UserSessionProvider'
 
 interface TaskHistorialModalProps {
   task: Tarea
@@ -37,13 +38,14 @@ const EMPTY_FORM: { tipo_cambio: TipoOrden; observaciones: string; valor_nuevo: 
 }
 
 export default function TaskHistorialModal({ task, onClose }: TaskHistorialModalProps) {
+  const { canEditAgenda } = useUserSession()
   const [rows, setRows] = useState<Historial[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
 
-  const canAdd = useMemo(() => !BLOCKED_STATES.has(task.estado), [task.estado])
+  const canAdd = useMemo(() => canEditAgenda && !BLOCKED_STATES.has(task.estado), [canEditAgenda, task.estado])
 
   const fetchHistorial = useCallback(async () => {
     setLoading(true)

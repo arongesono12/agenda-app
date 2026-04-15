@@ -3,10 +3,29 @@ import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 export const dynamic = 'force-dynamic'
 
-const DEFAULT_USERS = [
-  { email: 'dnguema@segesa.gq', password: 'Malabo1234gt' },
-  { email: 'mcarmenondo@segesa.gq', password: 'Eligui2011' },
-]
+type BootstrapUser = {
+  email: string
+  password: string
+}
+
+function readBootstrapUsers(): BootstrapUser[] {
+  const raw = process.env.AGENDA_BOOTSTRAP_USERS?.trim()
+
+  if (!raw) return []
+
+  try {
+    const parsed = JSON.parse(raw) as BootstrapUser[]
+    return parsed.filter(
+      (entry) =>
+        typeof entry?.email === 'string' &&
+        entry.email.trim() &&
+        typeof entry?.password === 'string' &&
+        entry.password.length >= 8
+    )
+  } catch {
+    return []
+  }
+}
 
 function readBootstrapToken(request: Request) {
   const authHeader = request.headers.get('authorization')
@@ -20,12 +39,23 @@ function readBootstrapToken(request: Request) {
 
 export async function POST(request: Request) {
   const expectedToken = process.env.AGENDA_BOOTSTRAP_TOKEN?.trim()
+  const bootstrapUsers = readBootstrapUsers()
 
   if (!expectedToken) {
     return NextResponse.json(
       {
         ok: false,
         error: 'Falta configurar AGENDA_BOOTSTRAP_TOKEN en el entorno.',
+      },
+      { status: 503 }
+    )
+  }
+
+  if (bootstrapUsers.length === 0) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'Falta configurar AGENDA_BOOTSTRAP_USERS con un JSON valido de usuarios iniciales.',
       },
       { status: 503 }
     )
@@ -60,7 +90,7 @@ export async function POST(request: Request) {
 
     const results: Array<{ email: string; action: 'created' | 'updated' }> = []
 
-    for (const targetUser of DEFAULT_USERS) {
+    for (const targetUser of bootstrapUsers) {
       const existing = existingByEmail.get(targetUser.email.toLowerCase())
 
       if (existing) {

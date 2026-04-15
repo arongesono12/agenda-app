@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AlertCircle, Eye, EyeOff, Loader2, LockKeyhole, Mail } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
@@ -10,7 +9,6 @@ import { supabase } from '@/lib/supabase'
 
 export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
   const router = useRouter()
-  const isLocalRegisterEnabled = process.env.NODE_ENV !== 'production'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -154,11 +152,6 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
             </button>
           </form>
 
-          {isLocalRegisterEnabled && (
-            <Link href="/registro-local" className="action-btn-ghost mt-4 justify-center">
-              Crear usuario local
-            </Link>
-          )}
         </div>
       </section>
     </div>

@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { UserRound } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -47,10 +48,13 @@ export default function UserAvatar({
       )}
     >
       {avatarUrl ? (
-        <img
+        <Image
           src={avatarUrl}
           alt={name ? `Avatar de ${name}` : 'Avatar del usuario'}
-          className="h-full w-full object-cover"
+          fill
+          sizes="112px"
+          className="object-cover"
+          unoptimized={avatarUrl.startsWith('data:')}
         />
       ) : name ? (
         <span>{initials}</span>

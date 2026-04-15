@@ -37,10 +37,12 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { normalizarPreferenciasUsuario } from '@/lib/user-preferences'
+import { useUserSession } from '@/components/UserSessionProvider'
 
 const INIT_FILTERS = { q: '', prioridad: '', departamento: '', estado: '', tipo: '' }
 
 export default function AgendaDiariaPage() {
+  const { profile, canEditAgenda } = useUserSession()
   const [tasks, setTasks] = useState<Tarea[]>([])
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState(INIT_FILTERS)
@@ -65,33 +67,10 @@ export default function AgendaDiariaPage() {
   }, [fetchTasks])
 
   useEffect(() => {
-    const loadPreferences = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (!user) return
-
-      const { data } = await supabase
-        .from('perfiles_usuario')
-        .select('preferencias')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      const preferencias = normalizarPreferenciasUsuario(
-        (data as { preferencias?: unknown } | null)?.preferencias as {
-          theme?: 'light' | 'dark'
-          mostrar_kpis_agenda?: boolean
-          abrir_filtros_agenda?: boolean
-        } | null
-      )
-
-      setShowKpis(preferencias.mostrar_kpis_agenda)
-      setShowFilters(preferencias.abrir_filtros_agenda)
-    }
-
-    void loadPreferences()
-  }, [])
+    const preferencias = normalizarPreferenciasUsuario(profile?.preferencias)
+    setShowKpis(preferencias.mostrar_kpis_agenda)
+    setShowFilters(preferencias.abrir_filtros_agenda)
+  }, [profile?.preferencias])
 
   const filtered = tasks.filter((t) => {
     if (
@@ -122,7 +101,7 @@ export default function AgendaDiariaPage() {
   }
 
   const handleDelete = async () => {
-    if (!taskToDelete) return
+    if (!taskToDelete || !canEditAgenda) return
 
     setDeletingId(taskToDelete.id)
     setDeleteError('')
@@ -153,9 +132,11 @@ export default function AgendaDiariaPage() {
             <button onClick={() => void fetchTasks()} className="action-btn h-12 w-12 rounded-2xl p-0">
               <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
             </button>
-            <button onClick={() => setModalTask(null)} className="action-btn-primary">
-              <Plus size={16} /> Nueva tarea
-            </button>
+            {canEditAgenda && (
+              <button onClick={() => setModalTask(null)} className="action-btn-primary">
+                <Plus size={16} /> Nueva tarea
+              </button>
+            )}
           </>
         }
       />
@@ -291,19 +272,23 @@ export default function AgendaDiariaPage() {
                       <History size={14} />
                       Historial
                     </button>
-                    <button onClick={() => setModalTask(t)} className="action-btn flex-1 justify-center" title="Editar">
-                      <Pencil size={14} />
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => requestDelete(t)}
-                      disabled={deletingId === t.id}
-                      className="action-btn flex-1 justify-center text-rose-600 disabled:opacity-40"
-                      title="Eliminar"
-                    >
-                      <Trash2 size={14} />
-                      Eliminar
-                    </button>
+                    {canEditAgenda && (
+                      <>
+                        <button onClick={() => setModalTask(t)} className="action-btn flex-1 justify-center" title="Editar">
+                          <Pencil size={14} />
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => requestDelete(t)}
+                          disabled={deletingId === t.id}
+                          className="action-btn flex-1 justify-center text-rose-600 disabled:opacity-40"
+                          title="Eliminar"
+                        >
+                          <Trash2 size={14} />
+                          Eliminar
+                        </button>
+                      </>
+                    )}
                   </div>
                 </article>
               ))}
@@ -353,19 +338,20 @@ export default function AgendaDiariaPage() {
                             >
                               <History size={14} />
                             </button>
-                            <button
-                              onClick={() => setModalTask(t)}
-                              className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-sky-600"
-                              title="Editar"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              onClick={() => requestDelete(t)}
-                              disabled={deletingId === t.id}
-                              className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-rose-600 disabled:opacity-40"
-                              title="Eliminar"
-                            >
+                        <button
+                          onClick={() => setModalTask(t)}
+                          disabled={!canEditAgenda}
+                          className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-sky-600"
+                          title="Editar"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={() => requestDelete(t)}
+                          disabled={!canEditAgenda || deletingId === t.id}
+                          className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-rose-600 disabled:opacity-40"
+                          title="Eliminar"
+                        >
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -380,7 +366,7 @@ export default function AgendaDiariaPage() {
         )}
       </div>
 
-      {modalTask !== undefined && (
+      {modalTask !== undefined && canEditAgenda && (
         <TaskModal task={modalTask} onClose={() => setModalTask(undefined)} onSave={fetchTasks} />
       )}
       {historialTask && (

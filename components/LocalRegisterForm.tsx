@@ -59,15 +59,15 @@ export default function LocalRegisterForm() {
                 Registro local de usuarios
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-                Este módulo solo existe para tu entorno local. En producción no se renderiza y la API devuelve acceso denegado.
+                Este modulo solo existe para tu entorno local y requiere una sesion autenticada con rol administrador.
               </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-3">
               {[
                 'Usa Admin API de Supabase de forma segura',
-                'Confirma el email automáticamente',
-                'No aparece en producción ni en el menú principal',
+                'Confirma el email automaticamente',
+                'Solo administradores autenticados pueden usarlo',
               ].map((item) => (
                 <div key={item} className="rounded-[26px] border border-white/10 bg-white/[0.05] p-4">
                   <p className="text-sm font-semibold text-slate-100">{item}</p>
@@ -119,17 +119,17 @@ export default function LocalRegisterForm() {
               </div>
 
               <div>
-                <label className="label-field">Contraseña</label>
+                <label className="label-field">Contrasena</label>
                 <div className="relative">
                   <LockKeyhole size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
-                    type="text"
+                    type="password"
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     minLength={8}
                     required
                     className="input-shell pl-11"
-                    placeholder="Mínimo 8 caracteres"
+                    placeholder="Minimo 8 caracteres"
                   />
                 </div>
               </div>
@@ -144,9 +144,9 @@ export default function LocalRegisterForm() {
               </button>
             </form>
 
-            <Link href="/login" className="action-btn-ghost mt-4 justify-center">
+            <Link href="/" className="action-btn-ghost mt-4 justify-center">
               <ArrowLeft size={16} />
-              Volver al login
+              Volver a la agenda
             </Link>
           </div>
         </section>

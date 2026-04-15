@@ -1,4 +1,5 @@
 'use client'
+
 import { useState, useEffect, useCallback } from 'react'
 import {
   Settings,
@@ -9,10 +10,13 @@ import {
   Building2,
   User,
   Tag,
+  ShieldAlert,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PageHeader from '@/components/ui/PageHeader'
 import { ESTADOS, TIPOS_TAREA, PRIORIDADES } from '@/lib/types'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { useUserSession } from '@/components/UserSessionProvider'
 
 interface Depto {
   id: number
@@ -28,7 +32,13 @@ interface Resp {
   activo: boolean
 }
 
+type DeleteTarget =
+  | { type: 'depto'; id: number; label: string }
+  | { type: 'resp'; id: number; label: string }
+  | null
+
 export default function CatalogosPage() {
+  const { isAdmin } = useUserSession()
   const [deptos, setDeptos] = useState<Depto[]>([])
   const [resps, setResps] = useState<Resp[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,6 +46,9 @@ export default function CatalogosPage() {
   const [newResp, setNewResp] = useState({ nombre: '', departamento: '', cargo: '' })
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<'deptos' | 'resps' | 'estados'>('deptos')
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
+  const [deleteError, setDeleteError] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const fetch = useCallback(async () => {
     setLoading(true)
@@ -49,7 +62,7 @@ export default function CatalogosPage() {
   }, [])
 
   useEffect(() => {
-    fetch()
+    void fetch()
   }, [fetch])
 
   const addDepto = async () => {
@@ -58,13 +71,7 @@ export default function CatalogosPage() {
     await supabase.from('departamentos').insert({ nombre: newDepto.trim() })
     setNewDepto('')
     setSaving(false)
-    fetch()
-  }
-
-  const deleteDepto = async (id: number) => {
-    if (!confirm('¿Eliminar este departamento?')) return
-    await supabase.from('departamentos').delete().eq('id', id)
-    fetch()
+    void fetch()
   }
 
   const addResp = async () => {
@@ -77,13 +84,31 @@ export default function CatalogosPage() {
     })
     setNewResp({ nombre: '', departamento: '', cargo: '' })
     setSaving(false)
-    fetch()
+    void fetch()
   }
 
-  const deleteResp = async (id: number) => {
-    if (!confirm('¿Eliminar este responsable?')) return
-    await supabase.from('responsables').delete().eq('id', id)
-    fetch()
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+
+    setDeleting(true)
+    setDeleteError('')
+
+    const query =
+      deleteTarget.type === 'depto'
+        ? supabase.from('departamentos').delete().eq('id', deleteTarget.id)
+        : supabase.from('responsables').delete().eq('id', deleteTarget.id)
+
+    const { error } = await query
+
+    if (error) {
+      setDeleteError(error.message)
+      setDeleting(false)
+      return
+    }
+
+    setDeleteTarget(null)
+    setDeleting(false)
+    void fetch()
   }
 
   const tabs = [
@@ -92,6 +117,27 @@ export default function CatalogosPage() {
     { key: 'estados', label: 'Valores del sistema', icon: <Tag size={15} /> },
   ] as const
 
+  if (!isAdmin) {
+    return (
+      <div className="page-stack">
+        <PageHeader
+          title="Catalogos"
+          subtitle="Modulo reservado para administradores del sistema."
+          icon={<Settings size={22} />}
+        />
+        <div className="surface-panel-strong mx-auto max-w-3xl p-8 text-center sm:p-10">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+            <ShieldAlert size={28} />
+          </div>
+          <h2 className="mt-5 text-2xl font-semibold text-slate-900">Permisos insuficientes</h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-500">
+            Solo los usuarios administradores pueden crear, editar o eliminar catalogos maestros.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="page-stack">
       <PageHeader
@@ -99,7 +145,7 @@ export default function CatalogosPage() {
         subtitle="Gestiona listas maestras y referencias base del sistema para mantener consistencia operativa."
         icon={<Settings size={22} />}
         actions={
-          <button onClick={fetch} className="action-btn h-12 w-12 rounded-2xl p-0">
+          <button onClick={() => void fetch()} className="action-btn h-12 w-12 rounded-2xl p-0">
             <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
           </button>
         }
@@ -138,7 +184,13 @@ export default function CatalogosPage() {
                       </div>
                       <span className="text-sm font-semibold text-slate-800">{d.nombre}</span>
                     </div>
-                    <button onClick={() => deleteDepto(d.id)} className="action-btn h-10 w-10 rounded-2xl p-0 text-rose-600">
+                    <button
+                      onClick={() => {
+                        setDeleteError('')
+                        setDeleteTarget({ type: 'depto', id: d.id, label: d.nombre })
+                      }}
+                      className="action-btn h-10 w-10 rounded-2xl p-0 text-rose-600"
+                    >
                       <Trash2 size={14} />
                     </button>
                   </li>
@@ -192,7 +244,13 @@ export default function CatalogosPage() {
                         </p>
                       </div>
                     </div>
-                    <button onClick={() => deleteResp(r.id)} className="action-btn h-10 w-10 rounded-2xl p-0 text-rose-600">
+                    <button
+                      onClick={() => {
+                        setDeleteError('')
+                        setDeleteTarget({ type: 'resp', id: r.id, label: r.nombre })
+                      }}
+                      className="action-btn h-10 w-10 rounded-2xl p-0 text-rose-600"
+                    >
                       <Trash2 size={14} />
                     </button>
                   </li>
@@ -261,6 +319,30 @@ export default function CatalogosPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={deleteTarget?.type === 'depto' ? 'Eliminar departamento' : 'Eliminar responsable'}
+        description="Confirma la eliminacion antes de modificar un catalogo maestro del sistema."
+        confirmLabel={deleteTarget?.type === 'depto' ? 'Si, eliminar departamento' : 'Si, eliminar responsable'}
+        loading={deleting}
+        error={deleteError}
+        onConfirm={() => void handleDelete()}
+        onClose={() => {
+          if (deleting) return
+          setDeleteError('')
+          setDeleteTarget(null)
+        }}
+      >
+        {deleteTarget && (
+          <div className="rounded-[24px] border border-white/80 bg-white/80 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Registro seleccionado
+            </p>
+            <p className="mt-2 text-sm font-semibold text-slate-900">{deleteTarget.label}</p>
+          </div>
+        )}
+      </ConfirmDialog>
     </div>
   )
 }

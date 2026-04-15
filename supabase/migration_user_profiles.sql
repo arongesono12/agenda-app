@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS tipos_usuario (
 INSERT INTO tipos_usuario (codigo, nombre, descripcion)
 VALUES
   ('administrador', 'Administrador', 'Gestion completa del sistema, catalogos, seguimiento y configuracion operativa.'),
+  ('administradora', 'Administradora', 'Gestion completa del sistema, catalogos, seguimiento y configuracion operativa.'),
   ('supervisor', 'Supervisor', 'Seguimiento ejecutivo del avance, control de alertas y consulta de indicadores.'),
   ('responsable', 'Responsable', 'Gestion de sus tareas, actualizacion de avances y consulta de historial.'),
   ('consulta', 'Consulta', 'Acceso de solo lectura a paneles, cronograma, alertas e historial.')

@@ -1,5 +1,6 @@
 'use client'
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { useUserSession } from '@/components/UserSessionProvider'
 
 type Theme = 'light' | 'dark'
 
@@ -14,17 +15,27 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 const STORAGE_KEY = 'agenda-theme'
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const { profile, loading: sessionLoading } = useUserSession()
   const [theme, setThemeState] = useState<Theme>('light')
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    if (sessionLoading) return
+
     const saved = window.localStorage.getItem(STORAGE_KEY)
-    const nextTheme: Theme = saved === 'dark' ? 'dark' : 'light'
+    const profileTheme = profile?.preferencias?.theme
+    const nextTheme: Theme =
+      profileTheme === 'dark' || profileTheme === 'light'
+        ? profileTheme
+        : saved === 'dark'
+          ? 'dark'
+          : 'light'
     setThemeState(nextTheme)
     document.documentElement.dataset.theme = nextTheme
     document.documentElement.style.colorScheme = nextTheme
+    window.localStorage.setItem(STORAGE_KEY, nextTheme)
     setMounted(true)
-  }, [])
+  }, [profile?.preferencias?.theme, sessionLoading])
 
   const setTheme = (nextTheme: Theme) => {
     setThemeState(nextTheme)

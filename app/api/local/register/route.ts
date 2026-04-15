@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { getServerSessionProfile } from '@/lib/server-access'
+import { hasAnyRole, ADMIN_ROLE_CODES } from '@/lib/access-control'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +22,18 @@ export async function POST(request: Request) {
   }
 
   try {
+    const { user, profile } = await getServerSessionProfile()
+
+    if (!user || !hasAnyRole(profile, ADMIN_ROLE_CODES)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Solo un administrador autenticado puede crear usuarios locales.',
+        },
+        { status: 403 }
+      )
+    }
+
     const body = (await request.json()) as RegisterPayload
     const email = body.email?.trim().toLowerCase()
     const password = body.password ?? ''

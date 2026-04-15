@@ -34,14 +34,15 @@ Sistema de gestion de tareas y seguimiento operativo construido con Next.js y Su
 4. Ejecuta despues [migration_user_profiles.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_user_profiles.sql) para habilitar perfiles y tipos de usuario.
 5. Ejecuta luego [migration_user_avatars.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_user_avatars.sql) para habilitar fotos de perfil.
 6. Ejecuta despues [migration_user_preferences.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_user_preferences.sql) para guardar preferencias por usuario.
-7. Copia la URL del proyecto y la clave anon desde `Settings -> API`.
+7. Ejecuta despues [migration_security_hardening.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_security_hardening.sql) para aplicar permisos por rol y endurecer RLS.
+8. Copia la URL del proyecto y la clave anon desde `Settings -> API`.
 
 ### 2. Variables de entorno
 
 Usa el archivo de ejemplo:
 
 ```bash
-copy .env.local.example .env.local
+copy .env.example .env.local
 ```
 
 Completa `.env.local` con tus credenciales:
@@ -49,6 +50,9 @@ Completa `.env.local` con tus credenciales:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-clave-anon
+SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
+AGENDA_BOOTSTRAP_TOKEN=token-largo-y-aleatorio
+AGENDA_BOOTSTRAP_USERS=[{"email":"admin@empresa.com","password":"ChangeMe123!"}]
 ```
 
 ### 3. Instalar y ejecutar

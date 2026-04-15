@@ -30,6 +30,7 @@ import {
 import { cn } from '@/lib/utils'
 import ThemeToggle from '@/components/ThemeToggle'
 import UserAvatar from '@/components/ui/UserAvatar'
+import { useUserSession } from '@/components/UserSessionProvider'
 
 const navItems = [
   { href: '/', label: 'Agenda diaria', icon: CalendarDays, badge: null },
@@ -40,16 +41,8 @@ const navItems = [
   { href: '/busqueda', label: 'Busqueda', icon: Search, badge: null },
   { href: '/responsable', label: 'Responsables', icon: User, badge: null },
   { href: '/historial', label: 'Historial', icon: History, badge: null },
-  { href: '/catalogos', label: 'Catalogos', icon: Settings, badge: null },
+  { href: '/catalogos', label: 'Catalogos', icon: Settings, badge: null, adminOnly: true },
 ]
-
-type SidebarProfileRow = {
-  nombre_completo?: string | null
-  avatar_url?: string | null
-  tipo_usuario?: {
-    nombre?: string | null
-  } | Array<{ nombre?: string | null }> | null
-}
 
 function BrandMark({ className = '' }: { className?: string }) {
   return (
@@ -71,23 +64,6 @@ function BrandMark({ className = '' }: { className?: string }) {
   )
 }
 
-function resolveUserName(fullName?: unknown, email?: string | null) {
-  if (typeof fullName === 'string' && fullName.trim()) return fullName.trim()
-  if (email) return email.split('@')[0]
-  return 'Usuario'
-}
-
-function normalizeRole(
-  tipoUsuario?: SidebarProfileRow['tipo_usuario'],
-  fallbackRole?: unknown
-) {
-  const value = Array.isArray(tipoUsuario) ? tipoUsuario[0] : tipoUsuario
-
-  if (typeof value?.nombre === 'string' && value.nombre.trim()) return value.nombre.trim()
-  if (typeof fallbackRole === 'string' && fallbackRole.trim()) return fallbackRole.trim()
-  return 'Responsable'
-}
-
 function SidebarContent({
   pathname,
   onNavigate,
@@ -99,19 +75,19 @@ function SidebarContent({
   onClose?: () => void
   showClose?: boolean
 }) {
-  const activeItem = useMemo(
-    () => navItems.find((item) => pathname === item.href)?.label ?? 'Panel',
-    [pathname]
-  )
-
+  const { profile, isAdmin } = useUserSession()
   const [alertCount, setAlertCount] = useState(0)
-  const [userName, setUserName] = useState('Usuario')
-  const [userRole, setUserRole] = useState('Responsable')
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const router = useRouter()
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => !item.adminOnly || isAdmin),
+    [isAdmin]
+  )
+  const userName = profile?.nombre_completo?.trim() || profile?.email?.split('@')[0] || 'Usuario'
+  const userRole = profile?.tipo_usuario?.nombre?.trim() || 'Responsable'
+  const avatarUrl = profile?.avatar_url ?? null
 
   useEffect(() => {
     const fetchAlerts = async () => {
@@ -121,7 +97,7 @@ function SidebarContent({
         .not('estado', 'in', '("Completado","Cancelado")')
 
       if (data) {
-        const normalized = normalizarTareas(data as any[])
+        const normalized = normalizarTareas(data as Array<{ fecha_fin?: string }> | null)
         const count = normalized.filter(
           (t) =>
             t.semaforo === SEMAFORO_VENCIDA ||
@@ -133,73 +109,6 @@ function SidebarContent({
     }
 
     void fetchAlerts()
-  }, [])
-
-  useEffect(() => {
-    const syncUser = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      const user = session?.user
-
-      if (!user) {
-        setUserName('Usuario')
-        setUserRole('Responsable')
-        setAvatarUrl(null)
-        return
-      }
-
-      const fallbackName = resolveUserName(user.user_metadata?.full_name, user.email)
-      const fallbackRole = user.user_metadata?.role
-      const fallbackAvatar =
-        typeof user.user_metadata?.avatar_url === 'string' && user.user_metadata.avatar_url.trim()
-          ? user.user_metadata.avatar_url.trim()
-          : null
-
-      const { data } = await supabase
-        .from('perfiles_usuario')
-        .select('nombre_completo, avatar_url, tipo_usuario:tipos_usuario(nombre)')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      const profile = data as SidebarProfileRow | null
-
-      setUserName(profile?.nombre_completo?.trim() || fallbackName)
-      setUserRole(normalizeRole(profile?.tipo_usuario, fallbackRole))
-      setAvatarUrl(profile?.avatar_url?.trim() || fallbackAvatar)
-    }
-
-    void syncUser()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      const user = session?.user
-
-      if (!user) {
-        setUserName('Usuario')
-        setUserRole('Responsable')
-        setAvatarUrl(null)
-        return
-      }
-
-      setUserName(resolveUserName(user.user_metadata?.full_name, user.email))
-      setUserRole(
-        typeof user.user_metadata?.role === 'string' && user.user_metadata.role.trim()
-          ? user.user_metadata.role.trim()
-          : 'Responsable'
-      )
-      setAvatarUrl(
-        typeof user.user_metadata?.avatar_url === 'string' && user.user_metadata.avatar_url.trim()
-          ? user.user_metadata.avatar_url.trim()
-          : null
-      )
-
-      void syncUser()
-    })
-
-    return () => subscription.unsubscribe()
   }, [])
 
   useEffect(() => {
@@ -269,7 +178,7 @@ function SidebarContent({
         </p>
         <div className="mt-3 h-full overflow-y-auto pr-1">
           <ul className="space-y-1">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive = pathname === item.href
               const Icon = item.icon
 
