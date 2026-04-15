@@ -69,7 +69,7 @@ export default function CronogramaPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="Cronograma Gantt"
+        title="Cronograma "
         subtitle={`Visualizacion de tareas por fechas · ${monthLabel}`}
         icon={<GanttChartSquare size={20} />}
         actions={

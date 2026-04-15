@@ -65,6 +65,34 @@ export interface KPIs {
   avance_promedio: number
 }
 
+export interface TipoUsuario {
+  id: number
+  codigo: string
+  nombre: string
+  descripcion?: string | null
+  created_at?: string
+}
+
+export type ThemePreference = 'light' | 'dark'
+
+export interface PreferenciasUsuario {
+  theme?: ThemePreference
+  mostrar_kpis_agenda?: boolean
+  abrir_filtros_agenda?: boolean
+}
+
+export interface PerfilUsuario {
+  id: string
+  email: string
+  nombre_completo?: string | null
+  avatar_url?: string | null
+  preferencias?: PreferenciasUsuario | null
+  tipo_usuario_id?: number | null
+  created_at?: string
+  updated_at?: string
+  tipo_usuario?: TipoUsuario | null
+}
+
 export const DEPARTAMENTOS = [
   'Gabinete', 'Coordinaci\u00F3n', 'Servicios T\u00E9cnicos', 'Servicios Comerciales',
   'Asesor\u00EDa Jur\u00EDdica', 'Servicios Financieros', 'RRHH',

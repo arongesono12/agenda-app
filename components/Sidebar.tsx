@@ -1,8 +1,9 @@
 'use client'
+
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import {
   supabase,
   normalizarTareas,
@@ -15,6 +16,7 @@ import {
   BarChart3,
   CalendarDays,
   ChevronRight,
+  CircleUserRound,
   GanttChartSquare,
   History,
   LayoutDashboard,
@@ -27,6 +29,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ThemeToggle from '@/components/ThemeToggle'
+import UserAvatar from '@/components/ui/UserAvatar'
 
 const navItems = [
   { href: '/', label: 'Agenda diaria', icon: CalendarDays, badge: null },
@@ -39,6 +42,14 @@ const navItems = [
   { href: '/historial', label: 'Historial', icon: History, badge: null },
   { href: '/catalogos', label: 'Catalogos', icon: Settings, badge: null },
 ]
+
+type SidebarProfileRow = {
+  nombre_completo?: string | null
+  avatar_url?: string | null
+  tipo_usuario?: {
+    nombre?: string | null
+  } | Array<{ nombre?: string | null }> | null
+}
 
 function BrandMark({ className = '' }: { className?: string }) {
   return (
@@ -60,6 +71,23 @@ function BrandMark({ className = '' }: { className?: string }) {
   )
 }
 
+function resolveUserName(fullName?: unknown, email?: string | null) {
+  if (typeof fullName === 'string' && fullName.trim()) return fullName.trim()
+  if (email) return email.split('@')[0]
+  return 'Usuario'
+}
+
+function normalizeRole(
+  tipoUsuario?: SidebarProfileRow['tipo_usuario'],
+  fallbackRole?: unknown
+) {
+  const value = Array.isArray(tipoUsuario) ? tipoUsuario[0] : tipoUsuario
+
+  if (typeof value?.nombre === 'string' && value.nombre.trim()) return value.nombre.trim()
+  if (typeof fallbackRole === 'string' && fallbackRole.trim()) return fallbackRole.trim()
+  return 'Responsable'
+}
+
 function SidebarContent({
   pathname,
   onNavigate,
@@ -77,8 +105,12 @@ function SidebarContent({
   )
 
   const [alertCount, setAlertCount] = useState(0)
-  const [userEmail, setUserEmail] = useState('Cargando sesión...')
+  const [userName, setUserName] = useState('Usuario')
+  const [userRole, setUserRole] = useState('Responsable')
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -87,7 +119,7 @@ function SidebarContent({
         .from('tareas')
         .select('fecha_fin')
         .not('estado', 'in', '("Completado","Cancelado")')
-      
+
       if (data) {
         const normalized = normalizarTareas(data as any[])
         const count = normalized.filter(
@@ -99,31 +131,100 @@ function SidebarContent({
         setAlertCount(count)
       }
     }
-    fetchAlerts()
+
+    void fetchAlerts()
   }, [])
 
   useEffect(() => {
     const syncUser = async () => {
       const {
-        data: { user },
-      } = await supabase.auth.getUser()
+        data: { session },
+      } = await supabase.auth.getSession()
 
-      setUserEmail(user?.email ?? 'Sesión activa')
+      const user = session?.user
+
+      if (!user) {
+        setUserName('Usuario')
+        setUserRole('Responsable')
+        setAvatarUrl(null)
+        return
+      }
+
+      const fallbackName = resolveUserName(user.user_metadata?.full_name, user.email)
+      const fallbackRole = user.user_metadata?.role
+      const fallbackAvatar =
+        typeof user.user_metadata?.avatar_url === 'string' && user.user_metadata.avatar_url.trim()
+          ? user.user_metadata.avatar_url.trim()
+          : null
+
+      const { data } = await supabase
+        .from('perfiles_usuario')
+        .select('nombre_completo, avatar_url, tipo_usuario:tipos_usuario(nombre)')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      const profile = data as SidebarProfileRow | null
+
+      setUserName(profile?.nombre_completo?.trim() || fallbackName)
+      setUserRole(normalizeRole(profile?.tipo_usuario, fallbackRole))
+      setAvatarUrl(profile?.avatar_url?.trim() || fallbackAvatar)
     }
 
-    syncUser()
+    void syncUser()
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserEmail(session?.user?.email ?? 'Sesión activa')
+      const user = session?.user
+
+      if (!user) {
+        setUserName('Usuario')
+        setUserRole('Responsable')
+        setAvatarUrl(null)
+        return
+      }
+
+      setUserName(resolveUserName(user.user_metadata?.full_name, user.email))
+      setUserRole(
+        typeof user.user_metadata?.role === 'string' && user.user_metadata.role.trim()
+          ? user.user_metadata.role.trim()
+          : 'Responsable'
+      )
+      setAvatarUrl(
+        typeof user.user_metadata?.avatar_url === 'string' && user.user_metadata.avatar_url.trim()
+          ? user.user_metadata.avatar_url.trim()
+          : null
+      )
+
+      void syncUser()
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleEscape)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [])
+
   const handleSignOut = async () => {
     setSigningOut(true)
+    setMenuOpen(false)
     await supabase.auth.signOut()
     router.replace('/login')
     router.refresh()
@@ -200,7 +301,10 @@ function SidebarContent({
                     )}
                     <ChevronRight
                       size={15}
-                      className={cn('transition-all', isActive ? 'translate-x-0 text-teal-100' : 'translate-x-1 text-slate-400 group-hover:text-slate-600')}
+                      className={cn(
+                        'transition-all',
+                        isActive ? 'translate-x-0 text-teal-100' : 'translate-x-1 text-slate-400 group-hover:text-slate-600'
+                      )}
                     />
                   </Link>
                 </li>
@@ -210,33 +314,70 @@ function SidebarContent({
         </div>
       </div>
 
-      <div className="mt-5 rounded-[24px] border border-white/70 bg-gradient-to-br from-white/80 to-white/55 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
-              Sesión activa
-            </p>
-            <p className="mt-1 truncate text-sm font-semibold text-slate-900">{userEmail}</p>
-            <p className="mt-1 truncate text-xs text-slate-500">Vista actual: {activeItem}</p>
+      <div ref={menuRef} className="relative mt-5 rounded-[28px] border border-white/70 bg-gradient-to-br from-white/85 to-white/60 p-5">
+        <button
+          type="button"
+          onClick={() => setMenuOpen((current) => !current)}
+          className="group block w-full rounded-[24px] text-left transition-transform duration-200 hover:-translate-y-0.5"
+          title="Abrir menu de usuario"
+        >
+          <div className="flex flex-col items-center text-center">
+            <UserAvatar
+              name={userName}
+              avatarUrl={avatarUrl}
+              size="lg"
+              className="h-20 w-20 rounded-full ring-0 transition-all duration-200 group-hover:ring-4 group-hover:ring-teal-100"
+            />
+            <div className="mt-3 min-w-0">
+              <p className="truncate text-lg font-semibold text-slate-900">{userName}</p>
+              <span className="mt-2 inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">
+                {userRole}
+              </span>
+            </div>
           </div>
-          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-white/70">
-            <User size={16} className="text-slate-700" />
+        </button>
+
+        {menuOpen && (
+          <div className="absolute inset-x-5 bottom-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-[24px] border border-white/80 bg-white/95 p-2 shadow-[0_22px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl">
+            <Link
+              href="/perfil"
+              onClick={() => {
+                setMenuOpen(false)
+                onNavigate?.()
+              }}
+              className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
+            >
+              <CircleUserRound size={16} />
+              Perfil
+            </Link>
+            <Link
+              href="/configuracion"
+              onClick={() => {
+                setMenuOpen(false)
+                onNavigate?.()
+              }}
+              className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
+            >
+              <Settings size={16} />
+              Configuracion
+            </Link>
+            <button
+              type="button"
+              onClick={() => void handleSignOut()}
+              disabled={signingOut}
+              className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-60"
+            >
+              <LogOut size={16} />
+              {signingOut ? 'Cerrando sesion...' : 'Cerrar sesion'}
+            </button>
           </div>
-        </div>
+        )}
+
         <div className="mt-4 flex items-center gap-2 text-xs text-slate-600">
           <span className="h-2 w-2 rounded-full bg-emerald-400" />
           Sistema activo y sincronizado
         </div>
         <ThemeToggle className="mt-4 w-full justify-center border-white/70 bg-white/70 text-slate-700 hover:bg-white hover:text-slate-900" />
-        <button
-          type="button"
-          onClick={handleSignOut}
-          disabled={signingOut}
-          className="action-btn-ghost mt-3 w-full justify-center disabled:opacity-60"
-        >
-          <LogOut size={16} />
-          {signingOut ? 'Cerrando sesión...' : 'Cerrar sesión'}
-        </button>
       </div>
     </div>
   )

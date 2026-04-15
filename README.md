@@ -12,6 +12,8 @@ Sistema de gestion de tareas y seguimiento operativo construido con Next.js y Su
 | Cronograma | `/cronograma` | Vista tipo Gantt por dias del mes |
 | Estadisticas | `/estadisticas` | Analisis por prioridad, tipo y departamento |
 | Busqueda | `/busqueda` | Filtros combinados sobre las tareas |
+| Perfil | `/perfil` | Perfil del usuario autenticado con cambio de nombre y contrasena |
+| Configuracion | `/configuracion` | Preferencias personales de la agenda por usuario |
 | Responsables | `/responsable` | Panel personal por responsable |
 | Historial | `/historial` | Auditoria automatica de cambios |
 | Catalogos | `/catalogos` | Gestion de departamentos y responsables |
@@ -29,7 +31,10 @@ Sistema de gestion de tareas y seguimiento operativo construido con Next.js y Su
 1. Crea un proyecto en [Supabase](https://supabase.com).
 2. Abre el SQL Editor.
 3. Ejecuta el contenido de [schema.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/schema.sql).
-4. Copia la URL del proyecto y la clave anon desde `Settings -> API`.
+4. Ejecuta despues [migration_user_profiles.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_user_profiles.sql) para habilitar perfiles y tipos de usuario.
+5. Ejecuta luego [migration_user_avatars.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_user_avatars.sql) para habilitar fotos de perfil.
+6. Ejecuta despues [migration_user_preferences.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_user_preferences.sql) para guardar preferencias por usuario.
+7. Copia la URL del proyecto y la clave anon desde `Settings -> API`.
 
 ### 2. Variables de entorno
 
