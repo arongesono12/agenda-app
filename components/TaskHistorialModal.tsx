@@ -172,8 +172,8 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-end bg-slate-950/45 p-0 backdrop-blur-md sm:p-6">
-      <div className="surface-panel-strong flex h-[100dvh] max-h-[100dvh] w-full max-w-6xl overflow-hidden rounded-none sm:h-full sm:max-h-[94vh] sm:rounded-[32px]">
+    <div className="agenda-modal-overlay">
+      <div className="agenda-modal-shell agenda-modal-shell-xl flex h-[92vh]">
         <div className="grid h-full w-full grid-cols-1 xl:grid-cols-[0.95fr_1.3fr]">
           <aside className="relative overflow-hidden border-b border-white/50 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 p-6 text-white xl:border-b-0 xl:border-r xl:border-white/10">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.22),transparent_40%)]" />
@@ -233,7 +233,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
               </div>
               <button
                 onClick={onClose}
-                className="action-btn h-11 w-11 rounded-2xl p-0"
+                className="agenda-modal-close"
                 aria-label="Cerrar historial"
               >
                 <X size={16} />

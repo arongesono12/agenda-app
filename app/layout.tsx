@@ -27,9 +27,24 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const themeInitScript = `
+    (() => {
+      try {
+        const saved = window.localStorage.getItem('agenda-theme');
+        const preference = saved === 'light' || saved === 'dark' || saved === 'system' ? saved : 'system';
+        const resolved = preference === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : preference;
+        document.documentElement.dataset.theme = resolved;
+        document.documentElement.style.colorScheme = resolved;
+      } catch {}
+    })();
+  `
+
   return (
     <html lang="es" suppressHydrationWarning>
       <body className={`${poppinsSans.variable} ${poppinsDisplay.variable}`}>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <AppChrome>{children}</AppChrome>
       </body>
     </html>

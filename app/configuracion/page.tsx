@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Loader2, Monitor, RefreshCw, Save, SlidersHorizontal } from 'lucide-react'
+import { Loader2, Monitor, Moon, RefreshCw, Save, SlidersHorizontal, Sun } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import { supabase } from '@/lib/supabase'
 import type { PerfilUsuario, PreferenciasUsuario } from '@/lib/types'
@@ -15,8 +15,8 @@ import {
 type ConfigQueryRow = Pick<PerfilUsuario, 'id' | 'email' | 'nombre_completo' | 'preferencias'>
 
 export default function ConfiguracionPage() {
-  const { refreshProfile } = useUserSession()
-  const { theme, setTheme, mounted } = useTheme()
+  const { refreshProfile, profile: sessionProfile } = useUserSession()
+  const { themePreference, resolvedTheme, setThemePreference } = useTheme()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -58,7 +58,7 @@ export default function ConfiguracionPage() {
 
     const nextPreferences = normalizarPreferenciasUsuario({
       ...profileRow?.preferencias,
-      theme: mounted ? theme : profileRow?.preferencias?.theme,
+      theme: profileRow?.preferencias?.theme ?? sessionProfile?.preferencias?.theme ?? themePreference,
     })
 
     setProfile({
@@ -71,7 +71,7 @@ export default function ConfiguracionPage() {
     })
     setPreferences(nextPreferences)
     setLoading(false)
-  }, [mounted, theme])
+  }, [sessionProfile?.preferencias?.theme, themePreference])
 
   useEffect(() => {
     void loadSettings()
@@ -124,7 +124,7 @@ export default function ConfiguracionPage() {
         throw saveError
       }
 
-      setTheme(normalizedPreferences.theme ?? 'light')
+      await setThemePreference(normalizedPreferences.theme ?? 'system', { persist: false })
       await refreshProfile()
       setSuccess('Preferencias guardadas correctamente.')
       await loadSettings()
@@ -174,7 +174,11 @@ export default function ConfiguracionPage() {
             <div className="rounded-[26px] border border-white/10 bg-white/[0.05] p-4">
               <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Tema</p>
               <p className="mt-2 text-lg font-semibold text-slate-100">
-                {preferences.theme === 'dark' ? 'Oscuro' : 'Claro'}
+                {preferences.theme === 'system'
+                  ? `Sistema (${resolvedTheme === 'dark' ? 'oscuro' : 'claro'})`
+                  : preferences.theme === 'dark'
+                    ? 'Oscuro'
+                    : 'Claro'}
               </p>
             </div>
 
@@ -214,12 +218,13 @@ export default function ConfiguracionPage() {
 
             <div className="rounded-[28px] border border-white/80 bg-slate-50/80 p-5">
               <label className="label-field">Tema visual</label>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={() => updatePreference('theme', 'light')}
                   className={preferences.theme === 'light' ? 'action-btn border-teal-200 bg-teal-50/90 text-teal-700 justify-center' : 'action-btn justify-center'}
                 >
+                  <Sun size={15} />
                   Claro
                 </button>
                 <button
@@ -227,9 +232,21 @@ export default function ConfiguracionPage() {
                   onClick={() => updatePreference('theme', 'dark')}
                   className={preferences.theme === 'dark' ? 'action-btn border-teal-200 bg-teal-50/90 text-teal-700 justify-center' : 'action-btn justify-center'}
                 >
+                  <Moon size={15} />
                   Oscuro
                 </button>
+                <button
+                  type="button"
+                  onClick={() => updatePreference('theme', 'system')}
+                  className={preferences.theme === 'system' ? 'action-btn border-teal-200 bg-teal-50/90 text-teal-700 justify-center' : 'action-btn justify-center'}
+                >
+                  <Monitor size={15} />
+                  Sistema
+                </button>
               </div>
+              <p className="mt-3 text-xs text-slate-500">
+                Sistema solo sigue el tema del navegador o del sistema cuando el usuario lo elige expresamente.
+              </p>
             </div>
 
             <div className="rounded-[28px] border border-white/80 bg-slate-50/80 p-5">

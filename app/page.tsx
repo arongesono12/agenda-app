@@ -1,22 +1,22 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  AlertCircle,
   CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  Clock3,
+  Filter,
+  History,
+  Pencil,
   Plus,
   RefreshCw,
-  Pencil,
-  Trash2,
-  History,
-  ChevronDown,
   Search,
-  Filter,
-  X,
-  AlertCircle,
-  Target,
-  Clock3,
-  CheckCircle2,
   Siren,
+  Target,
+  Trash2,
+  X,
 } from 'lucide-react'
 import {
   normalizarTareas,
@@ -25,14 +25,15 @@ import {
   supabase,
 } from '@/lib/supabase'
 import type { Tarea } from '@/lib/types'
-import { DEPARTAMENTOS, PRIORIDADES, ESTADOS, TIPOS_TAREA } from '@/lib/types'
-import { formatDateShort } from '@/lib/utils'
+import { DEPARTAMENTOS, ESTADOS, PRIORIDADES, TIPOS_TAREA } from '@/lib/types'
+import { cn, formatDateShort } from '@/lib/utils'
 import PageHeader from '@/components/ui/PageHeader'
-import { PrioridadBadge, EstadoBadge, TipoBadge, SemaforoBadge } from '@/components/ui/Badge'
+import { EstadoBadge, PrioridadBadge, SemaforoBadge, TipoBadge } from '@/components/ui/Badge'
 import ProgressBar from '@/components/ui/ProgressBar'
 import KPICard from '@/components/ui/KPICard'
 import TaskModal from '@/components/TaskModal'
 import TaskHistorialModal from '@/components/TaskHistorialModal'
+import TaskDetailModal from '@/components/TaskDetailModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -50,9 +51,13 @@ export default function AgendaDiariaPage() {
   const [showKpis, setShowKpis] = useState(true)
   const [modalTask, setModalTask] = useState<Tarea | null | undefined>(undefined)
   const [historialTask, setHistorialTask] = useState<Tarea | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailClosing, setDetailClosing] = useState(false)
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [taskToDelete, setTaskToDelete] = useState<Tarea | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
   const [deleteError, setDeleteError] = useState('')
+  const detailCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const today = format(new Date(), "EEEE d 'de' MMMM, yyyy", { locale: es })
 
   const fetchTasks = useCallback(async () => {
@@ -67,32 +72,56 @@ export default function AgendaDiariaPage() {
   }, [fetchTasks])
 
   useEffect(() => {
+    return () => {
+      if (detailCloseTimerRef.current) {
+        clearTimeout(detailCloseTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     const preferencias = normalizarPreferenciasUsuario(profile?.preferencias)
     setShowKpis(preferencias.mostrar_kpis_agenda)
     setShowFilters(preferencias.abrir_filtros_agenda)
   }, [profile?.preferencias])
 
-  const filtered = tasks.filter((t) => {
+  const filtered = tasks.filter((task) => {
     if (
       filters.q &&
-      !t.tarea.toLowerCase().includes(filters.q.toLowerCase()) &&
-      !(t.responsable ?? '').toLowerCase().includes(filters.q.toLowerCase())
+      !task.tarea.toLowerCase().includes(filters.q.toLowerCase()) &&
+      !(task.responsable ?? '').toLowerCase().includes(filters.q.toLowerCase())
     ) return false
-    if (filters.prioridad && t.prioridad !== filters.prioridad) return false
-    if (filters.departamento && t.departamento !== filters.departamento) return false
-    if (filters.estado && t.estado !== filters.estado) return false
-    if (filters.tipo && t.tipo_tarea !== filters.tipo) return false
+    if (filters.prioridad && task.prioridad !== filters.prioridad) return false
+    if (filters.departamento && task.departamento !== filters.departamento) return false
+    if (filters.estado && task.estado !== filters.estado) return false
+    if (filters.tipo && task.tipo_tarea !== filters.tipo) return false
     return true
   })
+  const selectedTask = selectedTaskId === null ? null : filtered.find((task) => task.id === selectedTaskId) ?? null
+  const selectedTaskIndex = selectedTask ? filtered.findIndex((task) => task.id === selectedTask.id) : -1
+
+  useEffect(() => {
+    if (filtered.length === 0) {
+      setSelectedTaskId(null)
+      setDetailOpen(false)
+      setDetailClosing(false)
+      return
+    }
+
+    setSelectedTaskId((current) => {
+      if (current !== null && filtered.some((task) => task.id === current)) return current
+      return filtered[0].id
+    })
+  }, [filtered])
 
   const kpis = {
     total: tasks.length,
-    pendientes: tasks.filter((t) => t.estado === 'Pendiente').length,
-    enProceso: tasks.filter((t) => t.estado === 'En Proceso').length,
-    completadas: tasks.filter((t) => t.estado === 'Completado').length,
-    alta: tasks.filter((t) => t.prioridad === 'Alta').length,
-    vencidas: tasks.filter((t) => t.semaforo === SEMAFORO_VENCIDA).length,
-    urgentes: tasks.filter((t) => t.semaforo === SEMAFORO_URGENTE).length,
+    pendientes: tasks.filter((task) => task.estado === 'Pendiente').length,
+    enProceso: tasks.filter((task) => task.estado === 'En Proceso').length,
+    completadas: tasks.filter((task) => task.estado === 'Completado').length,
+    alta: tasks.filter((task) => task.prioridad === 'Alta').length,
+    vencidas: tasks.filter((task) => task.semaforo === SEMAFORO_VENCIDA).length,
+    urgentes: tasks.filter((task) => task.semaforo === SEMAFORO_URGENTE).length,
   }
 
   const requestDelete = (task: Tarea) => {
@@ -114,9 +143,33 @@ export default function AgendaDiariaPage() {
       return
     }
 
+    if (selectedTaskId === taskToDelete.id) {
+      setDetailOpen(false)
+    }
+
     setTaskToDelete(null)
     setDeletingId(null)
     await fetchTasks()
+  }
+
+  const openTaskDetail = (task: Tarea) => {
+    if (detailCloseTimerRef.current) {
+      clearTimeout(detailCloseTimerRef.current)
+      detailCloseTimerRef.current = null
+    }
+    setSelectedTaskId(task.id)
+    setDetailClosing(false)
+    setDetailOpen(true)
+  }
+
+  const closeTaskDetail = () => {
+    if (!detailOpen || detailClosing) return
+    setDetailClosing(true)
+    detailCloseTimerRef.current = setTimeout(() => {
+      setDetailOpen(false)
+      setDetailClosing(false)
+      detailCloseTimerRef.current = null
+    }, 220)
   }
 
   const activeFilters = Object.values(filters).filter(Boolean).length
@@ -161,13 +214,13 @@ export default function AgendaDiariaPage() {
               type="text"
               placeholder="Buscar por tarea o responsable..."
               value={filters.q}
-              onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
+              onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))}
               className="input-shell pl-11"
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={() => setShowFilters((s) => !s)}
+              onClick={() => setShowFilters((current) => !current)}
               className={showFilters || activeFilters > 0 ? 'action-btn border-teal-200 bg-teal-50/90 text-teal-700' : 'action-btn'}
             >
               <Filter size={15} />
@@ -200,12 +253,12 @@ export default function AgendaDiariaPage() {
                 <label className="label-field">{label}</label>
                 <select
                   value={filters[key as keyof typeof filters]}
-                  onChange={(e) => setFilters((f) => ({ ...f, [key]: e.target.value }))}
+                  onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))}
                   className="input-shell"
                 >
                   <option value="">Todos</option>
-                  {options.map((o) => (
-                    <option key={o}>{o}</option>
+                  {options.map((option) => (
+                    <option key={option}>{option}</option>
                   ))}
                 </select>
               </div>
@@ -218,7 +271,7 @@ export default function AgendaDiariaPage() {
         <div className="flex flex-col gap-2 border-b border-white/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold text-slate-800">{filtered.length} tareas visibles</p>
-            <p className="text-xs text-slate-500">Actualizado en tiempo real para seguimiento diario</p>
+            <p className="text-xs text-slate-500">Activa una tarea para abrir su detalle y recorrer la lista sin cerrar el modal.</p>
           </div>
           <span className="section-label self-start sm:self-auto">Panel diario</span>
         </div>
@@ -237,50 +290,64 @@ export default function AgendaDiariaPage() {
         ) : (
           <>
             <div className="mobile-card-list p-4 md:hidden">
-              {filtered.map((t) => (
-                <article key={t.id} className="mobile-card">
+              {filtered.map((task) => (
+                <article
+                  key={task.id}
+                  className={cn(
+                    'mobile-card transition-all duration-200',
+                    detailOpen && selectedTaskId === task.id && 'border-teal-200 bg-teal-50/80 shadow-[0_18px_40px_rgba(13,148,136,0.14)]',
+                  )}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="mobile-card-meta">ID #{t.codigo_id ?? t.id}</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-800">{t.tarea}</p>
-                      {t.seccion && <p className="mt-1 text-xs text-slate-500">{t.seccion}</p>}
+                      <p className="mobile-card-meta">ID #{task.codigo_id ?? task.id}</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-800">{task.tarea}</p>
+                      {task.seccion && <p className="mt-1 text-xs text-slate-500">{task.seccion}</p>}
                     </div>
-                    <PrioridadBadge value={t.prioridad} />
+                    <PrioridadBadge value={task.prioridad} />
                   </div>
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <EstadoBadge value={t.estado} />
-                    <TipoBadge value={t.tipo_tarea} />
-                    <SemaforoBadge value={t.semaforo} />
+                    <EstadoBadge value={task.estado} />
+                    <TipoBadge value={task.tipo_tarea} />
+                    <SemaforoBadge value={task.semaforo} />
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500">
                     <div>
                       <p className="font-semibold text-slate-700">Responsable</p>
-                      <p className="mt-1">{t.responsable ?? '-'}</p>
+                      <p className="mt-1">{task.responsable ?? '-'}</p>
                     </div>
                     <div>
                       <p className="font-semibold text-slate-700">Fecha fin</p>
-                      <p className="mt-1">{formatDateShort(t.fecha_fin)}</p>
+                      <p className="mt-1">{formatDateShort(task.fecha_fin)}</p>
                     </div>
                   </div>
 
-                  <ProgressBar value={t.porcentaje_avance} showLabel className="mt-4" size="md" />
+                  <ProgressBar value={task.porcentaje_avance} showLabel className="mt-4" size="md" />
+
+                  <button
+                    onClick={() => openTaskDetail(task)}
+                    className="mt-4 flex w-full items-center justify-between rounded-[20px] border border-white/80 bg-white/70 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-teal-200 hover:bg-teal-50/90 hover:text-teal-700"
+                  >
+                    <span>Ver detalle completo</span>
+                    <ChevronDown size={16} className="-rotate-90 transition-transform" />
+                  </button>
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <button onClick={() => setHistorialTask(t)} className="action-btn flex-1 justify-center" title="Historial">
+                    <button onClick={() => setHistorialTask(task)} className="action-btn flex-1 justify-center" title="Historial">
                       <History size={14} />
                       Historial
                     </button>
                     {canEditAgenda && (
                       <>
-                        <button onClick={() => setModalTask(t)} className="action-btn flex-1 justify-center" title="Editar">
+                        <button onClick={() => setModalTask(task)} className="action-btn flex-1 justify-center" title="Editar">
                           <Pencil size={14} />
                           Editar
                         </button>
                         <button
-                          onClick={() => requestDelete(t)}
-                          disabled={deletingId === t.id}
+                          onClick={() => requestDelete(task)}
+                          disabled={deletingId === task.id}
                           className="action-btn flex-1 justify-center text-rose-600 disabled:opacity-40"
                           title="Eliminar"
                         >
@@ -299,59 +366,77 @@ export default function AgendaDiariaPage() {
                 <table className="w-full min-w-[1100px] text-sm">
                   <thead>
                     <tr className="border-b border-white/70 bg-white/40">
-                      {['ID', 'Tarea', 'Prioridad', 'Departamento', 'Responsable', 'Fecha fin', 'Avance', 'Semaforo', 'Estado', 'Tipo', 'Acciones'].map((h) => (
-                        <th key={h} className="table-header-cell whitespace-nowrap">{h}</th>
+                      {['ID', 'Tarea', 'Prioridad', 'Departamento', 'Responsable', 'Fecha fin', 'Avance', 'Semaforo', 'Estado', 'Tipo', 'Acciones'].map((header) => (
+                        <th key={header} className="table-header-cell whitespace-nowrap">{header}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100/80">
-                    {filtered.map((t, i) => (
-                      <tr key={t.id} className={i % 2 === 0 ? 'bg-white/10 transition-colors hover:bg-white/50' : 'bg-white/30 transition-colors hover:bg-white/60'}>
-                        <td className="px-4 py-3 text-xs font-semibold text-slate-400">{t.codigo_id ?? t.id}</td>
+                    {filtered.map((task, index) => (
+                      <tr
+                        key={task.id}
+                        onClick={() => openTaskDetail(task)}
+                        aria-selected={selectedTaskId === task.id}
+                        className={cn(
+                          'cursor-pointer transition-colors',
+                          index % 2 === 0 ? 'bg-white/10 hover:bg-white/50' : 'bg-white/30 hover:bg-white/60',
+                          detailOpen && selectedTaskId === task.id && 'bg-teal-50/90 hover:bg-teal-50/90',
+                        )}
+                      >
+                        <td className="px-4 py-3 text-xs font-semibold text-slate-400">{task.codigo_id ?? task.id}</td>
                         <td className="max-w-xs px-4 py-3">
-                          <p className="line-clamp-2 text-sm font-semibold leading-6 text-slate-800">{t.tarea}</p>
-                          {t.seccion && <p className="mt-1 text-xs text-slate-500">{t.seccion}</p>}
+                          <p className="line-clamp-2 text-sm font-semibold leading-6 text-slate-800">{task.tarea}</p>
+                          {task.seccion && <p className="mt-1 text-xs text-slate-500">{task.seccion}</p>}
                         </td>
-                        <td className="px-4 py-3"><PrioridadBadge value={t.prioridad} /></td>
-                        <td className="px-4 py-3 text-xs font-medium text-slate-600">{t.departamento ?? '-'}</td>
-                        <td className="px-4 py-3 text-xs font-medium text-slate-700">{t.responsable ?? '-'}</td>
+                        <td className="px-4 py-3"><PrioridadBadge value={task.prioridad} /></td>
+                        <td className="px-4 py-3 text-xs font-medium text-slate-600">{task.departamento ?? '-'}</td>
+                        <td className="px-4 py-3 text-xs font-medium text-slate-700">{task.responsable ?? '-'}</td>
                         <td className="px-4 py-3 text-xs text-slate-600">
-                          {formatDateShort(t.fecha_fin)}
-                          {t.dias_restantes !== null && t.dias_restantes !== undefined && (
-                            <p className={t.dias_restantes < 0 ? 'mt-1 font-semibold text-rose-500' : t.dias_restantes <= 2 ? 'mt-1 font-semibold text-amber-500' : 'mt-1 text-slate-500'}>
-                              {t.dias_restantes < 0 ? `${Math.abs(t.dias_restantes)}d vencida` : `${t.dias_restantes}d restantes`}
+                          {formatDateShort(task.fecha_fin)}
+                          {task.dias_restantes !== null && task.dias_restantes !== undefined && (
+                            <p className={task.dias_restantes < 0 ? 'mt-1 font-semibold text-rose-500' : task.dias_restantes <= 2 ? 'mt-1 font-semibold text-amber-500' : 'mt-1 text-slate-500'}>
+                              {task.dias_restantes < 0 ? `${Math.abs(task.dias_restantes)}d vencida` : `${task.dias_restantes}d restantes`}
                             </p>
                           )}
                         </td>
                         <td className="min-w-[140px] px-4 py-3">
-                          <ProgressBar value={t.porcentaje_avance} showLabel size="md" />
+                          <ProgressBar value={task.porcentaje_avance} showLabel size="md" />
                         </td>
-                        <td className="px-4 py-3"><SemaforoBadge value={t.semaforo} /></td>
-                        <td className="px-4 py-3"><EstadoBadge value={t.estado} /></td>
-                        <td className="px-4 py-3"><TipoBadge value={t.tipo_tarea} /></td>
+                        <td className="px-4 py-3"><SemaforoBadge value={task.semaforo} /></td>
+                        <td className="px-4 py-3"><EstadoBadge value={task.estado} /></td>
+                        <td className="px-4 py-3"><TipoBadge value={task.tipo_tarea} /></td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => setHistorialTask(t)}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setHistorialTask(task)
+                              }}
                               className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-teal-600"
                               title="Historial"
                             >
                               <History size={14} />
                             </button>
-                        <button
-                          onClick={() => setModalTask(t)}
-                          disabled={!canEditAgenda}
-                          className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-sky-600"
-                          title="Editar"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => requestDelete(t)}
-                          disabled={!canEditAgenda || deletingId === t.id}
-                          className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-rose-600 disabled:opacity-40"
-                          title="Eliminar"
-                        >
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                setModalTask(task)
+                              }}
+                              disabled={!canEditAgenda}
+                              className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-sky-600"
+                              title="Editar"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                requestDelete(task)
+                              }}
+                              disabled={!canEditAgenda || deletingId === task.id}
+                              className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-rose-600 disabled:opacity-40"
+                              title="Eliminar"
+                            >
                               <Trash2 size={14} />
                             </button>
                           </div>
@@ -369,9 +454,47 @@ export default function AgendaDiariaPage() {
       {modalTask !== undefined && canEditAgenda && (
         <TaskModal task={modalTask} onClose={() => setModalTask(undefined)} onSave={fetchTasks} />
       )}
+
       {historialTask && (
         <TaskHistorialModal task={historialTask} onClose={() => setHistorialTask(null)} onUpdate={fetchTasks} />
       )}
+
+      <TaskDetailModal
+        task={detailOpen || detailClosing ? selectedTask : null}
+        isClosing={detailClosing}
+        currentIndex={selectedTaskIndex}
+        totalTasks={filtered.length}
+        canGoPrev={selectedTaskIndex > 0}
+        canGoNext={selectedTaskIndex >= 0 && selectedTaskIndex < filtered.length - 1}
+        canEditAgenda={canEditAgenda}
+        onClose={closeTaskDetail}
+        onPrev={() => {
+          if (selectedTaskIndex > 0) {
+            setSelectedTaskId(filtered[selectedTaskIndex - 1].id)
+          }
+        }}
+        onNext={() => {
+          if (selectedTaskIndex >= 0 && selectedTaskIndex < filtered.length - 1) {
+            setSelectedTaskId(filtered[selectedTaskIndex + 1].id)
+          }
+        }}
+        onEdit={(task) => {
+          setDetailOpen(false)
+          setDetailClosing(false)
+          setModalTask(task)
+        }}
+        onDelete={(task) => {
+          setDetailOpen(false)
+          setDetailClosing(false)
+          requestDelete(task)
+        }}
+        onOpenHistory={(task) => {
+          setDetailOpen(false)
+          setDetailClosing(false)
+          setHistorialTask(task)
+        }}
+      />
+
       <ConfirmDialog
         open={!!taskToDelete}
         title="Eliminar tarea"

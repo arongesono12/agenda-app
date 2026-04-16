@@ -88,9 +88,9 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 p-0 backdrop-blur-md sm:items-center sm:p-6">
-      <div className="surface-panel-strong h-[100dvh] max-h-[100dvh] w-full max-w-4xl overflow-hidden rounded-none sm:h-auto sm:max-h-[92vh] sm:rounded-[32px]">
-        <div className="grid max-h-[100dvh] grid-cols-1 lg:grid-cols-[1.05fr_1.3fr] sm:max-h-[92vh]">
+    <div className="agenda-modal-overlay">
+      <div className="agenda-modal-shell agenda-modal-shell-compact">
+        <div className="grid max-h-[92vh] grid-cols-1 lg:grid-cols-[1.05fr_1.3fr]">
           <div className="relative overflow-hidden border-b border-white/50 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 p-6 text-white lg:border-b-0 lg:border-r lg:border-white/10">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.22),transparent_40%)]" />
             <div className="relative">
@@ -132,7 +132,7 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
               </div>
               <button
                 onClick={onClose}
-                className="action-btn h-11 w-11 rounded-2xl p-0"
+                className="agenda-modal-close"
                 aria-label="Cerrar"
               >
                 <X size={16} />

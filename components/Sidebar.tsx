@@ -223,38 +223,36 @@ function SidebarContent({
         </div>
       </div>
 
-      <div ref={menuRef} className="relative mt-5 rounded-[28px] border border-white/70 bg-gradient-to-br from-white/85 to-white/60 p-5">
+      <div ref={menuRef} className="relative mt-5 rounded-[24px] border border-white/70 bg-white/70 p-5">
         <button
           type="button"
           onClick={() => setMenuOpen((current) => !current)}
-          className="group block w-full rounded-[24px] text-left transition-transform duration-200 hover:-translate-y-0.5"
+          className="group flex w-full justify-center rounded-[24px] text-left transition-transform duration-200 hover:-translate-y-0.5"
           title="Abrir menu de usuario"
         >
-          <div className="flex flex-col items-center text-center">
-            <UserAvatar
-              name={userName}
-              avatarUrl={avatarUrl}
-              size="lg"
-              className="h-20 w-20 rounded-full ring-0 transition-all duration-200 group-hover:ring-4 group-hover:ring-teal-100"
-            />
-            <div className="mt-3 min-w-0">
-              <p className="truncate text-lg font-semibold text-slate-900">{userName}</p>
+          <UserAvatar
+            name={userName}
+            avatarUrl={avatarUrl}
+            size="lg"
+            className="h-20 w-20 rounded-full ring-0 transition-all duration-200 group-hover:ring-4 group-hover:ring-teal-100"
+          />
+        </button>
+
+        {menuOpen && (
+          <div className="absolute inset-x-5 bottom-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-[24px] border border-white/80 bg-white/70 p-2 shadow-[0_22px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl">
+            <div className="rounded-[20px] border border-white/80 bg-slate-50/80 px-4 py-3">
+              <p className="truncate text-sm font-semibold text-slate-900">{userName}</p>
               <span className="mt-2 inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">
                 {userRole}
               </span>
             </div>
-          </div>
-        </button>
-
-        {menuOpen && (
-          <div className="absolute inset-x-5 bottom-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-[24px] border border-white/80 bg-white/95 p-2 shadow-[0_22px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl">
             <Link
               href="/perfil"
               onClick={() => {
                 setMenuOpen(false)
                 onNavigate?.()
               }}
-              className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
+              className="mt-2 flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900"
             >
               <CircleUserRound size={16} />
               Perfil

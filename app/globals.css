@@ -217,6 +217,31 @@ body {
     @apply relative rounded-[28px] backdrop-blur-xl;
   }
 
+  .agenda-modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-md sm:p-6 lg:p-8;
+  }
+
+  .agenda-modal-shell {
+    @apply surface-panel-strong relative w-full overflow-hidden rounded-[32px] border border-white/85;
+    max-height: min(92vh, 920px);
+  }
+
+  .agenda-modal-shell-compact {
+    max-width: 980px;
+  }
+
+  .agenda-modal-shell-wide {
+    max-width: 1180px;
+  }
+
+  .agenda-modal-shell-xl {
+    max-width: 1320px;
+  }
+
+  .agenda-modal-close {
+    @apply action-btn h-11 w-11 rounded-2xl p-0;
+  }
+
   .section-label {
     background: var(--section-label-bg);
     border-color: var(--section-label-border);
@@ -411,9 +436,67 @@ body {
     animation: pageEnter 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
+  .detail-modal-backdrop {
+    animation: detailModalBackdropIn 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .detail-modal-backdrop-out {
+    animation: detailModalBackdropOut 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .detail-modal-panel {
+    transform-origin: center;
+    animation: detailModalPanelIn 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .detail-modal-panel-out {
+    transform-origin: center;
+    animation: detailModalPanelOut 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
   .logo-panel {
     background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96));
     border-color: rgba(226, 232, 240, 0.95);
+  }
+}
+
+@keyframes detailModalBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes detailModalBackdropOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes detailModalPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes detailModalPanelOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
   }
 }
 

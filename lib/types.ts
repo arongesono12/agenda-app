@@ -73,7 +73,7 @@ export interface TipoUsuario {
   created_at?: string
 }
 
-export type ThemePreference = 'light' | 'dark'
+export type ThemePreference = 'light' | 'dark' | 'system'
 
 export interface PreferenciasUsuario {
   theme?: ThemePreference
