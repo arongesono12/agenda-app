@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -39,58 +40,83 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<PerfilUsuario | null>(null)
   const [loading, setLoading] = useState(true)
+  const refreshInProgress = useRef(false)
 
   const refreshProfile = useCallback(async () => {
-    setLoading(true)
+    // Evitar ráfagas de llamadas concurrentes (común en React Strict Mode)
+    if (refreshInProgress.current) return
+    refreshInProgress.current = true
 
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser()
+    try {
+      setLoading(true)
 
-    setUser(authUser ?? null)
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser()
 
-    if (!authUser) {
-      setProfile(null)
+      setUser(authUser ?? null)
+
+      if (!authUser) {
+        setProfile(null)
+        setLoading(false)
+        return
+      }
+
+      const { data } = await supabase
+        .from('perfiles_usuario')
+        .select('id, email, nombre_completo, avatar_url, preferencias, tipo_usuario_id, created_at, updated_at, tipo_usuario:tipos_usuario(id, codigo, nombre, descripcion, created_at)')
+        .eq('id', authUser.id)
+        .maybeSingle()
+
+      const row = data as SessionProfileRow | null
+      const fallbackName =
+        typeof authUser.user_metadata?.full_name === 'string' ? authUser.user_metadata.full_name.trim() : null
+      const fallbackAvatar =
+        typeof authUser.user_metadata?.avatar_url === 'string' ? authUser.user_metadata.avatar_url.trim() : null
+
+      setProfile({
+        id: authUser.id,
+        email: row?.email ?? authUser.email ?? '',
+        nombre_completo: row?.nombre_completo ?? fallbackName,
+        avatar_url: row?.avatar_url ?? fallbackAvatar,
+        preferencias: normalizarPreferenciasUsuario(row?.preferencias),
+        tipo_usuario_id: row?.tipo_usuario_id ?? null,
+        created_at: row?.created_at,
+        updated_at: row?.updated_at ?? authUser.updated_at,
+        tipo_usuario: normalizarTipoUsuario(row?.tipo_usuario),
+      })
+    } finally {
       setLoading(false)
-      return
+      refreshInProgress.current = false
     }
-
-    const { data } = await supabase
-      .from('perfiles_usuario')
-      .select('id, email, nombre_completo, avatar_url, preferencias, tipo_usuario_id, created_at, updated_at, tipo_usuario:tipos_usuario(id, codigo, nombre, descripcion, created_at)')
-      .eq('id', authUser.id)
-      .maybeSingle()
-
-    const row = data as SessionProfileRow | null
-    const fallbackName =
-      typeof authUser.user_metadata?.full_name === 'string' ? authUser.user_metadata.full_name.trim() : null
-    const fallbackAvatar =
-      typeof authUser.user_metadata?.avatar_url === 'string' ? authUser.user_metadata.avatar_url.trim() : null
-
-    setProfile({
-      id: authUser.id,
-      email: row?.email ?? authUser.email ?? '',
-      nombre_completo: row?.nombre_completo ?? fallbackName,
-      avatar_url: row?.avatar_url ?? fallbackAvatar,
-      preferencias: normalizarPreferenciasUsuario(row?.preferencias),
-      tipo_usuario_id: row?.tipo_usuario_id ?? null,
-      created_at: row?.created_at,
-      updated_at: row?.updated_at ?? authUser.updated_at,
-      tipo_usuario: normalizarTipoUsuario(row?.tipo_usuario),
-    })
-    setLoading(false)
   }, [])
 
   useEffect(() => {
-    void refreshProfile()
+    let mounted = true
+
+    // Llamada inicial para asegurar estado
+    const init = async () => {
+      if (!mounted) return
+      await refreshProfile()
+    }
+    void init()
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      void refreshProfile()
+    } = supabase.auth.onAuthStateChange((event) => {
+      // Solo refrescar si el componente sigue montado y el evento es relevante
+      if (!mounted) return
+      
+      // Si recibimos un evento de firmado o salida, forzamos refresco
+      if (['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED', 'TOKEN_REFRESHED'].includes(event)) {
+         void refreshProfile()
+      }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      mounted = false
+      subscription.unsubscribe()
+    }
   }, [refreshProfile])
 
   const value = useMemo<UserSessionContextValue>(
