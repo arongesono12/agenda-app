@@ -196,13 +196,13 @@ export default function AgendaDiariaPage() {
 
       {showKpis && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-7">
-          <KPICard label="Total" value={kpis.total} icon={<Target size={18} />} color="slate" />
-          <KPICard label="Pendientes" value={kpis.pendientes} icon={<Clock3 size={18} />} color="slate" />
-          <KPICard label="En proceso" value={kpis.enProceso} icon={<RefreshCw size={18} />} color="blue" />
-          <KPICard label="Completadas" value={kpis.completadas} icon={<CheckCircle2 size={18} />} color="teal" />
-          <KPICard label="Alta prioridad" value={kpis.alta} icon={<Siren size={18} />} color="red" />
-          <KPICard label="Urgentes" value={kpis.urgentes} icon={<Clock3 size={18} />} color="amber" />
-          <KPICard label="Vencidas" value={kpis.vencidas} icon={<AlertCircle size={18} />} color="red" />
+          <KPICard label="Total" value={kpis.total} icon={<Target size={18} />} color="slate" layout="compact" />
+          <KPICard label="Pendientes" value={kpis.pendientes} icon={<Clock3 size={18} />} color="slate" layout="compact" />
+          <KPICard label="En proceso" value={kpis.enProceso} icon={<RefreshCw size={18} />} color="blue" layout="compact" />
+          <KPICard label="Completadas" value={kpis.completadas} icon={<CheckCircle2 size={18} />} color="teal" layout="compact" />
+          <KPICard label="Alta prioridad" value={kpis.alta} icon={<Siren size={18} />} color="red" layout="compact" />
+          <KPICard label="Urgentes" value={kpis.urgentes} icon={<Clock3 size={18} />} color="amber" layout="compact" />
+          <KPICard label="Vencidas" value={kpis.vencidas} icon={<AlertCircle size={18} />} color="red" layout="compact" />
         </div>
       )}
 
@@ -363,7 +363,7 @@ export default function AgendaDiariaPage() {
 
             <div className="hidden md:block">
               <div className="table-container">
-                <table className="w-full min-w-[1100px] text-sm">
+                <table className="w-full min-w-[1040px] text-sm">
                   <thead>
                     <tr className="border-b border-white/70 bg-white/40">
                       {['ID', 'Tarea', 'Prioridad', 'Departamento', 'Responsable', 'Fecha fin', 'Avance', 'Semaforo', 'Estado', 'Tipo', 'Acciones'].map((header) => (
@@ -384,13 +384,15 @@ export default function AgendaDiariaPage() {
                         )}
                       >
                         <td className="px-4 py-3 text-xs font-semibold text-slate-400">{task.codigo_id ?? task.id}</td>
-                        <td className="max-w-xs px-4 py-3">
+                        <td className="max-w-[240px] px-4 py-3">
                           <p className="line-clamp-2 text-sm font-semibold leading-6 text-slate-800">{task.tarea}</p>
                           {task.seccion && <p className="mt-1 text-xs text-slate-500">{task.seccion}</p>}
                         </td>
                         <td className="px-4 py-3"><PrioridadBadge value={task.prioridad} /></td>
                         <td className="px-4 py-3 text-xs font-medium text-slate-600">{task.departamento ?? '-'}</td>
-                        <td className="px-4 py-3 text-xs font-medium text-slate-700">{task.responsable ?? '-'}</td>
+                        <td className="max-w-[150px] px-4 py-3 text-xs font-medium text-slate-700">
+                          <span className="block truncate">{task.responsable ?? '-'}</span>
+                        </td>
                         <td className="px-4 py-3 text-xs text-slate-600">
                           {formatDateShort(task.fecha_fin)}
                           {task.dias_restantes !== null && task.dias_restantes !== undefined && (
@@ -399,20 +401,20 @@ export default function AgendaDiariaPage() {
                             </p>
                           )}
                         </td>
-                        <td className="min-w-[140px] px-4 py-3">
+                        <td className="min-w-[120px] px-4 py-3">
                           <ProgressBar value={task.porcentaje_avance} showLabel size="md" />
                         </td>
                         <td className="px-4 py-3"><SemaforoBadge value={task.semaforo} /></td>
                         <td className="px-4 py-3"><EstadoBadge value={task.estado} /></td>
                         <td className="px-4 py-3"><TipoBadge value={task.tipo_tarea} /></td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
+                        <td className="pl-2 pr-3 py-3">
+                          <div className="flex items-center justify-start gap-1.5">
                             <button
                               onClick={(event) => {
                                 event.stopPropagation()
                                 setHistorialTask(task)
                               }}
-                              className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-teal-600"
+                              className="flex h-8 w-8 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-teal-600"
                               title="Historial"
                             >
                               <History size={14} />
@@ -423,7 +425,7 @@ export default function AgendaDiariaPage() {
                                 setModalTask(task)
                               }}
                               disabled={!canEditAgenda}
-                              className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-sky-600"
+                              className="flex h-8 w-8 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-sky-600"
                               title="Editar"
                             >
                               <Pencil size={14} />
@@ -434,7 +436,7 @@ export default function AgendaDiariaPage() {
                                 requestDelete(task)
                               }}
                               disabled={!canEditAgenda || deletingId === task.id}
-                              className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-rose-600 disabled:opacity-40"
+                              className="flex h-8 w-8 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-rose-600 disabled:opacity-40"
                               title="Eliminar"
                             >
                               <Trash2 size={14} />

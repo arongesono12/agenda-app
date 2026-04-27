@@ -71,14 +71,12 @@ function SidebarContent({
   pathname,
   onNavigate,
   onClose,
-  onToggleCollapse,
   showClose = false,
   collapsed = false,
 }: {
   pathname: string
   onNavigate?: () => void
   onClose?: () => void
-  onToggleCollapse?: () => void
   showClose?: boolean
   collapsed?: boolean
 }) {
@@ -148,11 +146,11 @@ function SidebarContent({
   }
 
   return (
-    <div className={cn('surface-panel-strong flex h-full min-h-0 flex-col overflow-hidden text-slate-900', collapsed ? 'p-3' : 'p-4')}>
-      <div className={cn('rounded-[24px] border border-white/70 bg-white/70', collapsed ? 'p-3' : 'p-4')}>
+    <div className={cn('surface-panel-strong flex h-full min-h-0 flex-col overflow-hidden text-slate-900', collapsed ? 'p-2.5' : 'p-4')}>
+      <div className={cn('rounded-[24px] border border-white/70 bg-white/70', collapsed ? 'p-2.5' : 'p-4')}>
         <div className={cn('flex items-start justify-between gap-3', collapsed ? 'mb-0' : 'mb-4')}>
           <div className={cn('flex items-start gap-3', collapsed && 'min-w-0 flex-1')}>
-            <BrandMark className={cn(collapsed ? 'h-11 w-11' : 'h-12 w-12 sm:h-14 sm:w-14 lg:h-12 lg:w-12')} />
+            <BrandMark className={cn(collapsed ? 'h-11 w-11 flex-shrink-0' : 'h-12 w-12 flex-shrink-0 sm:h-14 sm:w-14 lg:h-12 lg:w-12')} />
             {!collapsed && (
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-teal-700">
@@ -164,16 +162,6 @@ function SidebarContent({
           </div>
 
           <div className="flex items-center gap-2">
-            {!showClose && onToggleCollapse && (
-              <button
-                onClick={onToggleCollapse}
-                className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-slate-900"
-                aria-label={collapsed ? 'Expandir sidebar' : 'Encoger sidebar'}
-                title={collapsed ? 'Expandir sidebar' : 'Encoger sidebar'}
-              >
-                {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-              </button>
-            )}
             {showClose && onClose && (
               <button
                 onClick={onClose}
@@ -206,7 +194,7 @@ function SidebarContent({
             Modulos
           </p>
         )}
-        <div className="mt-3 h-full overflow-y-auto pr-1">
+        <div className="sidebar-scroll mt-3 h-full pr-1">
           <ul className="space-y-1">
             {visibleNavItems.map((item) => {
               const isActive = pathname === item.href
@@ -228,7 +216,7 @@ function SidebarContent({
                   >
                     <span
                       className={cn(
-                        'relative flex h-10 w-10 items-center justify-center rounded-2xl transition-colors',
+                        'relative flex h-10 min-h-10 w-10 min-w-10 flex-shrink-0 items-center justify-center rounded-2xl transition-colors',
                         isActive ? 'bg-white/70 text-teal-700' : 'bg-white/60 text-slate-500 group-hover:text-slate-900'
                       )}
                     >
@@ -262,7 +250,7 @@ function SidebarContent({
         </div>
       </div>
 
-      <div ref={menuRef} className={cn('relative mt-5 rounded-[24px] border border-white/70 bg-white/70', collapsed ? 'p-3' : 'p-5')}>
+      <div ref={menuRef} className={cn('relative mt-5 rounded-[24px] border border-white/70 bg-white/70', collapsed ? 'p-2.5' : 'p-5')}>
         <button
           type="button"
           onClick={() => setMenuOpen((current) => !current)}
@@ -274,7 +262,7 @@ function SidebarContent({
             avatarUrl={avatarUrl}
             size={collapsed ? 'md' : 'lg'}
             className={cn(
-              collapsed ? 'h-14 w-14' : 'h-20 w-20',
+              collapsed ? 'h-14 min-h-14 w-14 min-w-14 flex-shrink-0' : 'h-20 w-20 flex-shrink-0',
               'rounded-full ring-0 transition-all duration-200 group-hover:ring-4 group-hover:ring-teal-100'
             )}
           />
@@ -334,7 +322,7 @@ function SidebarContent({
         <ThemeToggle
           className={cn(
             'mt-4 border-white/70 bg-white/70 text-slate-700 hover:bg-white hover:text-slate-900',
-            collapsed ? 'w-full justify-center px-0 [&>span]:hidden' : 'w-full justify-center'
+            collapsed ? 'h-11 w-full min-w-0 justify-center px-0 [&>span]:hidden' : 'w-full justify-center'
           )}
         />
       </div>
@@ -393,11 +381,21 @@ export default function Sidebar() {
       <aside
         className={cn(
           'no-print hidden flex-shrink-0 p-4 transition-[width,padding] duration-300 lg:block',
-          collapsed ? 'w-[6.75rem]' : 'w-[var(--sidebar-width)]'
+          collapsed ? 'w-[7.5rem]' : 'w-[var(--sidebar-width)]'
         )}
       >
-        <div className="sticky top-4 h-[calc(100vh-2rem)] overflow-hidden">
-          <SidebarContent pathname={pathname} collapsed={collapsed} onToggleCollapse={toggleCollapsed} />
+        <div className="sticky top-4 h-[calc(100vh-2rem)] overflow-visible">
+          <div className="relative h-full overflow-visible">
+            <SidebarContent pathname={pathname} collapsed={collapsed} />
+            <button
+              onClick={toggleCollapsed}
+              className="absolute right-0 top-[4.5rem] z-20 flex h-9 w-12 translate-x-1/2 items-center justify-center rounded-xl border border-white/80 bg-white/70 text-slate-500 shadow-[0_12px_28px_rgba(15,23,42,0.12)] backdrop-blur-xl transition-all duration-200 hover:scale-[1.03] hover:text-slate-900"
+              aria-label={collapsed ? 'Expandir sidebar' : 'Encoger sidebar'}
+              title={collapsed ? 'Expandir sidebar' : 'Encoger sidebar'}
+            >
+              {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            </button>
+          </div>
         </div>
       </aside>
 

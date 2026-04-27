@@ -36,8 +36,8 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
   }
 
   return (
-    <div className="grid w-full max-w-6xl grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-      <section className="surface-panel-dark relative overflow-hidden p-6 text-white sm:p-8 lg:p-10">
+    <div className="grid w-full max-w-md grid-cols-1 gap-6 lg:max-w-6xl lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="surface-panel-dark relative hidden overflow-hidden p-6 text-white sm:p-8 lg:block lg:p-10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.22),transparent_34%)]" />
         <div className="relative flex h-full flex-col justify-between gap-8">
           <div>

@@ -38,7 +38,7 @@ interface DetailItemProps {
 
 function DetailItem({ icon, label, value }: DetailItemProps) {
   return (
-    <div className="rounded-[22px] border border-white/80 bg-white/75 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)]">
+    <div className="rounded-[22px] border border-white/80 bg-white/70 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)]">
       <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
         <span className="text-slate-400">{icon}</span>
         {label}
@@ -58,7 +58,7 @@ function InfoBlock({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-[26px] border border-white/80 bg-white/72 p-5 shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
+    <section className="rounded-[26px] border border-white/80 bg-white/70 p-5 shadow-[0_18px_42px_rgba(15,23,42,0.06)]">
       <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
         <span className="text-slate-400">{icon}</span>
         {label}
@@ -220,7 +220,7 @@ export default function TaskDetailPanel({
 
       <div className="min-h-0 overflow-y-auto">
         <div className="space-y-4">
-          <section className="rounded-[28px] border border-white/80 bg-white/78 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.08)]">
+          <section className="rounded-[28px] border border-white/80 bg-white/70 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.08)]">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
@@ -237,7 +237,7 @@ export default function TaskDetailPanel({
             <ProgressBar value={task.porcentaje_avance} showLabel className="mt-5" size="md" />
           </section>
 
-          <section className="rounded-[28px] border border-white/80 bg-white/78 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.08)]">
+          <section className="rounded-[28px] border border-white/80 bg-white/70 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.08)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
               Resumen operativo
             </p>
@@ -255,7 +255,7 @@ export default function TaskDetailPanel({
             </div>
           </section>
 
-          <section className="rounded-[28px] border border-white/80 bg-white/78 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.08)]">
+          <section className="rounded-[28px] border border-white/80 bg-white/70 p-5 shadow-[0_18px_44px_rgba(15,23,42,0.08)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
               Acciones
             </p>

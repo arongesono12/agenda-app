@@ -7,6 +7,7 @@ interface KPICardProps {
   icon: React.ReactNode
   color?: 'teal' | 'blue' | 'amber' | 'red' | 'slate' | 'purple'
   trend?: { value: string; up: boolean }
+  layout?: 'default' | 'compact'
 }
 
 const colorMap = {
@@ -48,27 +49,49 @@ const colorMap = {
   },
 }
 
-export default function KPICard({ label, value, sub, icon, color = 'slate', trend }: KPICardProps) {
+export default function KPICard({
+  label,
+  value,
+  sub,
+  icon,
+  color = 'slate',
+  trend,
+  layout = 'compact',
+}: KPICardProps) {
   const c = colorMap[color]
+  const isCompact = layout === 'compact'
 
   return (
-    <div className={cn('surface-panel kpi-card kpi-shell relative overflow-hidden p-5', c.border)}>
+    <div className={cn('surface-panel kpi-card kpi-shell relative overflow-hidden', isCompact ? 'p-4' : 'p-5', c.border)}>
       <div className={cn('kpi-glow pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-br', c.glow)} />
-      <div className="relative flex items-start justify-between gap-3">
-        <div className={cn('flex h-12 w-12 items-center justify-center rounded-[20px] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]', c.icon)}>
-          {icon}
+      <div className={cn('relative', isCompact ? 'space-y-3' : '')}>
+        <div className="flex items-start justify-between gap-3">
+          <div className={cn('flex items-center', isCompact ? 'gap-3' : 'gap-0')}>
+            <div
+              className={cn(
+                'flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]',
+                isCompact ? 'h-10 w-10 rounded-2xl' : 'h-12 w-12 rounded-[20px]',
+                c.icon
+              )}
+            >
+              {icon}
+            </div>
+            {isCompact && (
+              <p className={cn('text-2xl font-semibold tracking-[-0.04em]', c.value)}>{value}</p>
+            )}
+          </div>
+          {trend && (
+            <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold', trend.up ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600')}>
+              {trend.up ? '\u2191' : '\u2193'} {trend.value}
+            </span>
+          )}
         </div>
-        {trend && (
-          <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-semibold', trend.up ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600')}>
-            {trend.up ? '\u2191' : '\u2193'} {trend.value}
-          </span>
-        )}
-      </div>
 
-      <div className="relative mt-5">
-        <p className={cn('text-3xl font-semibold tracking-[-0.04em]', c.value)}>{value}</p>
-        <p className="mt-2 text-sm font-semibold text-slate-700">{label}</p>
-        {sub && <p className="mt-1 text-xs leading-5 text-slate-500">{sub}</p>}
+        <div className={cn('relative', isCompact ? '' : 'mt-5')}>
+          {!isCompact && <p className={cn('text-3xl font-semibold tracking-[-0.04em]', c.value)}>{value}</p>}
+          <p className={cn('font-semibold text-slate-700', isCompact ? 'text-xs leading-5' : 'mt-2 text-sm')}>{label}</p>
+          {sub && <p className="mt-1 text-xs leading-5 text-slate-500">{sub}</p>}
+        </div>
       </div>
     </div>
   )
