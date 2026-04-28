@@ -2,11 +2,20 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { ArrowLeft, CheckCircle2, Loader2, LockKeyhole, Mail, ShieldPlus } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Loader2, LockKeyhole, Mail, ShieldPlus, UserCog } from 'lucide-react'
+
+const ROLES = [
+  { code: 'responsable', label: 'Responsable' },
+  { code: 'supervisor', label: 'Supervisor' },
+  { code: 'consulta', label: 'Consulta' },
+  { code: 'administrador', label: 'Administrador' },
+  { code: 'administradora', label: 'Administradora' },
+]
 
 export default function LocalRegisterForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [roleCode, setRoleCode] = useState('responsable')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -26,6 +35,7 @@ export default function LocalRegisterForm() {
         body: JSON.stringify({
           email: email.trim(),
           password,
+          roleCode,
         }),
       })
 
@@ -35,9 +45,10 @@ export default function LocalRegisterForm() {
         throw new Error(data.error || 'No se pudo crear el usuario.')
       }
 
-      setSuccess(`Usuario ${data.user.email} ${data.user.action === 'created' ? 'creado' : 'actualizado'} correctamente.`)
+      setSuccess(`Usuario ${data.user.email} ${data.user.action === 'created' ? 'creado' : 'actualizado'} correctamente con rol ${data.user.role}.`)
       setEmail('')
       setPassword('')
+      setRoleCode('responsable')
     } catch (submitError: unknown) {
       setError(submitError instanceof Error ? submitError.message : 'No se pudo crear el usuario.')
     } finally {
@@ -131,6 +142,24 @@ export default function LocalRegisterForm() {
                     className="input-shell pl-11"
                     placeholder="Minimo 8 caracteres"
                   />
+                </div>
+              </div>
+
+              <div>
+                <label className="label-field">Rol del usuario</label>
+                <div className="relative">
+                  <UserCog size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <select
+                    value={roleCode}
+                    onChange={(event) => setRoleCode(event.target.value)}
+                    className="input-shell pl-11"
+                  >
+                    {ROLES.map((role) => (
+                      <option key={role.code} value={role.code}>
+                        {role.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

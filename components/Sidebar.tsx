@@ -95,25 +95,27 @@ function SidebarContent({
   const avatarUrl = profile?.avatar_url ?? null
 
   useEffect(() => {
-    const fetchAlerts = async () => {
-      const { data } = await supabase
-        .from('tareas')
-        .select('fecha_fin')
-        .not('estado', 'in', '("Completado","Cancelado")')
+    let cancelled = false
 
-      if (data) {
-        const normalized = normalizarTareas(data as Array<{ fecha_fin?: string }> | null)
-        const count = normalized.filter(
-          (t) =>
-            t.semaforo === SEMAFORO_VENCIDA ||
-            t.semaforo === SEMAFORO_URGENTE ||
-            t.semaforo === SEMAFORO_PROXIMA
-        ).length
-        setAlertCount(count)
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch('/api/alertas/unread')
+        if (!cancelled && res.ok) {
+          const data = (await res.json()) as { count: number }
+          setAlertCount(data.count)
+        }
+      } catch {
+        // fallo silencioso — no interrumpe la UI
       }
     }
 
-    void fetchAlerts()
+    void fetchUnread()
+    const interval = setInterval(() => void fetchUnread(), 60_000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [])
 
   useEffect(() => {

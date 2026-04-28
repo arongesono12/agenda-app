@@ -17,18 +17,11 @@ import PageHeader from '@/components/ui/PageHeader'
 import { ESTADOS, TIPOS_TAREA, PRIORIDADES } from '@/lib/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { useUserSession } from '@/components/UserSessionProvider'
+import type { Responsable } from '@/lib/types'
 
 interface Depto {
   id: number
   nombre: string
-  activo: boolean
-}
-
-interface Resp {
-  id: number
-  nombre: string
-  departamento?: string
-  cargo?: string
   activo: boolean
 }
 
@@ -40,11 +33,12 @@ type DeleteTarget =
 export default function CatalogosPage() {
   const { isAdmin } = useUserSession()
   const [deptos, setDeptos] = useState<Depto[]>([])
-  const [resps, setResps] = useState<Resp[]>([])
+  const [resps, setResps] = useState<Responsable[]>([])
   const [loading, setLoading] = useState(true)
   const [newDepto, setNewDepto] = useState('')
-  const [newResp, setNewResp] = useState({ nombre: '', departamento: '', cargo: '' })
+  const [newResp, setNewResp] = useState({ nombre: '', email: '', departamento: '', cargo: '' })
   const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
   const [tab, setTab] = useState<'deptos' | 'resps' | 'estados'>('deptos')
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
   const [deleteError, setDeleteError] = useState('')
@@ -57,7 +51,7 @@ export default function CatalogosPage() {
       supabase.from('responsables').select('*').order('nombre'),
     ])
     setDeptos(d.data ?? [])
-    setResps(r.data ?? [])
+    setResps((r.data ?? []) as Responsable[])
     setLoading(false)
   }, [])
 
@@ -76,13 +70,34 @@ export default function CatalogosPage() {
 
   const addResp = async () => {
     if (!newResp.nombre.trim()) return
+    const email = newResp.email.trim().toLowerCase()
+
+    if (!email) {
+      setFormError('El correo del responsable es obligatorio.')
+      return
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setFormError('Introduce un correo valido.')
+      return
+    }
+
+    setFormError('')
     setSaving(true)
-    await supabase.from('responsables').insert({
+    const { error } = await supabase.from('responsables').insert({
       nombre: newResp.nombre.trim(),
+      email,
       departamento: newResp.departamento || null,
       cargo: newResp.cargo || null,
     })
-    setNewResp({ nombre: '', departamento: '', cargo: '' })
+
+    if (error) {
+      setFormError(error.message)
+      setSaving(false)
+      return
+    }
+
+    setNewResp({ nombre: '', email: '', departamento: '', cargo: '' })
     setSaving(false)
     void fetch()
   }
@@ -242,6 +257,10 @@ export default function CatalogosPage() {
                         <p className="truncate text-xs text-slate-500">
                           {[r.cargo, r.departamento].filter(Boolean).join(' · ') || 'Sin detalle adicional'}
                         </p>
+                        {r.email && <p className="truncate text-xs text-slate-500">{r.email}</p>}
+                        <p className={r.usuario_id ? 'mt-1 text-xs font-semibold text-teal-600' : 'mt-1 text-xs font-semibold text-amber-600'}>
+                          {r.usuario_id ? 'Usuario asociado' : 'Sin usuario asociado'}
+                        </p>
                       </div>
                     </div>
                     <button
@@ -262,13 +281,25 @@ export default function CatalogosPage() {
           <div className="surface-panel p-5">
             <p className="label-field">Nuevo registro</p>
             <h3 className="text-lg font-semibold text-slate-900">Agregar responsable</h3>
-            <p className="mt-1 text-sm text-slate-500">Asocia nombre, cargo y departamento para asignacion mas clara.</p>
+            <p className="mt-1 text-sm text-slate-500">Asocia nombre, correo, cargo y departamento para asignacion mas clara.</p>
             <div className="mt-5 space-y-3">
+              {formError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {formError}
+                </div>
+              )}
               <input
                 type="text"
                 value={newResp.nombre}
                 onChange={(e) => setNewResp((r) => ({ ...r, nombre: e.target.value }))}
                 placeholder="Nombre completo"
+                className="input-shell"
+              />
+              <input
+                type="email"
+                value={newResp.email}
+                onChange={(e) => setNewResp((r) => ({ ...r, email: e.target.value }))}
+                placeholder="Correo del responsable"
                 className="input-shell"
               />
               <input
@@ -288,7 +319,7 @@ export default function CatalogosPage() {
                   <option key={d.id}>{d.nombre}</option>
                 ))}
               </select>
-              <button onClick={addResp} disabled={saving || !newResp.nombre.trim()} className="action-btn-primary w-full justify-center disabled:translate-y-0 disabled:opacity-50">
+              <button onClick={addResp} disabled={saving || !newResp.nombre.trim() || !newResp.email.trim()} className="action-btn-primary w-full justify-center disabled:translate-y-0 disabled:opacity-50">
                 {saving ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
                 Agregar responsable
               </button>

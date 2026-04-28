@@ -3,7 +3,8 @@ import { useState, useEffect } from 'react'
 import { X, Save, Loader2, CalendarDays, FileText, Flag, UserRound } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { DEPARTAMENTOS, PRIORIDADES, ESTADOS, TIPOS_TAREA } from '@/lib/types'
-import type { Tarea } from '@/lib/types'
+import type { Responsable, Tarea } from '@/lib/types'
+import { useToast } from '@/components/ToastProvider'
 
 interface TaskModalProps {
   task?: Tarea | null
@@ -25,34 +26,64 @@ const empty: Partial<Tarea> = {
 }
 
 export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
+  const toast = useToast()
   const [form, setForm] = useState<Partial<Tarea>>(task ?? empty)
+  const [responsables, setResponsables] = useState<Responsable[]>([])
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
   const isEdit = !!task
 
   useEffect(() => {
     setForm(task ?? empty)
   }, [task])
 
+  useEffect(() => {
+    const loadResponsables = async () => {
+      const { data } = await supabase
+        .from('responsables')
+        .select('id, nombre, email, usuario_id, departamento, cargo, activo')
+        .eq('activo', true)
+        .order('nombre')
+
+      setResponsables((data ?? []) as Responsable[])
+    }
+
+    void loadResponsables()
+  }, [])
+
   const set = (k: keyof Tarea, v: unknown) => setForm((f) => ({ ...f, [k]: v }))
+
+  const setResponsable = (id: string) => {
+    if (!id) {
+      setForm((f) => ({ ...f, responsable_id: null, responsable_usuario_id: null, responsable: '' }))
+      return
+    }
+
+    const responsable = responsables.find((item) => item.id === Number(id))
+    setForm((f) => ({
+      ...f,
+      responsable_id: responsable?.id ?? null,
+      responsable_usuario_id: responsable?.usuario_id ?? null,
+      responsable: responsable?.nombre ?? '',
+    }))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.tarea?.trim()) {
-      setError('La tarea es obligatoria.')
+      toast.error('La tarea es obligatoria.')
       return
     }
 
     if (form.codigo_id !== undefined && form.codigo_id !== null && !Number.isInteger(Number(form.codigo_id))) {
-      setError('El ID manual debe ser un numero entero.')
+      toast.error('El ID manual debe ser un numero entero.')
       return
     }
 
     setSaving(true)
-    setError('')
 
     try {
       const payload = {
+        id: task?.id,
         codigo_id: form.codigo_id !== undefined && form.codigo_id !== null && `${form.codigo_id}` !== ''
           ? Number(form.codigo_id)
           : null,
@@ -62,6 +93,7 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
         departamento: form.departamento || null,
         seccion: form.seccion || null,
         responsable: form.responsable || null,
+        responsable_id: form.responsable_id || null,
         fecha_inicio: form.fecha_inicio || null,
         fecha_fin: form.fecha_fin || null,
         porcentaje_avance: Number(form.porcentaje_avance ?? 0),
@@ -70,18 +102,22 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
         ultima_actualizacion: new Date().toISOString(),
       }
 
-      if (isEdit) {
-        const { error: e } = await supabase.from('tareas').update(payload).eq('id', task!.id)
-        if (e) throw e
-      } else {
-        const { error: e } = await supabase.from('tareas').insert(payload)
-        if (e) throw e
+      const response = await fetch('/api/tareas', {
+        method: isEdit ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const result = (await response.json()) as { ok?: boolean; error?: string }
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error ?? 'Error al guardar')
       }
 
+      toast.success(isEdit ? 'Tarea actualizada correctamente.' : 'Tarea creada correctamente.')
       onSave()
       onClose()
     } catch (err: unknown) {
-      setError((err as Error)?.message ?? 'Error al guardar')
+      toast.error((err as Error)?.message ?? 'Error al guardar')
     } finally {
       setSaving(false)
     }
@@ -140,11 +176,6 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {error && (
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                  {error}
-                </div>
-              )}
 
               <div>
                 <label className="label-field">
@@ -215,13 +246,22 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className="label-field">Responsable</label>
-                  <input
-                    type="text"
-                    value={form.responsable ?? ''}
-                    onChange={(e) => set('responsable', e.target.value)}
+                  <select
+                    value={form.responsable_id ?? responsables.find((item) => item.nombre === form.responsable)?.id ?? ''}
+                    onChange={(e) => setResponsable(e.target.value)}
                     className="input-shell"
-                    placeholder="Nombre del responsable"
-                  />
+                  >
+                    <option value="">Seleccionar responsable</option>
+                    {responsables.map((responsable) => (
+                      <option key={responsable.id} value={responsable.id}>
+                        {responsable.nombre}
+                        {responsable.usuario_id ? '' : ' - sin usuario'}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Para notificar en la aplicacion, el responsable debe tener un usuario asociado a su correo.
+                  </p>
                 </div>
                 <div>
                   <label className="label-field">Tipo de tarea</label>

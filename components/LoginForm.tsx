@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { AlertCircle, Eye, EyeOff, Loader2, LockKeyhole, Mail } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
@@ -151,6 +152,15 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
               {submitting ? 'Validando acceso...' : 'Entrar al sistema'}
             </button>
           </form>
+
+          <div className="mt-5 rounded-[22px] border border-white/80 bg-slate-50/80 px-4 py-3 text-center">
+            <p className="text-sm text-slate-600">
+              No tienes cuenta?{' '}
+              <Link href="/registro" className="font-semibold text-teal-700 transition-colors hover:text-teal-900">
+                Registrarse
+              </Link>
+            </p>
+          </div>
 
         </div>
       </section>

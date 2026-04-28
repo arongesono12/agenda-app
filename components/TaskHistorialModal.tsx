@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { TIPOS_ORDEN } from '@/lib/types'
 import type { Historial, Tarea, TipoOrden } from '@/lib/types'
 import { useUserSession } from '@/components/UserSessionProvider'
+import { useToast } from '@/components/ToastProvider'
 
 interface TaskHistorialModalProps {
   task: Tarea
@@ -40,17 +41,17 @@ const EMPTY_FORM: { tipo_cambio: TipoOrden; observaciones: string; valor_nuevo: 
 
 export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHistorialModalProps) {
   const { canEditAgenda } = useUserSession()
+  const toast = useToast()
   const [rows, setRows] = useState<Historial[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
+  const [finalizar, setFinalizar] = useState(false)
 
   const canAdd = useMemo(() => canEditAgenda && !BLOCKED_STATES.has(task.estado), [canEditAgenda, task.estado])
 
   const fetchHistorial = useCallback(async () => {
     setLoading(true)
-    setError('')
 
     const { data, error: fetchError } = await supabase
       .from('historial')
@@ -60,13 +61,13 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
 
     if (fetchError) {
       setRows([])
-      setError(fetchError.message)
+      toast.error('No se pudo cargar el historial: ' + fetchError.message)
     } else {
       setRows(data ?? [])
     }
 
     setLoading(false)
-  }, [task.id])
+  }, [task.id, toast])
 
   useEffect(() => {
     void fetchHistorial()
@@ -74,7 +75,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
 
   useEffect(() => {
     setForm(EMPTY_FORM)
-    setError('')
+    setFinalizar(false)
   }, [task.id])
 
   useEffect(() => {
@@ -105,69 +106,36 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
     const valorNuevo = form.valor_nuevo.trim()
 
     if (!observaciones && !valorNuevo) {
-      setError('Escribe una observación o un valor nuevo antes de registrar la entrada.')
+      toast.error('Escribe una observación o un valor nuevo antes de registrar la entrada.')
       return
     }
 
     setSubmitting(true)
-    setError('')
 
-    let nuevoPorcentaje: number | null = null
-
-    const isFinalizado = valorNuevo.toLowerCase().includes('completado') || valorNuevo.toLowerCase().includes('finalizado')
-    const isChangeState = form.tipo_cambio === 'Cambio de Estado'
-
-    if (isChangeState && isFinalizado) {
-      nuevoPorcentaje = 100
-    } else if ((form.tipo_cambio === 'Avance' || form.tipo_cambio === 'Nota') && task.estado !== 'Completado') {
-      const parsed = parseInt(valorNuevo, 10)
-      if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
-        nuevoPorcentaje = parsed
-      }
-    }
-
-    if (nuevoPorcentaje === null && task.porcentaje_avance < 100) {
-      nuevoPorcentaje = Math.min(task.porcentaje_avance + 10, 95)
-    }
-
-    const payload = {
-      fecha: new Date().toISOString(),
-      usuario: 'Usuario',
+    const response = await fetch('/api/historial', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
       tarea_id: task.id,
-      tarea_nombre: task.tarea,
-      modulo: 'Agenda de Control',
       tipo_cambio: form.tipo_cambio,
-      valor_anterior: null,
-      valor_nuevo: valorNuevo || null,
       observaciones: observaciones || null,
-    }
+        valor_nuevo: valorNuevo || null,
+        finalizar,
+      }),
+    })
+    const result = (await response.json()) as { ok?: boolean; error?: string }
 
-    const { error: insertError } = await supabase.from('historial').insert(payload)
-
-    if (insertError) {
-      setError(insertError.message)
+    if (!response.ok || !result.ok) {
+      toast.error(result.error ?? 'No se pudo registrar la entrada.')
       setSubmitting(false)
       return
     }
 
-    if (nuevoPorcentaje !== null) {
-      await supabase.from('tareas').update({ 
-        porcentaje_avance: nuevoPorcentaje,
-        ultima_actualizacion: new Date().toISOString()
-      }).eq('id', task.id)
-      if (onUpdate) onUpdate()
-    }
-
-    if (isChangeState && isFinalizado) {
-      await supabase.from('tareas').update({ 
-        estado: 'Completado',
-        ultima_actualizacion: new Date().toISOString()
-      }).eq('id', task.id)
-      if (onUpdate) onUpdate()
-    }
-
+    toast.success(finalizar ? 'Tarea marcada como finalizada.' : 'Entrada registrada correctamente.')
     setForm(EMPTY_FORM)
+    setFinalizar(false)
     await fetchHistorial()
+    if (onUpdate) onUpdate()
     setSubmitting(false)
   }
 
@@ -255,11 +223,6 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  {error && (
-                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                      {error}
-                    </div>
-                  )}
 
                   <div>
                     <label className="label-field">Tipo de cambio</label>
@@ -300,6 +263,32 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                       disabled={!canAdd || submitting}
                     />
                   </div>
+
+                  <label className="flex cursor-pointer items-start gap-3 rounded-[22px] border border-white/80 bg-slate-50/80 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={finalizar}
+                      onChange={(event) => {
+                        const checked = event.target.checked
+                        setFinalizar(checked)
+                        if (checked) {
+                          setForm((current) => ({
+                            ...current,
+                            tipo_cambio: 'Cambio de Estado',
+                            valor_nuevo: 'Completado',
+                          }))
+                        }
+                      }}
+                      disabled={!canAdd || submitting}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 accent-teal-600"
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold text-slate-800">Marcar tarea como finalizada</span>
+                      <span className="mt-1 block text-xs leading-5 text-slate-500">
+                        Cambia el estado a Completado, fija el avance en 100% y notifica a los administradores.
+                      </span>
+                    </span>
+                  </label>
 
                   <button
                     type="submit"

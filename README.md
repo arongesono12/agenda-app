@@ -35,7 +35,8 @@ Sistema de gestion de tareas y seguimiento operativo construido con Next.js y Su
 5. Ejecuta luego [migration_user_avatars.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_user_avatars.sql) para habilitar fotos de perfil.
 6. Ejecuta despues [migration_user_preferences.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_user_preferences.sql) para guardar preferencias por usuario.
 7. Ejecuta despues [migration_security_hardening.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_security_hardening.sql) para aplicar permisos por rol y endurecer RLS.
-8. Copia la URL del proyecto y la clave anon desde `Settings -> API`.
+8. Ejecuta despues [migration_responsables_notificaciones.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_responsables_notificaciones.sql) para asociar responsables con usuarios, alertas internas y emails.
+9. Copia la URL del proyecto y la clave anon desde `Settings -> API`.
 
 ### 2. Variables de entorno
 
@@ -53,7 +54,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-clave-anon
 SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key
 AGENDA_BOOTSTRAP_TOKEN=token-largo-y-aleatorio
 AGENDA_BOOTSTRAP_USERS=[{"email":"admin@empresa.com","password":"ChangeMe123!"}]
+RESEND_API_KEY=re_xxxxxxxxx
+RESEND_FROM_EMAIL=Agenda <agenda@tu-dominio.com>
+AGENDA_ALERTS_CRON_TOKEN=otro-token-largo-y-aleatorio
 ```
+
+Para procesar vencimientos automaticamente, configura un cron externo o Vercel Cron que invoque `GET` o `POST /api/alertas/vencimientos` con el header `Authorization: Bearer <AGENDA_ALERTS_CRON_TOKEN>`.
 
 ### 3. Instalar y ejecutar
 

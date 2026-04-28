@@ -16,6 +16,8 @@ export interface Tarea {
   prioridad: Prioridad
   departamento?: string
   seccion?: string
+  responsable_id?: number | null
+  responsable_usuario_id?: string | null
   responsable?: string
   fecha_inicio?: string
   fecha_fin?: string
@@ -91,6 +93,17 @@ export interface PerfilUsuario {
   created_at?: string
   updated_at?: string
   tipo_usuario?: TipoUsuario | null
+}
+
+export interface Responsable {
+  id: number
+  nombre: string
+  email?: string | null
+  usuario_id?: string | null
+  departamento?: string | null
+  cargo?: string | null
+  activo: boolean
+  created_at?: string
 }
 
 export const DEPARTAMENTOS = [
