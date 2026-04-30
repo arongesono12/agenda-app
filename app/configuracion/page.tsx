@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Loader2, Monitor, Moon, RefreshCw, Save, SlidersHorizontal, Sun } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import { supabase } from '@/lib/supabase'
+import type { Json } from '@/lib/database.types'
 import type { PerfilUsuario, PreferenciasUsuario } from '@/lib/types'
 import { useTheme } from '@/components/ThemeProvider'
 import { useUserSession } from '@/components/UserSessionProvider'
@@ -115,7 +116,7 @@ export default function ConfiguracionPage() {
           nombre_completo:
             profile.nombre_completo ??
             (typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : null),
-          preferencias: normalizedPreferences,
+          preferencias: normalizedPreferences as Json,
         },
         { onConflict: 'id' }
       )

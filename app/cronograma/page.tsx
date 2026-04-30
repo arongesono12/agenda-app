@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { GanttChartSquare, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
-import { normalizarTareas, supabase } from '@/lib/supabase'
+import { normalizarTareas } from '@/lib/supabase'
 import type { Tarea } from '@/lib/types'
 import PageHeader from '@/components/ui/PageHeader'
 import { format, getDaysInMonth, isWeekend, isToday, parseISO, isBefore, isAfter } from 'date-fns'
@@ -18,25 +18,33 @@ export default function CronogramaPage() {
   const [tasks, setTasks] = useState<Tarea[]>([])
   const [loading, setLoading] = useState(true)
   const [ref, setRef] = useState(new Date())
+  const year = ref.getFullYear()
+  const month = ref.getMonth()
+  const daysCount = getDaysInMonth(ref)
 
   const fetch = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from('tareas')
-      .select('*')
-      .not('fecha_inicio', 'is', null)
-      .not('fecha_fin', 'is', null)
-    setTasks(normalizarTareas(data as Tarea[] | null))
+    const monthStart = format(new Date(year, month, 1), 'yyyy-MM-dd')
+    const monthEnd = format(new Date(year, month, daysCount), 'yyyy-MM-dd')
+    const params = new URLSearchParams({
+      page: '0',
+      pageSize: '100',
+      orderBy: 'fecha_inicio',
+      ascending: 'true',
+      summary: 'false',
+      cronograma_desde: monthStart,
+      cronograma_hasta: monthEnd,
+    })
+    const response = await window.fetch(`/api/tareas?${params.toString()}`)
+    const result = (await response.json()) as { ok?: boolean; tasks?: Tarea[] }
+    setTasks(response.ok && result.ok ? normalizarTareas(result.tasks ?? []) : [])
     setLoading(false)
-  }, [])
+  }, [daysCount, month, year])
 
   useEffect(() => {
     fetch()
   }, [fetch])
 
-  const year = ref.getFullYear()
-  const month = ref.getMonth()
-  const daysCount = getDaysInMonth(ref)
   const days = Array.from({ length: daysCount }, (_, i) => new Date(year, month, i + 1))
   const monthLabel = format(ref, 'MMMM yyyy', { locale: es })
 

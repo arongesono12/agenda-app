@@ -9,33 +9,74 @@ import KPICard from '@/components/ui/KPICard'
 import { PrioridadBadge, EstadoBadge, SemaforoBadge } from '@/components/ui/Badge'
 import ProgressBar from '@/components/ui/ProgressBar'
 
+type ResponsableSummary = {
+  total: number
+  enProceso: number
+  completadas: number
+  pendientes: number
+}
+
 export default function ResponsablePage() {
-  const [allTasks, setAllTasks] = useState<Tarea[]>([])
+  const [myTasks, setMyTasks] = useState<Tarea[]>([])
   const [responsables, setResponsables] = useState<string[]>([])
   const [selected, setSelected] = useState('')
   const [loading, setLoading] = useState(true)
+  const [summary, setSummary] = useState<ResponsableSummary>({ total: 0, enProceso: 0, completadas: 0, pendientes: 0 })
 
-  const fetch = useCallback(async () => {
+  const fetchResponsables = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('tareas').select('*').order('fecha_fin')
-    const tasks = normalizarTareas(data as Tarea[] | null)
-    setAllTasks(tasks)
-    const unique = [...new Set(tasks.map((t) => t.responsable).filter(Boolean))] as string[]
+    const { data } = await supabase.from('responsables').select('nombre').eq('activo', true).order('nombre')
+    const unique = (data ?? []).map((row) => row.nombre).filter(Boolean)
     setResponsables(unique.sort())
     if (unique.length > 0 && !selected) setSelected(unique[0])
     setLoading(false)
   }, [selected])
 
+  const fetch = useCallback(async () => {
+    if (!selected) return
+    setLoading(true)
+    const params = new URLSearchParams({
+      page: '0',
+      pageSize: '100',
+      orderBy: 'fecha_fin',
+      ascending: 'true',
+      responsable_exact: selected,
+    })
+    const response = await window.fetch(`/api/tareas?${params.toString()}`)
+    const result = (await response.json()) as {
+      ok?: boolean
+      tasks?: Tarea[]
+      summary?: {
+        total: number
+        enProceso: number
+        completadas: number
+        pendientes: number
+      } | null
+    }
+
+    if (response.ok && result.ok) {
+      setMyTasks(normalizarTareas(result.tasks ?? []))
+      setSummary(result.summary ?? { total: 0, enProceso: 0, completadas: 0, pendientes: 0 })
+    } else {
+      setMyTasks([])
+      setSummary({ total: 0, enProceso: 0, completadas: 0, pendientes: 0 })
+    }
+    setLoading(false)
+  }, [selected])
+
+  useEffect(() => {
+    fetchResponsables()
+  }, [fetchResponsables])
+
   useEffect(() => {
     fetch()
   }, [fetch])
 
-  const myTasks = allTasks.filter((t) => t.responsable === selected)
   const kpis = {
-    total: myTasks.length,
-    enProceso: myTasks.filter((t) => t.estado === 'En Proceso').length,
-    completadas: myTasks.filter((t) => t.estado === 'Completado').length,
-    pendientes: myTasks.filter((t) => t.estado === 'Pendiente').length,
+    total: summary.total,
+    enProceso: summary.enProceso,
+    completadas: summary.completadas,
+    pendientes: summary.pendientes,
     avance: myTasks.length ? Math.round(myTasks.reduce((a, t) => a + (t.porcentaje_avance ?? 0), 0) / myTasks.length) : 0,
   }
 

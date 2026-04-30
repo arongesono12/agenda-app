@@ -1,8 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
-import { ArrowLeft, CheckCircle2, Loader2, LockKeyhole, Mail, ShieldPlus, UserCog } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArrowLeft, Building2, CheckCircle2, ChevronDown, Loader2, LockKeyhole, Mail, ShieldPlus, UserCog } from 'lucide-react'
+import ThemeToggle from '@/components/ThemeToggle'
+
+type PublicDepartamento = {
+  id: number
+  nombre: string
+}
 
 const ROLES = [
   { code: 'responsable', label: 'Responsable' },
@@ -16,9 +22,29 @@ export default function LocalRegisterForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [roleCode, setRoleCode] = useState('responsable')
+  const [departamento, setDepartamento] = useState('')
+  const [departamentos, setDepartamentos] = useState<PublicDepartamento[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  useEffect(() => {
+    const loadDepartamentos = async () => {
+      try {
+        const response = await fetch('/api/register')
+        const data = (await response.json()) as { ok?: boolean; departamentos?: PublicDepartamento[] }
+
+        if (response.ok && data.ok && data.departamentos?.length) {
+          setDepartamentos(data.departamentos)
+          setDepartamento((current) => current || data.departamentos?.[0]?.nombre || '')
+        }
+      } catch {
+        setDepartamentos([])
+      }
+    }
+
+    void loadDepartamentos()
+  }, [])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -36,6 +62,7 @@ export default function LocalRegisterForm() {
           email: email.trim(),
           password,
           roleCode,
+          departamento,
         }),
       })
 
@@ -49,6 +76,7 @@ export default function LocalRegisterForm() {
       setEmail('')
       setPassword('')
       setRoleCode('responsable')
+      setDepartamento(departamentos[0]?.nombre ?? '')
     } catch (submitError: unknown) {
       setError(submitError instanceof Error ? submitError.message : 'No se pudo crear el usuario.')
     } finally {
@@ -95,7 +123,7 @@ export default function LocalRegisterForm() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-700">Provisioning local</p>
                 <p className="mt-1 text-xl font-semibold text-slate-900">Crear usuario manual</p>
               </div>
-              <ShieldPlus size={22} className="text-teal-700" />
+              <ThemeToggle className="w-11 flex-shrink-0 px-0 sm:w-auto sm:px-3" />
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -163,9 +191,30 @@ export default function LocalRegisterForm() {
                 </div>
               </div>
 
+              <div>
+                <label className="label-field">Departamento</label>
+                <div className="relative">
+                  <Building2 size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <select
+                    value={departamento}
+                    onChange={(event) => setDepartamento(event.target.value)}
+                    required
+                    className="input-shell appearance-none pl-11 pr-10"
+                  >
+                    <option value="">Seleccionar departamento</option>
+                    {departamentos.map((item) => (
+                      <option key={item.id} value={item.nombre}>
+                        {item.nombre}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                </div>
+              </div>
+
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !departamento}
                 className="action-btn-primary w-full justify-center disabled:translate-y-0 disabled:opacity-60"
               >
                 {loading ? <Loader2 size={16} className="animate-spin" /> : <ShieldPlus size={16} />}

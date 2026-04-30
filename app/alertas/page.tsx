@@ -38,12 +38,17 @@ export default function AlertasPage() {
     setLoading(true)
     await window.fetch('/api/alertas/vencimientos', { method: 'POST' }).catch(() => null)
 
-    const { data } = await supabase
-      .from('tareas')
-      .select('*')
-      .not('estado', 'in', '("Completado","Cancelado")')
-      .order('fecha_fin', { ascending: true })
-    setTasks(normalizarTareas(data as Tarea[] | null))
+    const params = new URLSearchParams({
+      page: '0',
+      pageSize: '100',
+      orderBy: 'fecha_fin',
+      ascending: 'true',
+      summary: 'false',
+      alertas: 'true',
+    })
+    const response = await window.fetch(`/api/tareas?${params.toString()}`)
+    const result = (await response.json()) as { ok?: boolean; tasks?: Tarea[] }
+    setTasks(response.ok && result.ok ? normalizarTareas(result.tasks ?? []) : [])
 
     if (user?.id) {
       const { data: alerts } = await supabase

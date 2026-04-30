@@ -8,6 +8,7 @@ type RegisterPayload = {
   password?: string
   fullName?: string
   roleCode?: string
+  departamento?: string
 }
 
 function fallbackNameFromEmail(email: string) {
@@ -26,22 +27,27 @@ function isPublicRole(roleCode?: string | null) {
 export async function GET() {
   try {
     const admin = createAdminSupabaseClient()
-    const { data, error } = await admin
-      .from('tipos_usuario')
-      .select('codigo, nombre, descripcion')
-      .order('nombre')
+    const [rolesResult, departamentosResult] = await Promise.all([
+      admin.from('tipos_usuario').select('codigo, nombre, descripcion').order('nombre'),
+      admin.from('departamentos').select('id, nombre, activo').eq('activo', true).order('nombre'),
+    ])
 
-    if (error) throw error
+    if (rolesResult.error) throw rolesResult.error
+    if (departamentosResult.error && departamentosResult.error.code !== '42P01') throw departamentosResult.error
 
-    const roles = (data ?? [])
+    const roles = (rolesResult.data ?? [])
       .filter((role) => isPublicRole(role.codigo))
       .map((role) => ({
         codigo: role.codigo,
         nombre: role.nombre,
         descripcion: role.descripcion,
       }))
+    const departamentos = (departamentosResult.data ?? []).map((departamento) => ({
+      id: departamento.id,
+      nombre: departamento.nombre,
+    }))
 
-    return NextResponse.json({ ok: true, roles })
+    return NextResponse.json({ ok: true, roles, departamentos })
   } catch (error: unknown) {
     return NextResponse.json(
       {
@@ -60,6 +66,7 @@ export async function POST(request: Request) {
     const password = body.password ?? ''
     const fullName = body.fullName?.trim() || (email ? fallbackNameFromEmail(email) : '')
     const roleCode = normalizeRoleCode(body.roleCode)
+    const departamento = body.departamento?.trim()
 
     if (!email || !password) {
       return NextResponse.json(
@@ -81,7 +88,36 @@ export async function POST(request: Request) {
       )
     }
 
+    if (!departamento) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Selecciona un departamento para el usuario.',
+        },
+        { status: 400 }
+      )
+    }
+
     const admin = createAdminSupabaseClient()
+    const { data: departamentoRow, error: departamentoError } = await admin
+      .from('departamentos')
+      .select('nombre')
+      .eq('nombre', departamento)
+      .eq('activo', true)
+      .maybeSingle()
+
+    if (departamentoError) throw departamentoError
+
+    if (!departamentoRow) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Selecciona un departamento valido.',
+        },
+        { status: 400 }
+      )
+    }
+
     const { data: roleRow, error: roleError } = await admin
       .from('tipos_usuario')
       .select('id, codigo, nombre')
@@ -154,11 +190,13 @@ export async function POST(request: Request) {
       throw responsableLookupError
     }
 
-    if (roleRow.codigo === 'responsable' && responsableLookupError?.code !== '42P01') {
+    if (responsableLookupError?.code !== '42P01') {
       const responsablePayload = {
         nombre: fullName,
         email,
         usuario_id: userId,
+        departamento: departamentoRow.nombre,
+        cargo: roleRow.nombre,
         activo: true,
       }
 

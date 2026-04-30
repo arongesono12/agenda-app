@@ -4,13 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useMemo, useState, useEffect, useRef } from 'react'
-import {
-  supabase,
-  normalizarTareas,
-  SEMAFORO_VENCIDA,
-  SEMAFORO_URGENTE,
-  SEMAFORO_PROXIMA,
-} from '@/lib/supabase'
+import { supabase } from '@/lib/supabase'
 import {
   Bell,
   BarChart3,

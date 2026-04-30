@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { ADMIN_ROLE_CODES } from '@/lib/access-control'
+import type { Database } from '@/lib/database.types'
+import { DOMAIN_WARNING_ROUTE, isDomainAcquisitionExpired } from '@/lib/domain-acquisition'
 
 type CookieMutation = {
   name: string
@@ -25,7 +27,7 @@ export async function updateSession(request: NextRequest) {
     },
   })
 
-  const supabase = createServerClient(
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -55,13 +57,25 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
   const isLoginRoute = pathname === '/login'
+  const isDomainWarningRoute = pathname === DOMAIN_WARNING_ROUTE
   const isRegisterRoute = pathname === '/registro'
   const isRegisterApi = pathname === '/api/register'
   const isLocalRegisterRoute = process.env.NODE_ENV !== 'production' && pathname === '/registro-local'
   const isLocalRegisterApi = process.env.NODE_ENV !== 'production' && pathname === '/api/local/register'
   const isBootstrapApi = pathname === '/api/bootstrap/agenda-users'
-  const isProtectedRoute = !isLoginRoute && !isRegisterRoute && !isRegisterApi && !isLocalRegisterRoute && !isLocalRegisterApi && !isBootstrapApi
+  const isProtectedRoute = !isLoginRoute && !isDomainWarningRoute && !isRegisterRoute && !isRegisterApi && !isLocalRegisterRoute && !isLocalRegisterApi && !isBootstrapApi
   const isAdminOnlyRoute = pathname === '/catalogos' || isLocalRegisterRoute || isLocalRegisterApi
+  const domainExpired = isDomainAcquisitionExpired()
+
+  if (!claims && domainExpired && isLoginRoute) {
+    const warningUrl = request.nextUrl.clone()
+    warningUrl.pathname = DOMAIN_WARNING_ROUTE
+    warningUrl.search = ''
+
+    const redirectResponse = NextResponse.redirect(warningUrl)
+    copyCookies(response, redirectResponse)
+    return redirectResponse
+  }
 
   if (!claims && isProtectedRoute) {
     if (isApiRoute(pathname)) {
@@ -75,7 +89,7 @@ export async function updateSession(request: NextRequest) {
     }
 
     const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = '/login'
+    loginUrl.pathname = DOMAIN_WARNING_ROUTE
 
     const requestedPath =
       pathname === '/'

@@ -6,6 +6,8 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Filter,
   History,
@@ -18,12 +20,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import {
-  normalizarTareas,
-  SEMAFORO_URGENTE,
-  SEMAFORO_VENCIDA,
-  supabase,
-} from '@/lib/supabase'
+import { normalizarTareas } from '@/lib/supabase'
 import type { Tarea } from '@/lib/types'
 import { DEPARTAMENTOS, ESTADOS, PRIORIDADES, TIPOS_TAREA } from '@/lib/types'
 import { cn, formatDateShort } from '@/lib/utils'
@@ -41,12 +38,44 @@ import { normalizarPreferenciasUsuario } from '@/lib/user-preferences'
 import { useUserSession } from '@/components/UserSessionProvider'
 
 const INIT_FILTERS = { q: '', prioridad: '', departamento: '', estado: '', tipo: '' }
+const PAGE_SIZE = 25
+
+type TaskSummary = {
+  total: number
+  pendientes: number
+  enProceso: number
+  completadas: number
+  altaPrioridad: number
+  vencidas: number
+  urgentes: number
+}
+
+type TasksResponse = {
+  ok?: boolean
+  error?: string
+  tasks?: Tarea[]
+  total?: number
+  totalPages?: number
+  summary?: TaskSummary | null
+}
 
 export default function AgendaDiariaPage() {
   const { profile, canEditAgenda } = useUserSession()
   const [tasks, setTasks] = useState<Tarea[]>([])
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState(INIT_FILTERS)
+  const [page, setPage] = useState(0)
+  const [totalTasks, setTotalTasks] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [summary, setSummary] = useState<TaskSummary>({
+    total: 0,
+    pendientes: 0,
+    enProceso: 0,
+    completadas: 0,
+    altaPrioridad: 0,
+    vencidas: 0,
+    urgentes: 0,
+  })
   const [showFilters, setShowFilters] = useState(false)
   const [showKpis, setShowKpis] = useState(true)
   const [modalTask, setModalTask] = useState<Tarea | null | undefined>(undefined)
@@ -62,14 +91,41 @@ export default function AgendaDiariaPage() {
 
   const fetchTasks = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('tareas').select('*').order('created_at', { ascending: false })
-    setTasks(normalizarTareas(data as Tarea[] | null))
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(PAGE_SIZE),
+      orderBy: 'created_at',
+    })
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.set(key, value)
+    })
+
+    const response = await window.fetch(`/api/tareas?${params.toString()}`)
+    const result = (await response.json()) as TasksResponse
+
+    if (response.ok && result.ok) {
+      setTasks(normalizarTareas(result.tasks ?? []))
+      setTotalTasks(result.total ?? 0)
+      setTotalPages(result.totalPages ?? 0)
+      if (result.summary) {
+        setSummary(result.summary)
+      }
+    } else {
+      setTasks([])
+      setTotalTasks(0)
+      setTotalPages(0)
+    }
     setLoading(false)
-  }, [])
+  }, [filters, page])
 
   useEffect(() => {
     void fetchTasks()
   }, [fetchTasks])
+
+  useEffect(() => {
+    setPage(0)
+  }, [filters])
 
   useEffect(() => {
     return () => {
@@ -85,18 +141,7 @@ export default function AgendaDiariaPage() {
     setShowFilters(preferencias.abrir_filtros_agenda)
   }, [profile?.preferencias])
 
-  const filtered = tasks.filter((task) => {
-    if (
-      filters.q &&
-      !task.tarea.toLowerCase().includes(filters.q.toLowerCase()) &&
-      !(task.responsable ?? '').toLowerCase().includes(filters.q.toLowerCase())
-    ) return false
-    if (filters.prioridad && task.prioridad !== filters.prioridad) return false
-    if (filters.departamento && task.departamento !== filters.departamento) return false
-    if (filters.estado && task.estado !== filters.estado) return false
-    if (filters.tipo && task.tipo_tarea !== filters.tipo) return false
-    return true
-  })
+  const filtered = tasks
   const selectedTask = selectedTaskId === null ? null : filtered.find((task) => task.id === selectedTaskId) ?? null
   const selectedTaskIndex = selectedTask ? filtered.findIndex((task) => task.id === selectedTask.id) : -1
 
@@ -115,13 +160,13 @@ export default function AgendaDiariaPage() {
   }, [filtered])
 
   const kpis = {
-    total: tasks.length,
-    pendientes: tasks.filter((task) => task.estado === 'Pendiente').length,
-    enProceso: tasks.filter((task) => task.estado === 'En Proceso').length,
-    completadas: tasks.filter((task) => task.estado === 'Completado').length,
-    alta: tasks.filter((task) => task.prioridad === 'Alta').length,
-    vencidas: tasks.filter((task) => task.semaforo === SEMAFORO_VENCIDA).length,
-    urgentes: tasks.filter((task) => task.semaforo === SEMAFORO_URGENTE).length,
+    total: summary.total,
+    pendientes: summary.pendientes,
+    enProceso: summary.enProceso,
+    completadas: summary.completadas,
+    alta: summary.altaPrioridad,
+    vencidas: summary.vencidas,
+    urgentes: summary.urgentes,
   }
 
   const requestDelete = (task: Tarea) => {
@@ -135,10 +180,15 @@ export default function AgendaDiariaPage() {
     setDeletingId(taskToDelete.id)
     setDeleteError('')
 
-    const { error } = await supabase.from('tareas').delete().eq('id', taskToDelete.id)
+    const response = await fetch('/api/tareas', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: taskToDelete.id }),
+    })
+    const result = (await response.json()) as { ok?: boolean; error?: string }
 
-    if (error) {
-      setDeleteError(error.message)
+    if (!response.ok || !result.ok) {
+      setDeleteError(result.error ?? 'No se pudo eliminar la tarea.')
       setDeletingId(null)
       return
     }
@@ -270,8 +320,10 @@ export default function AgendaDiariaPage() {
       <div className="surface-panel table-shell overflow-hidden">
         <div className="flex flex-col gap-2 border-b border-white/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold text-slate-800">{filtered.length} tareas visibles</p>
-            <p className="text-xs text-slate-500">Activa una tarea para abrir su detalle y recorrer la lista sin cerrar el modal.</p>
+            <p className="text-sm font-semibold text-slate-800">{totalTasks} tareas encontradas</p>
+            <p className="text-xs text-slate-500">
+              Mostrando {filtered.length} en esta pagina. Activa una tarea para abrir su detalle.
+            </p>
           </div>
           <span className="section-label self-start sm:self-auto">Panel diario</span>
         </div>
@@ -449,6 +501,32 @@ export default function AgendaDiariaPage() {
                 </table>
               </div>
             </div>
+
+            {totalPages > 1 && (
+              <div className="flex flex-col gap-3 border-t border-white/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-slate-500">
+                  Pagina {page + 1} de {totalPages}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage((current) => Math.max(0, current - 1))}
+                    disabled={page === 0 || loading}
+                    className="action-btn h-10 w-10 rounded-2xl p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Pagina anterior"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
+                    disabled={page >= totalPages - 1 || loading}
+                    className="action-btn h-10 w-10 rounded-2xl p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Pagina siguiente"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

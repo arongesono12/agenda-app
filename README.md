@@ -36,7 +36,8 @@ Sistema de gestion de tareas y seguimiento operativo construido con Next.js y Su
 6. Ejecuta despues [migration_user_preferences.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_user_preferences.sql) para guardar preferencias por usuario.
 7. Ejecuta despues [migration_security_hardening.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_security_hardening.sql) para aplicar permisos por rol y endurecer RLS.
 8. Ejecuta despues [migration_responsables_notificaciones.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_responsables_notificaciones.sql) para asociar responsables con usuarios, alertas internas y emails.
-9. Copia la URL del proyecto y la clave anon desde `Settings -> API`.
+9. Ejecuta despues [migration_scalability_phase2.sql](C:/Users/admesono/Desktop/Proyectos/agenda-app/supabase/migration_scalability_phase2.sql) para activar RLS por alcance, RPCs agregadas e indices de escala.
+10. Copia la URL del proyecto y la clave anon desde `Settings -> API`.
 
 ### 2. Variables de entorno
 
@@ -91,7 +92,7 @@ La tabla `tareas` incluye:
 
 ## Stack
 
-- Next.js 14
+- Next.js 16
 - React 18
 - TypeScript
 - Tailwind CSS
@@ -99,3 +100,10 @@ La tabla `tareas` incluye:
 - Recharts
 - Lucide React
 - date-fns
+
+## Escalabilidad
+
+- Las pantallas de agenda y busqueda usan `/api/tareas` con paginacion, filtros server-side y limite maximo de pagina.
+- Dashboard y estadisticas usan RPCs SQL (`api_dashboard_data`, `api_estadisticas_data`) cuando la migracion de escala esta aplicada; si no existe, las APIs hacen fallback a calculos TypeScript.
+- La migracion de escala endurece RLS por alcance: administradores gestionan todo, supervisores operan por departamento o asignacion, responsables solo sus tareas, consulta mantiene lectura.
+- Los clientes Supabase usan el contrato tipado de [database.types.ts](C:/Users/admesono/Desktop/Proyectos/agenda-app/lib/database.types.ts). En CI se recomienda regenerarlo con Supabase CLI cuando cambie el esquema.

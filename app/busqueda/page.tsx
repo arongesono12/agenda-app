@@ -1,7 +1,7 @@
 'use client'
 import { useState, useCallback } from 'react'
-import { Search, SlidersHorizontal, X, Loader2, History } from 'lucide-react'
-import { normalizarTareas, supabase } from '@/lib/supabase'
+import { Search, SlidersHorizontal, X, Loader2, History, ChevronLeft, ChevronRight } from 'lucide-react'
+import { normalizarTareas } from '@/lib/supabase'
 import type { Tarea } from '@/lib/types'
 import { DEPARTAMENTOS, PRIORIDADES, ESTADOS, TIPOS_TAREA } from '@/lib/types'
 import { formatDateShort } from '@/lib/utils'
@@ -11,6 +11,15 @@ import { PrioridadBadge, EstadoBadge, TipoBadge, SemaforoBadge } from '@/compone
 import ProgressBar from '@/components/ui/ProgressBar'
 
 const INIT = { q: '', prioridad: '', departamento: '', responsable: '', estado: '', tipo: '', fecha_desde: '', fecha_hasta: '' }
+const PAGE_SIZE = 50
+
+type SearchResponse = {
+  ok?: boolean
+  error?: string
+  tasks?: Tarea[]
+  total?: number
+  totalPages?: number
+}
 
 export default function BusquedaPage() {
   const [filters, setFilters] = useState(INIT)
@@ -18,40 +27,51 @@ export default function BusquedaPage() {
   const [searched, setSearched] = useState(false)
   const [loading, setLoading] = useState(false)
   const [historialTask, setHistorialTask] = useState<Tarea | null>(null)
+  const [page, setPage] = useState(0)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
 
   const set = (k: string, v: string) => setFilters((f) => ({ ...f, [k]: v }))
 
-  const search = useCallback(async () => {
+  const search = useCallback(async (nextPage = page) => {
     setLoading(true)
     setSearched(true)
-    let q = supabase.from('tareas').select('*')
-    if (filters.prioridad) q = q.eq('prioridad', filters.prioridad)
-    if (filters.departamento) q = q.eq('departamento', filters.departamento)
-    if (filters.estado) q = q.eq('estado', filters.estado)
-    if (filters.tipo) q = q.eq('tipo_tarea', filters.tipo)
-    if (filters.responsable) q = q.ilike('responsable', `%${filters.responsable}%`)
-    if (filters.q) {
-      const term = filters.q.trim()
-      const numericId = Number(term)
-      if (!isNaN(numericId) && term !== '' && Number.isInteger(numericId)) {
-        // Si es número: buscar por descripción, id o codigo_id
-        q = q.or(`tarea.ilike.%${term}%,id.eq.${numericId},codigo_id.eq.${numericId}`)
-      } else {
-        // Si es texto: buscar por descripción
-        q = q.ilike('tarea', `%${term}%`)
-      }
+
+    const params = new URLSearchParams({
+      page: String(nextPage),
+      pageSize: String(PAGE_SIZE),
+      orderBy: 'created_at',
+      summary: 'false',
+    })
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.set(key, value)
+    })
+
+    const response = await window.fetch(`/api/tareas?${params.toString()}`)
+    const result = (await response.json()) as SearchResponse
+
+    if (response.ok && result.ok) {
+      setResults(normalizarTareas(result.tasks ?? []))
+      setTotal(result.total ?? 0)
+      setTotalPages(result.totalPages ?? 0)
+      setPage(nextPage)
+    } else {
+      setResults([])
+      setTotal(0)
+      setTotalPages(0)
     }
-    if (filters.fecha_desde) q = q.gte('fecha_fin', filters.fecha_desde)
-    if (filters.fecha_hasta) q = q.lte('fecha_fin', filters.fecha_hasta)
-    const { data } = await q.order('created_at', { ascending: false })
-    setResults(normalizarTareas(data as Tarea[] | null))
+
     setLoading(false)
-  }, [filters])
+  }, [filters, page])
 
   const clear = () => {
     setFilters(INIT)
     setResults([])
     setSearched(false)
+    setPage(0)
+    setTotal(0)
+    setTotalPages(0)
   }
 
   const activeCount = Object.values(filters).filter(Boolean).length
@@ -90,7 +110,7 @@ export default function BusquedaPage() {
                 type="text"
                 value={filters.q}
                 onChange={(e) => set('q', e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && search()}
+                onKeyDown={(e) => e.key === 'Enter' && search(0)}
                 placeholder="Descripcion de la tarea, ID (#42) o codigo manual..."
                 className="input-shell pl-11"
               />
@@ -139,7 +159,7 @@ export default function BusquedaPage() {
         </div>
 
         <div className="mt-5 flex flex-wrap gap-3">
-          <button onClick={search} className="action-btn-primary">
+          <button onClick={() => search(0)} className="action-btn-primary">
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
             Buscar
           </button>
@@ -151,7 +171,7 @@ export default function BusquedaPage() {
         <div className="surface-panel table-shell overflow-hidden">
           <div className="border-b border-white/70 px-5 py-4">
             <p className="text-sm font-semibold text-slate-800">
-              {loading ? 'Buscando...' : `${results.length} resultado${results.length !== 1 ? 's' : ''} encontrado${results.length !== 1 ? 's' : ''}`}
+              {loading ? 'Buscando...' : `${total} resultado${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}`}
             </p>
           </div>
 
@@ -242,6 +262,31 @@ export default function BusquedaPage() {
               </table>
             </div>
             </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-white/70 px-5 py-4">
+                <p className="text-xs text-slate-500">
+                  Pagina {page + 1} de {totalPages}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => search(Math.max(0, page - 1))}
+                    disabled={page === 0 || loading}
+                    className="action-btn h-10 w-10 rounded-2xl p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Pagina anterior"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <button
+                    onClick={() => search(Math.min(totalPages - 1, page + 1))}
+                    disabled={page >= totalPages - 1 || loading}
+                    className="action-btn h-10 w-10 rounded-2xl p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label="Pagina siguiente"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
             </>
           )}
         </div>

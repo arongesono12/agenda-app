@@ -34,7 +34,7 @@ export default function HistorialPage() {
       .select('*', { count: 'exact' })
       .order('fecha', { ascending: false })
       .range(from, to)
-    setRows(data ?? [])
+    setRows((data ?? []) as Historial[])
     setTotal(count ?? 0)
     setLoading(false)
   }, [page])

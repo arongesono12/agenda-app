@@ -1,9 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { BarChart3, RefreshCw } from 'lucide-react'
-import { normalizarTareas, supabase } from '@/lib/supabase'
-import type { Tarea } from '@/lib/types'
-import { PRIORIDADES, TIPOS_TAREA } from '@/lib/types'
 import PageHeader from '@/components/ui/PageHeader'
 import ProgressBar from '@/components/ui/ProgressBar'
 import {
@@ -20,14 +17,45 @@ import {
   Radar,
 } from 'recharts'
 
+type StatRowData = {
+  total: number
+  completadas: number
+  en_proceso: number
+  pendientes: number
+}
+
+type EstadisticasData = {
+  prioridadStats: Array<StatRowData & { prioridad: string }>
+  tipoStats: Array<StatRowData & { tipo: string; pct: number }>
+  departamentoStats: Array<StatRowData & { dpto: string; avance_prom: number }>
+  radarData: Array<{ dept: string; completadas: number; en_proceso: number; pendientes: number }>
+}
+
+const EMPTY_STATS: EstadisticasData = {
+  prioridadStats: [],
+  tipoStats: [],
+  departamentoStats: [],
+  radarData: [],
+}
+
 export default function EstadisticasPage() {
-  const [tasks, setTasks] = useState<Tarea[]>([])
+  const [stats, setStats] = useState<EstadisticasData>(EMPTY_STATS)
   const [loading, setLoading] = useState(true)
 
   const fetch = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('tareas').select('*')
-    setTasks(normalizarTareas(data as Tarea[] | null))
+    const response = await window.fetch('/api/estadisticas')
+    const result = (await response.json()) as ({ ok?: boolean; error?: string } & Partial<EstadisticasData>)
+
+    if (response.ok && result.ok) {
+      setStats({
+        prioridadStats: result.prioridadStats ?? [],
+        tipoStats: result.tipoStats ?? [],
+        departamentoStats: result.departamentoStats ?? [],
+        radarData: result.radarData ?? [],
+      })
+    }
+
     setLoading(false)
   }, [])
 
@@ -35,55 +63,7 @@ export default function EstadisticasPage() {
     fetch()
   }, [fetch])
 
-  const priStats = PRIORIDADES.map((p) => ({
-    prioridad: p,
-    total: tasks.filter((t) => t.prioridad === p).length,
-    completadas: tasks.filter((t) => t.prioridad === p && t.estado === 'Completado').length,
-    en_proceso: tasks.filter((t) => t.prioridad === p && t.estado === 'En Proceso').length,
-    pendientes: tasks.filter((t) => t.prioridad === p && t.estado === 'Pendiente').length,
-  }))
-
-  const tipoStats = TIPOS_TAREA.map((tipo) => ({
-    tipo,
-    total: tasks.filter((t) => t.tipo_tarea === tipo).length,
-    completadas: tasks.filter((t) => t.tipo_tarea === tipo && t.estado === 'Completado').length,
-    en_proceso: tasks.filter((t) => t.tipo_tarea === tipo && t.estado === 'En Proceso').length,
-    pendientes: tasks.filter((t) => t.tipo_tarea === tipo && t.estado === 'Pendiente').length,
-    pct:
-      tasks.filter((t) => t.tipo_tarea === tipo).length > 0
-        ? Math.round(
-            (tasks.filter((t) => t.tipo_tarea === tipo && t.estado === 'Completado').length /
-              tasks.filter((t) => t.tipo_tarea === tipo).length) *
-              100
-          )
-        : 0,
-  }))
-
-  const deptMap: Record<string, { completadas: number; en_proceso: number; pendientes: number; avance: number[] }> = {}
-  tasks.forEach((t) => {
-    const d = t.departamento ?? 'Sin asignar'
-    if (!deptMap[d]) deptMap[d] = { completadas: 0, en_proceso: 0, pendientes: 0, avance: [] }
-    if (t.estado === 'Completado') deptMap[d].completadas++
-    else if (t.estado === 'En Proceso') deptMap[d].en_proceso++
-    else deptMap[d].pendientes++
-    deptMap[d].avance.push(t.porcentaje_avance ?? 0)
-  })
-
-  const deptStats = Object.entries(deptMap)
-    .map(([dpto, v]) => ({
-      dpto: dpto.length > 14 ? `${dpto.slice(0, 14)}...` : dpto,
-      ...v,
-      total: v.completadas + v.en_proceso + v.pendientes,
-      avance_prom: v.avance.length ? Math.round(v.avance.reduce((a, b) => a + b, 0) / v.avance.length) : 0,
-    }))
-    .sort((a, b) => b.total - a.total)
-
-  const radarData = deptStats.slice(0, 6).map((d) => ({
-    dept: d.dpto,
-    completadas: d.completadas,
-    en_proceso: d.en_proceso,
-    pendientes: d.pendientes,
-  }))
+  const { prioridadStats: priStats, tipoStats, departamentoStats: deptStats, radarData } = stats
 
   const StatRow = ({
     label,

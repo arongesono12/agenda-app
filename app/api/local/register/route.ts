@@ -9,6 +9,7 @@ type RegisterPayload = {
   email?: string
   password?: string
   roleCode?: string
+  departamento?: string
 }
 
 const ALLOWED_ROLE_CODES = ['administrador', 'administradora', 'supervisor', 'responsable', 'consulta'] as const
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
     const email = body.email?.trim().toLowerCase()
     const password = body.password ?? ''
     const roleCode = normalizeRoleCode(body.roleCode)
+    const departamento = body.departamento?.trim()
 
     if (!email || !password) {
       return NextResponse.json(
@@ -66,6 +68,16 @@ export async function POST(request: Request) {
         {
           ok: false,
           error: 'Selecciona un rol valido para el usuario.',
+        },
+        { status: 400 }
+      )
+    }
+
+    if (!departamento) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Selecciona un departamento para el usuario.',
         },
         { status: 400 }
       )
@@ -106,6 +118,27 @@ export async function POST(request: Request) {
         {
           ok: false,
           error: `El rol "${roleCode}" no existe en tipos_usuario. Ejecuta migration_user_profiles.sql primero.`,
+        },
+        { status: 400 }
+      )
+    }
+
+    const { data: departamentoRow, error: departamentoError } = await admin
+      .from('departamentos')
+      .select('nombre')
+      .eq('nombre', departamento)
+      .eq('activo', true)
+      .maybeSingle()
+
+    if (departamentoError) {
+      throw departamentoError
+    }
+
+    if (!departamentoRow) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Selecciona un departamento valido.',
         },
         { status: 400 }
       )
@@ -156,32 +189,32 @@ export async function POST(request: Request) {
       throw profileError
     }
 
-    if (roleCode === 'responsable') {
-      const { data: responsable, error: responsableLookupError } = await admin
-        .from('responsables')
-        .select('id')
-        .eq('email', email)
-        .maybeSingle()
+    const { data: responsable, error: responsableLookupError } = await admin
+      .from('responsables')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle()
 
-      if (responsableLookupError && responsableLookupError.code !== '42P01') {
-        throw responsableLookupError
+    if (responsableLookupError && responsableLookupError.code !== '42P01') {
+      throw responsableLookupError
+    }
+
+    if (responsableLookupError?.code !== '42P01') {
+      const responsablePayload = {
+        nombre: fallbackNameFromEmail(email),
+        email,
+        usuario_id: userId,
+        departamento: departamentoRow.nombre,
+        cargo: roleRow.nombre,
+        activo: true,
       }
 
-      if (responsableLookupError?.code !== '42P01') {
-        const responsablePayload = {
-          nombre: fallbackNameFromEmail(email),
-          email,
-          usuario_id: userId,
-          activo: true,
-        }
+      const { error: responsableSaveError } = responsable?.id
+        ? await admin.from('responsables').update(responsablePayload).eq('id', responsable.id)
+        : await admin.from('responsables').insert(responsablePayload)
 
-        const { error: responsableSaveError } = responsable?.id
-          ? await admin.from('responsables').update(responsablePayload).eq('id', responsable.id)
-          : await admin.from('responsables').insert(responsablePayload)
-
-        if (responsableSaveError) {
-          throw responsableSaveError
-        }
+      if (responsableSaveError) {
+        throw responsableSaveError
       }
     }
 

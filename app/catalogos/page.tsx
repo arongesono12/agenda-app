@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Settings,
   RefreshCw,
@@ -43,6 +43,14 @@ export default function CatalogosPage() {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
   const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const usuariosPorDepartamento = useMemo(() => {
+    return resps.reduce<Record<string, number>>((acc, responsable) => {
+      const departamento = responsable.departamento?.trim()
+      if (!departamento || !responsable.usuario_id) return acc
+      acc[departamento] = (acc[departamento] ?? 0) + 1
+      return acc
+    }, {})
+  }, [resps])
 
   const fetch = useCallback(async () => {
     setLoading(true)
@@ -50,8 +58,8 @@ export default function CatalogosPage() {
       supabase.from('departamentos').select('*').order('nombre'),
       supabase.from('responsables').select('*').order('nombre'),
     ])
-    setDeptos(d.data ?? [])
-    setResps((r.data ?? []) as Responsable[])
+    setDeptos((d.data ?? []).map((row) => ({ id: row.id, nombre: row.nombre, activo: row.activo ?? true })))
+    setResps((r.data ?? []).map((row) => ({ ...row, activo: row.activo ?? true })) as Responsable[])
     setLoading(false)
   }, [])
 
@@ -197,6 +205,9 @@ export default function CatalogosPage() {
                       <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-teal-500/10 text-teal-700">
                         <Building2 size={16} />
                       </div>
+                      <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-2xl border border-teal-200 bg-teal-50 px-2 text-xs font-bold text-teal-700">
+                        {usuariosPorDepartamento[d.nombre] ?? 0}
+                      </span>
                       <span className="text-sm font-semibold text-slate-800">{d.nombre}</span>
                     </div>
                     <button

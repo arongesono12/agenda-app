@@ -63,7 +63,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
       setRows([])
       toast.error('No se pudo cargar el historial: ' + fetchError.message)
     } else {
-      setRows(data ?? [])
+      setRows((data ?? []) as Historial[])
     }
 
     setLoading(false)

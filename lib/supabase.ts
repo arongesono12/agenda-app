@@ -1,10 +1,11 @@
 import { createBrowserClient } from '@supabase/ssr'
+import type { Database } from '@/lib/database.types'
 import type { Semaforo, Tarea } from '@/lib/types'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey)
 
 export const SEMAFORO_SIN_FECHA = '\u26AA Sin fecha'
 export const SEMAFORO_VENCIDA = '\u{1F534} Vencida'

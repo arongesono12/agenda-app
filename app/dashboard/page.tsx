@@ -10,12 +10,6 @@ import {
   AlertTriangle,
   Target,
 } from 'lucide-react'
-import {
-  normalizarTareas,
-  SEMAFORO_VENCIDA,
-  supabase,
-} from '@/lib/supabase'
-import type { Tarea } from '@/lib/types'
 import PageHeader from '@/components/ui/PageHeader'
 import KPICard from '@/components/ui/KPICard'
 import ProgressBar from '@/components/ui/ProgressBar'
@@ -36,14 +30,67 @@ import {
 
 const PIE_COLORS = ['#0f766e', '#0284c7', '#f59e0b', '#ef4444']
 
+type DashboardData = {
+  kpis: {
+    total: number
+    completadas: number
+    enProceso: number
+    pendientes: number
+    alta: number
+    vencidas: number
+    avance: number
+  }
+  deptData: Array<{ name: string; total: number; completadas: number; enProceso: number; pendientes: number }>
+  respData: Array<[string, { total: number; completadas: number; enProceso: number; pendientes: number }]>
+  pieData: Array<{ name: string; value: number }>
+  priData: Array<{ name: 'Alta' | 'Media' | 'Baja'; value: number }>
+  recientes: Array<{
+    id: number
+    tarea: string
+    prioridad: 'Alta' | 'Media' | 'Baja'
+    estado: 'Pendiente' | 'En Proceso' | 'Completado' | 'Cancelado'
+    updated_at?: string | null
+    created_at?: string | null
+  }>
+}
+
+const EMPTY_DASHBOARD: DashboardData = {
+  kpis: {
+    total: 0,
+    completadas: 0,
+    enProceso: 0,
+    pendientes: 0,
+    alta: 0,
+    vencidas: 0,
+    avance: 0,
+  },
+  deptData: [],
+  respData: [],
+  pieData: [],
+  priData: [],
+  recientes: [],
+}
+
 export default function DashboardPage() {
-  const [tasks, setTasks] = useState<Tarea[]>([])
+  const [dashboard, setDashboard] = useState<DashboardData>(EMPTY_DASHBOARD)
   const [loading, setLoading] = useState(true)
 
   const fetch = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('tareas').select('*')
-    setTasks(normalizarTareas(data as Tarea[] | null))
+    const response = await window.fetch('/api/dashboard')
+    const result = (await response.json()) as ({ ok?: boolean; error?: string } & Partial<DashboardData>)
+
+    if (response.ok && result.ok) {
+      setDashboard({
+        kpis: result.kpis ?? EMPTY_DASHBOARD.kpis,
+        deptData: result.deptData ?? [],
+        respData: result.respData ?? [],
+        pieData: result.pieData ?? [],
+        priData: result.priData ?? [],
+        recientes: result.recientes ?? [],
+      })
+    }
+
     setLoading(false)
   }, [])
 
@@ -59,67 +106,7 @@ export default function DashboardPage() {
     )
   }
 
-  const kpis = {
-    total: tasks.length,
-    completadas: tasks.filter((t) => t.estado === 'Completado').length,
-    enProceso: tasks.filter((t) => t.estado === 'En Proceso').length,
-    pendientes: tasks.filter((t) => t.estado === 'Pendiente').length,
-    alta: tasks.filter((t) => t.prioridad === 'Alta').length,
-    vencidas: tasks.filter((t) => t.semaforo === SEMAFORO_VENCIDA).length,
-    avance: tasks.length ? Math.round(tasks.reduce((a, t) => a + (t.porcentaje_avance ?? 0), 0) / tasks.length) : 0,
-  }
-
-  const deptMap: Record<string, { total: number; completadas: number; enProceso: number; pendientes: number }> = {}
-  const respMap: Record<string, { total: number; completadas: number; enProceso: number; pendientes: number }> = {}
-
-  tasks.forEach((t) => {
-    const depto = t.departamento ?? 'Sin asignar'
-    const resp = t.responsable ?? 'Sin asignar'
-
-    if (!deptMap[depto]) deptMap[depto] = { total: 0, completadas: 0, enProceso: 0, pendientes: 0 }
-    if (!respMap[resp]) respMap[resp] = { total: 0, completadas: 0, enProceso: 0, pendientes: 0 }
-
-    deptMap[depto].total++
-    respMap[resp].total++
-
-    if (t.estado === 'Completado') {
-      deptMap[depto].completadas++
-      respMap[resp].completadas++
-    } else if (t.estado === 'En Proceso') {
-      deptMap[depto].enProceso++
-      respMap[resp].enProceso++
-    } else {
-      deptMap[depto].pendientes++
-      respMap[resp].pendientes++
-    }
-  })
-
-  const deptData = Object.entries(deptMap)
-    .sort((a, b) => b[1].total - a[1].total)
-    .slice(0, 8)
-    .map(([name, value]) => ({
-      name: name.length > 16 ? `${name.slice(0, 16)}...` : name,
-      ...value,
-    }))
-
-  const respData = Object.entries(respMap).sort((a, b) => b[1].total - a[1].total).slice(0, 6)
-
-  const pieData = [
-    { name: 'Completado', value: kpis.completadas },
-    { name: 'En proceso', value: kpis.enProceso },
-    { name: 'Pendiente', value: kpis.pendientes },
-    { name: 'Cancelado', value: tasks.filter((t) => t.estado === 'Cancelado').length },
-  ].filter((d) => d.value > 0)
-
-  const priData = [
-    { name: 'Alta', value: tasks.filter((t) => t.prioridad === 'Alta').length },
-    { name: 'Media', value: tasks.filter((t) => t.prioridad === 'Media').length },
-    { name: 'Baja', value: tasks.filter((t) => t.prioridad === 'Baja').length },
-  ].filter((d) => d.value > 0)
-
-  const recientes = [...tasks]
-    .sort((a, b) => new Date(b.updated_at ?? b.created_at ?? 0).getTime() - new Date(a.updated_at ?? a.created_at ?? 0).getTime())
-    .slice(0, 5)
+  const { kpis, deptData, respData, pieData, priData, recientes } = dashboard
 
   return (
     <div className="page-stack">
