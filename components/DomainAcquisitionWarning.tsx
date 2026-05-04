@@ -129,7 +129,7 @@ export default function DomainAcquisitionWarning({
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#3ecf8e]">Cuenta regresiva</p>
-                    <p className="mt-2 text-sm text-[#9fb8aa]">Fecha limite: 07/05/2026</p>
+                    <p className="mt-2 text-sm text-[#9fb8aa]">Fecha limite: 14/05/2026</p>
                   </div>
                   <LockKeyhole size={20} className={expired ? 'text-red-300' : 'text-[#3ecf8e]'} />
                 </div>
