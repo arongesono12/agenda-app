@@ -17,7 +17,7 @@ import {
   UsersRound,
 } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
-import { REGISTRATION_DEPARTAMENTOS, REGISTRATION_ROLES } from '@/lib/registration-options'
+import { PUBLIC_REGISTRATION_ROLES, REGISTRATION_DEPARTAMENTOS } from '@/lib/registration-options'
 
 type PublicRole = {
   codigo: string
@@ -32,7 +32,7 @@ type PublicDepartamento = {
 
 export default function RegisterForm() {
   const router = useRouter()
-  const [roles, setRoles] = useState<PublicRole[]>(REGISTRATION_ROLES)
+  const [roles, setRoles] = useState<PublicRole[]>(PUBLIC_REGISTRATION_ROLES)
   const [departamentos, setDepartamentos] = useState<PublicDepartamento[]>(REGISTRATION_DEPARTAMENTOS)
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
@@ -54,7 +54,7 @@ export default function RegisterForm() {
         const response = await fetch('/api/register')
         const data = (await response.json()) as { ok?: boolean; roles?: PublicRole[]; departamentos?: PublicDepartamento[] }
 
-        const nextRoles = response.ok && data.ok && data.roles?.length ? data.roles : REGISTRATION_ROLES
+        const nextRoles = response.ok && data.ok && data.roles?.length ? data.roles : PUBLIC_REGISTRATION_ROLES
         const nextDepartamentos =
           response.ok && data.ok && data.departamentos?.length ? data.departamentos : REGISTRATION_DEPARTAMENTOS
 
@@ -65,7 +65,7 @@ export default function RegisterForm() {
         }
         setDepartamento((current) => current || nextDepartamentos[0]?.nombre || '')
       } catch {
-        setRoles(REGISTRATION_ROLES)
+        setRoles(PUBLIC_REGISTRATION_ROLES)
         setDepartamentos(REGISTRATION_DEPARTAMENTOS)
         setDepartamento((current) => current || REGISTRATION_DEPARTAMENTOS[0]?.nombre || '')
       } finally {

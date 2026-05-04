@@ -37,6 +37,10 @@ export const REGISTRATION_ROLES: RegistrationRole[] = [
   },
 ]
 
+export const PUBLIC_REGISTRATION_ROLES = REGISTRATION_ROLES.filter(
+  (role) => role.codigo !== 'administrador' && role.codigo !== 'administradora'
+)
+
 export const REGISTRATION_DEPARTAMENTOS: RegistrationDepartamento[] = [
   { id: 1, nombre: 'Gabinete' },
   { id: 2, nombre: 'Coordinacion' },
@@ -52,3 +56,4 @@ export const REGISTRATION_DEPARTAMENTOS: RegistrationDepartamento[] = [
 ]
 
 export const REGISTRATION_ROLE_CODES = REGISTRATION_ROLES.map((role) => role.codigo)
+export const PUBLIC_REGISTRATION_ROLE_CODES = PUBLIC_REGISTRATION_ROLES.map((role) => role.codigo)

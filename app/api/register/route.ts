@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { REGISTRATION_DEPARTAMENTOS, REGISTRATION_ROLE_CODES, REGISTRATION_ROLES } from '@/lib/registration-options'
+import { PUBLIC_REGISTRATION_ROLE_CODES, PUBLIC_REGISTRATION_ROLES, REGISTRATION_DEPARTAMENTOS } from '@/lib/registration-options'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +30,7 @@ function normalizeCatalogText(value?: string | null) {
 
 function isRegistrationRole(roleCode?: string | null) {
   const normalizedRole = roleCode?.trim().toLowerCase()
-  return !!normalizedRole && REGISTRATION_ROLE_CODES.includes(normalizedRole)
+  return !!normalizedRole && PUBLIC_REGISTRATION_ROLE_CODES.includes(normalizedRole)
 }
 
 export async function GET() {
@@ -58,13 +58,13 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
-      roles: roles.length ? roles : REGISTRATION_ROLES,
+      roles: roles.length ? roles : PUBLIC_REGISTRATION_ROLES,
       departamentos: departamentos.length ? departamentos : REGISTRATION_DEPARTAMENTOS,
     })
   } catch (error: unknown) {
     return NextResponse.json({
       ok: true,
-      roles: REGISTRATION_ROLES,
+      roles: PUBLIC_REGISTRATION_ROLES,
       departamentos: REGISTRATION_DEPARTAMENTOS,
       warning: error instanceof Error ? error.message : 'No se pudieron cargar los catalogos desde la base de datos.',
     })
