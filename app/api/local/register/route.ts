@@ -24,16 +24,6 @@ function fallbackNameFromEmail(email: string) {
 }
 
 export async function POST(request: Request) {
-  if (process.env.NODE_ENV === 'production') {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: 'Ruta no disponible en producción.',
-      },
-      { status: 404 }
-    )
-  }
-
   try {
     const { user, profile } = await getServerSessionProfile()
 
@@ -57,7 +47,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          error: 'Correo y contraseña son obligatorios.',
+          error: 'Correo y contrasena son obligatorios.',
         },
         { status: 400 }
       )
@@ -87,7 +77,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          error: 'La contraseña debe tener al menos 8 caracteres.',
+          error: 'La contrasena debe tener al menos 8 caracteres.',
         },
         { status: 400 }
       )
@@ -147,7 +137,7 @@ export async function POST(request: Request) {
     let userId = ''
     let action: 'created' | 'updated' = 'created'
 
-    const existingUser = (listedUsers.users ?? []).find((user) => user.email?.toLowerCase() === email)
+    const existingUser = (listedUsers.users ?? []).find((listedUser) => listedUser.email?.toLowerCase() === email)
 
     if (existingUser) {
       const { data: updatedUser, error: updateError } = await admin.auth.admin.updateUserById(existingUser.id, {

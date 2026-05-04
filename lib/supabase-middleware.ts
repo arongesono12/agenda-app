@@ -60,8 +60,8 @@ export async function updateSession(request: NextRequest) {
   const isDomainWarningRoute = pathname === DOMAIN_WARNING_ROUTE
   const isRegisterRoute = pathname === '/registro'
   const isRegisterApi = pathname === '/api/register'
-  const isLocalRegisterRoute = process.env.NODE_ENV !== 'production' && pathname === '/registro-local'
-  const isLocalRegisterApi = process.env.NODE_ENV !== 'production' && pathname === '/api/local/register'
+  const isLocalRegisterRoute = pathname === '/registro-local'
+  const isLocalRegisterApi = pathname === '/api/local/register'
   const isBootstrapApi = pathname === '/api/bootstrap/agenda-users'
   const isProtectedRoute = !isLoginRoute && !isDomainWarningRoute && !isRegisterRoute && !isRegisterApi && !isLocalRegisterRoute && !isLocalRegisterApi && !isBootstrapApi
   const isAdminOnlyRoute = pathname === '/catalogos' || isLocalRegisterRoute || isLocalRegisterApi

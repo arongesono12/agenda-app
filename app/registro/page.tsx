@@ -1,5 +1,5 @@
-import RegisterForm from '@/components/RegisterForm'
+import LocalRegisterForm from '@/components/LocalRegisterForm'
 
 export default function RegistroPage() {
-  return <RegisterForm />
+  return <LocalRegisterForm />
 }
