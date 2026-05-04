@@ -9,6 +9,8 @@ import {
   Building2,
   CheckCircle2,
   ChevronDown,
+  Eye,
+  EyeOff,
   Loader2,
   LockKeyhole,
   Mail,
@@ -38,6 +40,8 @@ export default function RegisterForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [roleCode, setRoleCode] = useState('responsable')
   const [departamento, setDepartamento] = useState('')
   const [accepted, setAccepted] = useState(false)
@@ -298,14 +302,22 @@ export default function RegisterForm() {
                   <div className="relative">
                     <LockKeyhole size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                       minLength={8}
                       required
-                      className="input-shell pl-11"
+                      className="input-shell pl-11 pr-12"
                       placeholder="Minimo 8"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((current) => !current)}
+                      className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                      aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
 
@@ -314,14 +326,22 @@ export default function RegisterForm() {
                   <div className="relative">
                     <LockKeyhole size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
-                      type="password"
+                      type={showConfirmPassword ? 'text' : 'password'}
                       value={confirmPassword}
                       onChange={(event) => setConfirmPassword(event.target.value)}
                       minLength={8}
                       required
-                      className="input-shell pl-11"
+                      className="input-shell pl-11 pr-12"
                       placeholder="Repetir clave"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((current) => !current)}
+                      className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                      aria-label={showConfirmPassword ? 'Ocultar confirmacion de contrasena' : 'Mostrar confirmacion de contrasena'}
+                    >
+                      {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
               </div>
