@@ -12,6 +12,15 @@ type RegisterPayload = {
   departamento?: string
 }
 
+type AdminClient = ReturnType<typeof createAdminSupabaseClient>
+type ResponsablePayload = {
+  email: string
+  fullName: string
+  userId: string
+  departamento: string
+  roleName: string
+}
+
 function fallbackNameFromEmail(email: string) {
   return email.split('@')[0]?.replace(/[._-]+/g, ' ').trim() || email
 }
@@ -31,6 +40,89 @@ function normalizeCatalogText(value?: string | null) {
 function isRegistrationRole(roleCode?: string | null) {
   const normalizedRole = roleCode?.trim().toLowerCase()
   return !!normalizedRole && PUBLIC_REGISTRATION_ROLE_CODES.includes(normalizedRole)
+}
+
+function isMissingColumnError(error: { code?: string; message?: string } | null | undefined, columns: string[]) {
+  const message = error?.message ?? ''
+  return (
+    (error?.code === 'PGRST204' || error?.code === '42703') &&
+    columns.some((column) => message.includes(`'${column}' column`) || message.includes(`.${column} does not exist`))
+  )
+}
+
+async function findAuthUserByEmail(admin: AdminClient, email: string) {
+  const perPage = 1000
+
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage })
+
+    if (error) throw error
+
+    const user = (data.users ?? []).find((item) => item.email?.toLowerCase() === email)
+    if (user) return user
+    if ((data.users ?? []).length < perPage) return null
+  }
+
+  return null
+}
+
+async function saveResponsable(admin: AdminClient, payload: ResponsablePayload) {
+  const fullPayload = {
+    nombre: payload.fullName,
+    email: payload.email,
+    usuario_id: payload.userId,
+    departamento: payload.departamento,
+    cargo: payload.roleName,
+    activo: true,
+  }
+  const legacyPayload = {
+    nombre: payload.fullName,
+    departamento: payload.departamento,
+    cargo: payload.roleName,
+    activo: true,
+  }
+
+  const saveLegacyResponsable = async () => {
+    const { data: responsableByName, error: legacyLookupError } = await admin
+      .from('responsables')
+      .select('id')
+      .eq('nombre', payload.fullName)
+      .maybeSingle()
+
+    if (legacyLookupError?.code === '42P01') return
+    if (legacyLookupError) throw legacyLookupError
+
+    const { error: legacySaveError } = responsableByName?.id
+      ? await admin.from('responsables').update(legacyPayload).eq('id', responsableByName.id)
+      : await admin.from('responsables').insert(legacyPayload)
+
+    if (legacySaveError?.code === '42P01') return
+    if (legacySaveError) throw legacySaveError
+  }
+
+  const { data: responsable, error: responsableLookupError } = await admin
+    .from('responsables')
+    .select('id')
+    .eq('email', payload.email)
+    .maybeSingle()
+
+  if (responsableLookupError?.code === '42P01') return
+  if (isMissingColumnError(responsableLookupError, ['email'])) {
+    await saveLegacyResponsable()
+    return
+  }
+  if (responsableLookupError) throw responsableLookupError
+
+  const { error: responsableSaveError } = responsable?.id
+    ? await admin.from('responsables').update(fullPayload).eq('id', responsable.id)
+    : await admin.from('responsables').insert(fullPayload)
+
+  if (responsableSaveError?.code === '42P01') return
+  if (isMissingColumnError(responsableSaveError, ['email', 'usuario_id'])) {
+    await saveLegacyResponsable()
+    return
+  }
+  if (responsableSaveError) throw responsableSaveError
 }
 
 export async function GET() {
@@ -150,37 +242,37 @@ export async function POST(request: Request) {
       )
     }
 
-    const { data: listedUsers, error: listError } = await admin.auth.admin.listUsers({
-      page: 1,
-      perPage: 200,
-    })
-
-    if (listError) throw listError
-
-    const existingUser = (listedUsers.users ?? []).find((user) => user.email?.toLowerCase() === email)
+    const existingUser = await findAuthUserByEmail(admin, email)
+    let userId = ''
+    let action: 'created' | 'updated' = 'created'
 
     if (existingUser) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'Ya existe un usuario con este correo. Inicia sesion o pide restablecer la contrasena.',
+      const { data: updatedUser, error: updateError } = await admin.auth.admin.updateUserById(existingUser.id, {
+        password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: fullName,
         },
-        { status: 409 }
-      )
+      })
+
+      if (updateError) throw updateError
+
+      userId = updatedUser.user.id
+      action = 'updated'
+    } else {
+      const { data: createdUser, error: createError } = await admin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: fullName,
+        },
+      })
+
+      if (createError) throw createError
+
+      userId = createdUser.user.id
     }
-
-    const { data: createdUser, error: createError } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        full_name: fullName,
-      },
-    })
-
-    if (createError) throw createError
-
-    const userId = createdUser.user.id
 
     const { error: profileError } = await admin.from('perfiles_usuario').upsert(
       {
@@ -194,32 +286,13 @@ export async function POST(request: Request) {
 
     if (profileError) throw profileError
 
-    const { data: responsable, error: responsableLookupError } = await admin
-      .from('responsables')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle()
-
-    if (responsableLookupError && responsableLookupError.code !== '42P01') {
-      throw responsableLookupError
-    }
-
-    if (responsableLookupError?.code !== '42P01') {
-      const responsablePayload = {
-        nombre: fullName,
-        email,
-        usuario_id: userId,
-        departamento: departamentoRow.nombre,
-        cargo: roleRow.nombre,
-        activo: true,
-      }
-
-      const { error: responsableSaveError } = responsable?.id
-        ? await admin.from('responsables').update(responsablePayload).eq('id', responsable.id)
-        : await admin.from('responsables').insert(responsablePayload)
-
-      if (responsableSaveError) throw responsableSaveError
-    }
+    await saveResponsable(admin, {
+      email,
+      fullName,
+      userId,
+      departamento: departamentoRow.nombre,
+      roleName: roleRow.nombre,
+    })
 
     return NextResponse.json({
       ok: true,
@@ -227,6 +300,7 @@ export async function POST(request: Request) {
         id: userId,
         email,
         role: roleRow.nombre,
+        action,
       },
     })
   } catch (error: unknown) {
