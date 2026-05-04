@@ -38,7 +38,7 @@ const navItems = [
   { href: '/busqueda', label: 'Busqueda', icon: Search, badge: null },
   { href: '/responsable', label: 'Responsables', icon: User, badge: null },
   { href: '/historial', label: 'Historial', icon: History, badge: null },
-  { href: '/catalogos', label: 'Catalogos', icon: Settings, badge: null, adminOnly: true },
+  { href: '/catalogos', label: 'Catalogos', icon: Settings, badge: null },
 ]
 
 function BrandMark({ className = '' }: { className?: string }) {
@@ -74,15 +74,15 @@ function SidebarContent({
   showClose?: boolean
   collapsed?: boolean
 }) {
-  const { profile, isAdmin } = useUserSession()
+  const { profile, capabilities } = useUserSession()
   const [alertCount, setAlertCount] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const router = useRouter()
   const visibleNavItems = useMemo(
-    () => navItems.filter((item) => !item.adminOnly || isAdmin),
-    [isAdmin]
+    () => navItems.filter((item) => capabilities.navItems.includes(item.href)),
+    [capabilities.navItems]
   )
   const userName = profile?.nombre_completo?.trim() || profile?.email?.split('@')[0] || 'Usuario'
   const userRole = profile?.tipo_usuario?.nombre?.trim() || 'Responsable'
@@ -177,7 +177,7 @@ function SidebarContent({
                 Panel activo
               </p>
               <p className="mt-1 text-sm text-slate-600">
-                Supervisa tareas, alertas y avance operativo desde un solo lugar.
+                {capabilities.agendaSubtitle}
               </p>
             </div>
           </div>

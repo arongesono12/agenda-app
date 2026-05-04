@@ -23,7 +23,8 @@ import ProgressBar from '@/components/ui/ProgressBar'
 
 interface TaskDetailPanelProps {
   task: Tarea | null
-  canEditAgenda: boolean
+  canEditTask: boolean
+  canDeleteTask: boolean
   onEdit: (task: Tarea) => void
   onDelete: (task: Tarea) => void
   onOpenHistory: (task: Tarea) => void
@@ -99,7 +100,8 @@ function StatusCard({
 
 export default function TaskDetailPanel({
   task,
-  canEditAgenda,
+  canEditTask,
+  canDeleteTask,
   onEdit,
   onDelete,
   onOpenHistory,
@@ -264,12 +266,15 @@ export default function TaskDetailPanel({
                 <History size={14} />
                 Historial
               </button>
-              {canEditAgenda && (
+              {(canEditTask || canDeleteTask) && (
                 <>
+                  {canEditTask && (
                   <button onClick={() => onEdit(task)} className="action-btn w-full justify-center" title="Editar">
                     <Pencil size={14} />
                     Editar
                   </button>
+                  )}
+                  {canDeleteTask && (
                   <button
                     onClick={() => onDelete(task)}
                     className="action-btn w-full justify-center text-rose-600"
@@ -278,6 +283,7 @@ export default function TaskDetailPanel({
                     <Trash2 size={14} />
                     Eliminar
                   </button>
+                  )}
                 </>
               )}
             </div>

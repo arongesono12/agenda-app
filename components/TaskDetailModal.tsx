@@ -12,7 +12,8 @@ interface TaskDetailModalProps {
   totalTasks: number
   canGoPrev: boolean
   canGoNext: boolean
-  canEditAgenda: boolean
+  canEditTask: boolean
+  canDeleteTask: boolean
   onClose: () => void
   onPrev: () => void
   onNext: () => void
@@ -28,7 +29,8 @@ export default function TaskDetailModal({
   totalTasks,
   canGoPrev,
   canGoNext,
-  canEditAgenda,
+  canEditTask,
+  canDeleteTask,
   onClose,
   onPrev,
   onNext,
@@ -107,7 +109,8 @@ export default function TaskDetailModal({
 
         <TaskDetailPanel
           task={task}
-          canEditAgenda={canEditAgenda}
+          canEditTask={canEditTask}
+          canDeleteTask={canDeleteTask}
           onEdit={onEdit}
           onDelete={onDelete}
           onOpenHistory={onOpenHistory}

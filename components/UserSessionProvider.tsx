@@ -14,7 +14,8 @@ import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import type { PerfilUsuario, TipoUsuario } from '@/lib/types'
 import { normalizarPreferenciasUsuario } from '@/lib/user-preferences'
-import { hasAnyRole, ADMIN_ROLE_CODES, EDITOR_ROLE_CODES } from '@/lib/access-control'
+import { hasAnyRole, ADMIN_ROLE_CODES } from '@/lib/access-control'
+import { getRoleCapabilities, type RoleCapabilitySet } from '@/lib/role-capabilities'
 
 type SessionProfileRow = Omit<PerfilUsuario, 'tipo_usuario'> & {
   tipo_usuario?: TipoUsuario | TipoUsuario[] | null
@@ -27,6 +28,7 @@ interface UserSessionContextValue {
   refreshProfile: () => Promise<void>
   isAdmin: boolean
   canEditAgenda: boolean
+  capabilities: RoleCapabilitySet
 }
 
 const UserSessionContext = createContext<UserSessionContextValue | null>(null)
@@ -120,14 +122,19 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
   }, [refreshProfile])
 
   const value = useMemo<UserSessionContextValue>(
-    () => ({
-      user,
-      profile,
-      loading,
-      refreshProfile,
-      isAdmin: hasAnyRole(profile, ADMIN_ROLE_CODES),
-      canEditAgenda: hasAnyRole(profile, EDITOR_ROLE_CODES),
-    }),
+    () => {
+      const capabilities = getRoleCapabilities(profile)
+
+      return {
+        user,
+        profile,
+        loading,
+        refreshProfile,
+        isAdmin: hasAnyRole(profile, ADMIN_ROLE_CODES),
+        canEditAgenda: capabilities.canCreateTasks || capabilities.canEditTasks || capabilities.canDeleteTasks,
+        capabilities,
+      }
+    },
     [loading, profile, refreshProfile, user]
   )
 

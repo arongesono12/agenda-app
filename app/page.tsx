@@ -60,7 +60,10 @@ type TasksResponse = {
 }
 
 export default function AgendaDiariaPage() {
-  const { profile, canEditAgenda } = useUserSession()
+  const { profile, capabilities } = useUserSession()
+  const canCreateTask = capabilities.canCreateTasks
+  const canEditTask = capabilities.canEditTasks
+  const canDeleteTask = capabilities.canDeleteTasks
   const [tasks, setTasks] = useState<Tarea[]>([])
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState(INIT_FILTERS)
@@ -175,7 +178,7 @@ export default function AgendaDiariaPage() {
   }
 
   const handleDelete = async () => {
-    if (!taskToDelete || !canEditAgenda) return
+    if (!taskToDelete || !canDeleteTask) return
 
     setDeletingId(taskToDelete.id)
     setDeleteError('')
@@ -227,15 +230,15 @@ export default function AgendaDiariaPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="Agenda de control"
-        subtitle={`Vista diaria del equipo. Hoy es ${today}. Gestiona prioridades, vencimientos y responsables desde un panel central.`}
+        title={capabilities.agendaTitle}
+        subtitle={`${capabilities.agendaSubtitle} Hoy es ${today}.`}
         icon={<CalendarDays size={22} />}
         actions={
           <>
             <button onClick={() => void fetchTasks()} className="action-btn h-12 w-12 rounded-2xl p-0">
               <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
             </button>
-            {canEditAgenda && (
+            {canCreateTask && (
               <button onClick={() => setModalTask(null)} className="action-btn-primary">
                 <Plus size={16} /> Nueva tarea
               </button>
@@ -337,7 +340,9 @@ export default function AgendaDiariaPage() {
           <div className="py-24 text-center">
             <AlertCircle size={30} className="mx-auto text-slate-300" />
             <p className="mt-3 text-sm font-semibold text-slate-700">No se encontraron tareas</p>
-            <p className="mt-1 text-xs text-slate-500">Prueba con otros filtros o crea una nueva tarea.</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {canCreateTask ? 'Prueba con otros filtros o crea una nueva tarea.' : 'No hay tareas disponibles para tu perfil.'}
+            </p>
           </div>
         ) : (
           <>
@@ -391,21 +396,25 @@ export default function AgendaDiariaPage() {
                       <History size={14} />
                       Historial
                     </button>
-                    {canEditAgenda && (
+                    {(canEditTask || canDeleteTask) && (
                       <>
-                        <button onClick={() => setModalTask(task)} className="action-btn flex-1 justify-center" title="Editar">
-                          <Pencil size={14} />
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => requestDelete(task)}
-                          disabled={deletingId === task.id}
-                          className="action-btn flex-1 justify-center text-rose-600 disabled:opacity-40"
-                          title="Eliminar"
-                        >
-                          <Trash2 size={14} />
-                          Eliminar
-                        </button>
+                        {canEditTask && (
+                          <button onClick={() => setModalTask(task)} className="action-btn flex-1 justify-center" title="Editar">
+                            <Pencil size={14} />
+                            Editar
+                          </button>
+                        )}
+                        {canDeleteTask && (
+                          <button
+                            onClick={() => requestDelete(task)}
+                            disabled={deletingId === task.id}
+                            className="action-btn flex-1 justify-center text-rose-600 disabled:opacity-40"
+                            title="Eliminar"
+                          >
+                            <Trash2 size={14} />
+                            Eliminar
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -471,28 +480,31 @@ export default function AgendaDiariaPage() {
                             >
                               <History size={14} />
                             </button>
-                            <button
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                setModalTask(task)
-                              }}
-                              disabled={!canEditAgenda}
-                              className="flex h-8 w-8 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-sky-600"
-                              title="Editar"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                requestDelete(task)
-                              }}
-                              disabled={!canEditAgenda || deletingId === task.id}
-                              className="flex h-8 w-8 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-rose-600 disabled:opacity-40"
-                              title="Eliminar"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            {canEditTask && (
+                              <button
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  setModalTask(task)
+                                }}
+                                className="flex h-8 w-8 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-sky-600"
+                                title="Editar"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                            {canDeleteTask && (
+                              <button
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  requestDelete(task)
+                                }}
+                                disabled={deletingId === task.id}
+                                className="flex h-8 w-8 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-rose-600 disabled:opacity-40"
+                                title="Eliminar"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -531,7 +543,7 @@ export default function AgendaDiariaPage() {
         )}
       </div>
 
-      {modalTask !== undefined && canEditAgenda && (
+      {modalTask !== undefined && (modalTask === null ? canCreateTask : canEditTask) && (
         <TaskModal task={modalTask} onClose={() => setModalTask(undefined)} onSave={fetchTasks} />
       )}
 
@@ -546,7 +558,8 @@ export default function AgendaDiariaPage() {
         totalTasks={filtered.length}
         canGoPrev={selectedTaskIndex > 0}
         canGoNext={selectedTaskIndex >= 0 && selectedTaskIndex < filtered.length - 1}
-        canEditAgenda={canEditAgenda}
+        canEditTask={canEditTask}
+        canDeleteTask={canDeleteTask}
         onClose={closeTaskDetail}
         onPrev={() => {
           if (selectedTaskIndex > 0) {

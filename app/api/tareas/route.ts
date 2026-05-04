@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getServerSessionProfile } from '@/lib/server-access'
-import { EDITOR_ROLE_CODES, READER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
+import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, READER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
 import { escapeHtml, sendAgendaEmail } from '@/lib/email/resend'
 import { applyTaskScope, buildTaskScope, isTaskScopeColumnError, type TaskScope } from '@/lib/task-scope'
 
@@ -455,7 +455,7 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
   try {
     const { user, profile } = await getServerSessionProfile()
 
-    if (!user || !hasAnyRole(profile, EDITOR_ROLE_CODES)) {
+    if (!user || !hasAnyRole(profile, MANAGER_ROLE_CODES)) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para guardar tareas.' }, { status: 403 })
     }
 
@@ -600,7 +600,7 @@ export async function DELETE(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
 
-    if (!user || !hasAnyRole(profile, EDITOR_ROLE_CODES)) {
+    if (!user || !hasAnyRole(profile, ADMIN_ROLE_CODES)) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para eliminar tareas.' }, { status: 403 })
     }
 

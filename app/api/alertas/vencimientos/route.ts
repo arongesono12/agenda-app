@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getServerSessionProfile } from '@/lib/server-access'
-import { EDITOR_ROLE_CODES, ADMIN_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
+import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
 import { escapeHtml, sendAgendaEmail } from '@/lib/email/resend'
 
 export const dynamic = 'force-dynamic'
@@ -54,7 +54,7 @@ async function isAuthorized(request: Request) {
   if (isCronRequest(request)) return true
 
   const { user, profile } = await getServerSessionProfile()
-  return !!user && hasAnyRole(profile, EDITOR_ROLE_CODES)
+  return !!user && hasAnyRole(profile, MANAGER_ROLE_CODES)
 }
 
 function vencimientoEmailHtml(task: TaskDueRow, recipient: Recipient) {

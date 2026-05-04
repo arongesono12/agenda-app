@@ -40,7 +40,7 @@ const EMPTY_FORM: { tipo_cambio: TipoOrden; observaciones: string; valor_nuevo: 
 }
 
 export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHistorialModalProps) {
-  const { canEditAgenda } = useUserSession()
+  const { capabilities } = useUserSession()
   const toast = useToast()
   const [rows, setRows] = useState<Historial[]>([])
   const [loading, setLoading] = useState(true)
@@ -48,7 +48,10 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
   const [form, setForm] = useState(EMPTY_FORM)
   const [finalizar, setFinalizar] = useState(false)
 
-  const canAdd = useMemo(() => canEditAgenda && !BLOCKED_STATES.has(task.estado), [canEditAgenda, task.estado])
+  const canAdd = useMemo(
+    () => (capabilities.canUpdateAssignedTasks || capabilities.canEditTasks) && !BLOCKED_STATES.has(task.estado),
+    [capabilities.canEditTasks, capabilities.canUpdateAssignedTasks, task.estado]
+  )
 
   const fetchHistorial = useCallback(async () => {
     setLoading(true)

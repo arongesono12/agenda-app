@@ -14,6 +14,7 @@ import PageHeader from '@/components/ui/PageHeader'
 import KPICard from '@/components/ui/KPICard'
 import ProgressBar from '@/components/ui/ProgressBar'
 import { PrioridadBadge, EstadoBadge } from '@/components/ui/Badge'
+import { useUserSession } from '@/components/UserSessionProvider'
 import {
   BarChart,
   Bar,
@@ -72,6 +73,7 @@ const EMPTY_DASHBOARD: DashboardData = {
 }
 
 export default function DashboardPage() {
+  const { capabilities } = useUserSession()
   const [dashboard, setDashboard] = useState<DashboardData>(EMPTY_DASHBOARD)
   const [loading, setLoading] = useState(true)
 
@@ -111,8 +113,8 @@ export default function DashboardPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        title="Dashboard ejecutivo"
-        subtitle="Indicadores de rendimiento, carga operativa y estado global del equipo en una sola vista."
+        title={capabilities.dashboardTitle}
+        subtitle={capabilities.dashboardSubtitle}
         icon={<LayoutDashboard size={22} />}
         actions={
           <button onClick={fetch} className="action-btn h-12 w-12 rounded-2xl p-0">

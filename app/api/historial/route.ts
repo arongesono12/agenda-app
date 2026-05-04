@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
-import { ADMIN_ROLE_CODES, EDITOR_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
+import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
 import { escapeHtml, sendAgendaEmail } from '@/lib/email/resend'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getServerSessionProfile } from '@/lib/server-access'
+import { buildTaskScope, isTaskScopeColumnError } from '@/lib/task-scope'
 import type { Estado, TipoOrden } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -22,6 +23,7 @@ type TaskRow = {
   estado: Estado
   porcentaje_avance: number
   responsable: string | null
+  responsable_usuario_id?: string | null
   fecha_fin: string | null
 }
 
@@ -144,7 +146,7 @@ export async function POST(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
 
-    if (!user || !hasAnyRole(profile, EDITOR_ROLE_CODES)) {
+    if (!user || !hasAnyRole(profile, [...MANAGER_ROLE_CODES, 'responsable'])) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para registrar historial.' }, { status: 403 })
     }
 
@@ -161,11 +163,20 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminSupabaseClient()
-    const { data: taskData, error: taskError } = await admin
+    const primaryTask = await admin
       .from('tareas')
-      .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, fecha_fin')
+      .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, responsable_usuario_id, fecha_fin')
       .eq('id', payload.tarea_id)
       .maybeSingle()
+    const fallbackTask =
+      primaryTask.error && isTaskScopeColumnError(primaryTask.error)
+        ? await admin
+            .from('tareas')
+            .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, fecha_fin')
+            .eq('id', payload.tarea_id)
+            .maybeSingle()
+        : primaryTask
+    const { data: taskData, error: taskError } = fallbackTask
 
     if (taskError) throw taskError
     if (!taskData) {
@@ -173,6 +184,14 @@ export async function POST(request: Request) {
     }
 
     const task = taskData as TaskRow
+    const scope = buildTaskScope(user, profile)
+    const isManager = hasAnyRole(profile, MANAGER_ROLE_CODES)
+    const isAssignedByUserId = !!task.responsable_usuario_id && task.responsable_usuario_id === user.id
+    const isAssignedByName = !!task.responsable && scope.assignedNames.includes(task.responsable)
+
+    if (!isManager && !isAssignedByUserId && !isAssignedByName) {
+      return NextResponse.json({ ok: false, error: 'Solo puedes actualizar tareas asignadas a tu usuario.' }, { status: 403 })
+    }
 
     if (task.estado === 'Completado' || task.estado === 'Cancelado') {
       return NextResponse.json({ ok: false, error: 'La tarea ya esta cerrada y no acepta nuevas entradas.' }, { status: 409 })

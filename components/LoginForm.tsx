@@ -7,6 +7,17 @@ import { useRouter } from 'next/navigation'
 import { AlertCircle, Eye, EyeOff, Loader2, LockKeyhole, Mail } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
 import { supabase } from '@/lib/supabase'
+import { getRoleCapabilities } from '@/lib/role-capabilities'
+import type { PerfilUsuario, TipoUsuario } from '@/lib/types'
+
+type LoginProfileRow = Omit<PerfilUsuario, 'tipo_usuario'> & {
+  tipo_usuario?: TipoUsuario | TipoUsuario[] | null
+}
+
+function normalizarTipoUsuario(value?: TipoUsuario | TipoUsuario[] | null) {
+  if (!value) return null
+  return Array.isArray(value) ? value[0] ?? null : value
+}
 
 export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
   const router = useRouter()
@@ -32,7 +43,39 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
       return
     }
 
-    router.replace(nextPath)
+    let landingPath = nextPath
+
+    if (nextPath === '/') {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (user) {
+        const { data: profileRow } = await supabase
+          .from('perfiles_usuario')
+          .select('id, email, nombre_completo, avatar_url, preferencias, tipo_usuario_id, created_at, updated_at, tipo_usuario:tipos_usuario(id, codigo, nombre, descripcion, created_at)')
+          .eq('id', user.id)
+          .maybeSingle()
+        const row = profileRow as LoginProfileRow | null
+        const capabilities = getRoleCapabilities({
+          id: user.id,
+          email: row?.email ?? user.email ?? '',
+          nombre_completo:
+            row?.nombre_completo ??
+            (typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : null),
+          avatar_url: row?.avatar_url ?? null,
+          preferencias: row?.preferencias ?? null,
+          tipo_usuario_id: row?.tipo_usuario_id ?? null,
+          created_at: row?.created_at,
+          updated_at: row?.updated_at ?? user.updated_at,
+          tipo_usuario: normalizarTipoUsuario(row?.tipo_usuario),
+        })
+
+        landingPath = capabilities.landingPath
+      }
+    }
+
+    router.replace(landingPath)
     router.refresh()
   }
 
