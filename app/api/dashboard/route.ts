@@ -2,11 +2,27 @@ import { NextResponse } from 'next/server'
 import { READER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
 import { getServerSessionProfile } from '@/lib/server-access'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { applyTaskScope, buildTaskScope, isTaskScopeColumnError } from '@/lib/task-scope'
 import type { Tarea } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
 const DASHBOARD_COLUMNS = [
+  'id',
+  'codigo_id',
+  'tarea',
+  'prioridad',
+  'departamento',
+  'responsable',
+  'fecha_fin',
+  'porcentaje_avance',
+  'estado',
+  'responsable_usuario_id',
+  'created_at',
+  'updated_at',
+].join(',')
+
+const LEGACY_DASHBOARD_COLUMNS = [
   'id',
   'codigo_id',
   'tarea',
@@ -94,7 +110,10 @@ export async function GET() {
     }
 
     const supabase = await createServerSupabaseClient()
-    const { data: rpcData, error: rpcError } = await supabase.rpc('api_dashboard_data')
+    const scope = buildTaskScope(user, profile)
+    const { data: rpcData, error: rpcError } = scope.unrestricted
+      ? await supabase.rpc('api_dashboard_data')
+      : { data: null, error: new Error('Scoped dashboard skips global RPC') }
 
     if (!rpcError && isDashboardRpcData(rpcData)) {
       return NextResponse.json({
@@ -108,7 +127,18 @@ export async function GET() {
       })
     }
 
-    const { data, error } = await supabase.from('tareas').select(DASHBOARD_COLUMNS)
+    const runQuery = async (columns: string, includeUserColumn: boolean) => {
+      const baseQuery = supabase.from('tareas').select(columns)
+      const query = applyTaskScope(baseQuery, scope, { includeUserColumn })
+      return query
+    }
+
+    const primary = await runQuery(DASHBOARD_COLUMNS, true)
+    const fallback =
+      primary.error && !scope.unrestricted && isTaskScopeColumnError(primary.error)
+        ? await runQuery(LEGACY_DASHBOARD_COLUMNS, false)
+        : primary
+    const { data, error } = fallback
 
     if (error) throw error
 

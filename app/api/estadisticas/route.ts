@@ -2,11 +2,13 @@ import { NextResponse } from 'next/server'
 import { READER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
 import { getServerSessionProfile } from '@/lib/server-access'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { applyTaskScope, buildTaskScope, isTaskScopeColumnError } from '@/lib/task-scope'
 import { PRIORIDADES, TIPOS_TAREA, type Tarea } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-const STATS_COLUMNS = 'prioridad,tipo_tarea,departamento,estado,porcentaje_avance'
+const STATS_COLUMNS = 'prioridad,tipo_tarea,departamento,estado,porcentaje_avance,responsable,responsable_usuario_id'
+const LEGACY_STATS_COLUMNS = 'prioridad,tipo_tarea,departamento,estado,porcentaje_avance,responsable'
 
 type StatsTask = Pick<Tarea, 'prioridad' | 'tipo_tarea' | 'departamento' | 'estado' | 'porcentaje_avance'>
 
@@ -40,7 +42,10 @@ export async function GET() {
     }
 
     const supabase = await createServerSupabaseClient()
-    const { data: rpcData, error: rpcError } = await supabase.rpc('api_estadisticas_data')
+    const scope = buildTaskScope(user, profile)
+    const { data: rpcData, error: rpcError } = scope.unrestricted
+      ? await supabase.rpc('api_estadisticas_data')
+      : { data: null, error: new Error('Scoped statistics skips global RPC') }
 
     if (!rpcError && isEstadisticasRpcData(rpcData)) {
       return NextResponse.json({
@@ -52,7 +57,18 @@ export async function GET() {
       })
     }
 
-    const { data, error } = await supabase.from('tareas').select(STATS_COLUMNS)
+    const runQuery = async (columns: string, includeUserColumn: boolean) => {
+      const baseQuery = supabase.from('tareas').select(columns)
+      const query = applyTaskScope(baseQuery, scope, { includeUserColumn })
+      return query
+    }
+
+    const primary = await runQuery(STATS_COLUMNS, true)
+    const fallback =
+      primary.error && !scope.unrestricted && isTaskScopeColumnError(primary.error)
+        ? await runQuery(LEGACY_STATS_COLUMNS, false)
+        : primary
+    const { data, error } = fallback
 
     if (error) throw error
 

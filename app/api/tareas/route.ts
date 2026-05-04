@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getServerSessionProfile } from '@/lib/server-access'
 import { EDITOR_ROLE_CODES, READER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
 import { escapeHtml, sendAgendaEmail } from '@/lib/email/resend'
+import { applyTaskScope, buildTaskScope, isTaskScopeColumnError, type TaskScope } from '@/lib/task-scope'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,6 +105,7 @@ type TaskFilters = {
 
 type SupabaseFilterQuery = {
   eq(column: string, value: unknown): SupabaseFilterQuery
+  in(column: string, values: unknown[]): SupabaseFilterQuery
   ilike(column: string, pattern: string): SupabaseFilterQuery
   not(column: string, operator: string, value: unknown): SupabaseFilterQuery
   lte(column: string, value: unknown): SupabaseFilterQuery
@@ -191,35 +193,51 @@ function applyTaskFilters(
   return next
 }
 
-async function countTasks(filters: TaskFilters & { estado?: string; prioridad?: string; fechaFinLt?: string; fechaFinGte?: string; fechaFinLte?: string }) {
+async function countTasks(
+  filters: TaskFilters & { estado?: string; prioridad?: string; fechaFinLt?: string; fechaFinGte?: string; fechaFinLte?: string },
+  scope: TaskScope
+) {
   const supabase = await createServerSupabaseClient()
-  const baseQuery = supabase.from('tareas').select('id', { count: 'exact', head: true })
-  let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters) as unknown as typeof baseQuery
 
-  if (filters.fechaFinLt) query = query.lt('fecha_fin', filters.fechaFinLt)
-  if (filters.fechaFinGte) query = query.gte('fecha_fin', filters.fechaFinGte)
-  if (filters.fechaFinLte) query = query.lte('fecha_fin', filters.fechaFinLte)
+  const runCount = async (includeUserColumn: boolean) => {
+    const baseQuery = supabase.from('tareas').select('id', { count: 'exact', head: true })
+    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters) as unknown as typeof baseQuery
+    query = applyTaskScope(query as unknown as SupabaseFilterQuery, scope, { includeUserColumn }) as unknown as typeof baseQuery
 
-  const { count, error } = await query
-  if (error) throw error
-  return count ?? 0
+    if (filters.fechaFinLt) query = query.lt('fecha_fin', filters.fechaFinLt)
+    if (filters.fechaFinGte) query = query.gte('fecha_fin', filters.fechaFinGte)
+    if (filters.fechaFinLte) query = query.lte('fecha_fin', filters.fechaFinLte)
+
+    return query
+  }
+
+  const primary = await runCount(true)
+
+  if (!primary.error || scope.unrestricted || !isTaskScopeColumnError(primary.error)) {
+    if (primary.error) throw primary.error
+    return primary.count ?? 0
+  }
+
+  const fallback = await runCount(false)
+  if (fallback.error) throw fallback.error
+  return fallback.count ?? 0
 }
 
-async function buildTaskSummary(filters: TaskFilters) {
+async function buildTaskSummary(filters: TaskFilters, scope: TaskScope) {
   const baseFilters = { ...filters }
   const today = todayIso()
   const urgentLimit = todayIso(2)
   const nextLimit = todayIso(5)
 
   const [total, pendientes, enProceso, completadas, altaPrioridad, vencidas, urgentes, proximas] = await Promise.all([
-    countTasks(baseFilters),
-    countTasks({ ...baseFilters, estado: 'Pendiente' }),
-    countTasks({ ...baseFilters, estado: 'En Proceso' }),
-    countTasks({ ...baseFilters, estado: 'Completado' }),
-    countTasks({ ...baseFilters, prioridad: 'Alta' }),
-    countTasks({ ...baseFilters, fechaFinLt: today }),
-    countTasks({ ...baseFilters, fechaFinGte: today, fechaFinLte: urgentLimit }),
-    countTasks({ ...baseFilters, fechaFinGte: todayIso(3), fechaFinLte: nextLimit }),
+    countTasks(baseFilters, scope),
+    countTasks({ ...baseFilters, estado: 'Pendiente' }, scope),
+    countTasks({ ...baseFilters, estado: 'En Proceso' }, scope),
+    countTasks({ ...baseFilters, estado: 'Completado' }, scope),
+    countTasks({ ...baseFilters, prioridad: 'Alta' }, scope),
+    countTasks({ ...baseFilters, fechaFinLt: today }, scope),
+    countTasks({ ...baseFilters, fechaFinGte: today, fechaFinLte: urgentLimit }, scope),
+    countTasks({ ...baseFilters, fechaFinGte: todayIso(3), fechaFinLte: nextLimit }, scope),
   ])
 
   return {
@@ -240,26 +258,29 @@ async function loadTaskPage({
   to,
   orderBy,
   ascending,
+  scope,
 }: {
   filters: TaskFilters
   from: number
   to: number
   orderBy: string
   ascending: boolean
+  scope: TaskScope
 }) {
   const supabase = await createServerSupabaseClient()
 
-  const runQuery = async (columns: string) => {
+  const runQuery = async (columns: string, includeUserColumn: boolean) => {
     const baseQuery = supabase
       .from('tareas')
       .select(columns, { count: 'exact' })
       .order(orderBy, { ascending })
       .range(from, to)
-    const query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters) as unknown as typeof baseQuery
+    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters) as unknown as typeof baseQuery
+    query = applyTaskScope(query as unknown as SupabaseFilterQuery, scope, { includeUserColumn }) as unknown as typeof baseQuery
     return query
   }
 
-  const primary = await runQuery(TASK_LIST_COLUMNS)
+  const primary = await runQuery(TASK_LIST_COLUMNS, true)
 
   if (!primary.error) {
     return primary
@@ -274,7 +295,7 @@ async function loadTaskPage({
     return primary
   }
 
-  const fallback = await runQuery(LEGACY_TASK_LIST_COLUMNS)
+  const fallback = await runQuery(LEGACY_TASK_LIST_COLUMNS, false)
 
   return {
     ...fallback,
@@ -523,6 +544,7 @@ export async function GET(request: Request) {
     const requestedOrderBy = url.searchParams.get('orderBy') || 'created_at'
     const orderBy = TASK_ORDER_COLUMNS.has(requestedOrderBy) ? requestedOrderBy : 'created_at'
     const ascending = url.searchParams.get('ascending') === 'true'
+    const scope = buildTaskScope(user, profile)
 
     const { data, count, error } = await loadTaskPage({
       filters,
@@ -530,6 +552,7 @@ export async function GET(request: Request) {
       to,
       orderBy,
       ascending,
+      scope,
     })
 
     if (error) throw error
@@ -538,7 +561,7 @@ export async function GET(request: Request) {
 
     if (includeSummary) {
       try {
-        summary = await buildTaskSummary(filters)
+        summary = await buildTaskSummary(filters, scope)
       } catch {
         summary = {
           total: count ?? 0,
