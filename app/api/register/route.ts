@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
+import { REGISTRATION_DEPARTAMENTOS, REGISTRATION_ROLE_CODES, REGISTRATION_ROLES } from '@/lib/registration-options'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,9 +20,17 @@ function normalizeRoleCode(value?: string) {
   return value?.trim().toLowerCase() || 'responsable'
 }
 
-function isPublicRole(roleCode?: string | null) {
+function normalizeCatalogText(value?: string | null) {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+}
+
+function isRegistrationRole(roleCode?: string | null) {
   const normalizedRole = roleCode?.trim().toLowerCase()
-  return !!normalizedRole && normalizedRole !== 'administrador' && normalizedRole !== 'administradora'
+  return !!normalizedRole && REGISTRATION_ROLE_CODES.includes(normalizedRole)
 }
 
 export async function GET() {
@@ -36,7 +45,7 @@ export async function GET() {
     if (departamentosResult.error && departamentosResult.error.code !== '42P01') throw departamentosResult.error
 
     const roles = (rolesResult.data ?? [])
-      .filter((role) => isPublicRole(role.codigo))
+      .filter((role) => isRegistrationRole(role.codigo))
       .map((role) => ({
         codigo: role.codigo,
         nombre: role.nombre,
@@ -47,15 +56,18 @@ export async function GET() {
       nombre: departamento.nombre,
     }))
 
-    return NextResponse.json({ ok: true, roles, departamentos })
+    return NextResponse.json({
+      ok: true,
+      roles: roles.length ? roles : REGISTRATION_ROLES,
+      departamentos: departamentos.length ? departamentos : REGISTRATION_DEPARTAMENTOS,
+    })
   } catch (error: unknown) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: error instanceof Error ? error.message : 'No se pudieron cargar los roles.',
-      },
-      { status: 500 }
-    )
+    return NextResponse.json({
+      ok: true,
+      roles: REGISTRATION_ROLES,
+      departamentos: REGISTRATION_DEPARTAMENTOS,
+      warning: error instanceof Error ? error.message : 'No se pudieron cargar los catalogos desde la base de datos.',
+    })
   }
 }
 
@@ -99,14 +111,16 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminSupabaseClient()
-    const { data: departamentoRow, error: departamentoError } = await admin
+    const { data: departamentoRows, error: departamentoError } = await admin
       .from('departamentos')
       .select('nombre')
-      .eq('nombre', departamento)
       .eq('activo', true)
-      .maybeSingle()
 
     if (departamentoError) throw departamentoError
+
+    const departamentoRow = (departamentoRows ?? []).find(
+      (row) => normalizeCatalogText(row.nombre) === normalizeCatalogText(departamento)
+    )
 
     if (!departamentoRow) {
       return NextResponse.json(
@@ -126,11 +140,11 @@ export async function POST(request: Request) {
 
     if (roleError) throw roleError
 
-    if (!roleRow || !isPublicRole(roleRow.codigo)) {
+    if (!roleRow || !isRegistrationRole(roleRow.codigo)) {
       return NextResponse.json(
         {
           ok: false,
-          error: 'Selecciona un rol valido. Los roles de administrador no se pueden crear desde el registro publico.',
+          error: 'Selecciona un rol valido para el usuario.',
         },
         { status: 400 }
       )

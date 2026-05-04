@@ -17,6 +17,7 @@ import {
   UsersRound,
 } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
+import { REGISTRATION_DEPARTAMENTOS, REGISTRATION_ROLES } from '@/lib/registration-options'
 
 type PublicRole = {
   codigo: string
@@ -29,18 +30,10 @@ type PublicDepartamento = {
   nombre: string
 }
 
-const FALLBACK_ROLES: PublicRole[] = [
-  {
-    codigo: 'responsable',
-    nombre: 'Responsable',
-    descripcion: 'Gestion de sus tareas, actualizacion de avances y consulta de historial.',
-  },
-]
-
 export default function RegisterForm() {
   const router = useRouter()
-  const [roles, setRoles] = useState<PublicRole[]>(FALLBACK_ROLES)
-  const [departamentos, setDepartamentos] = useState<PublicDepartamento[]>([])
+  const [roles, setRoles] = useState<PublicRole[]>(REGISTRATION_ROLES)
+  const [departamentos, setDepartamentos] = useState<PublicDepartamento[]>(REGISTRATION_DEPARTAMENTOS)
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -61,18 +54,20 @@ export default function RegisterForm() {
         const response = await fetch('/api/register')
         const data = (await response.json()) as { ok?: boolean; roles?: PublicRole[]; departamentos?: PublicDepartamento[] }
 
-        if (response.ok && data.ok && data.roles?.length) {
-          setRoles(data.roles)
-          if (!data.roles.some((role) => role.codigo === roleCode)) {
-            setRoleCode(data.roles[0].codigo)
-          }
+        const nextRoles = response.ok && data.ok && data.roles?.length ? data.roles : REGISTRATION_ROLES
+        const nextDepartamentos =
+          response.ok && data.ok && data.departamentos?.length ? data.departamentos : REGISTRATION_DEPARTAMENTOS
+
+        setRoles(nextRoles)
+        setDepartamentos(nextDepartamentos)
+        if (!nextRoles.some((role) => role.codigo === roleCode)) {
+          setRoleCode(nextRoles[0].codigo)
         }
-        if (response.ok && data.ok && data.departamentos?.length) {
-          setDepartamentos(data.departamentos)
-          setDepartamento((current) => current || data.departamentos?.[0]?.nombre || '')
-        }
+        setDepartamento((current) => current || nextDepartamentos[0]?.nombre || '')
       } catch {
-        setRoles(FALLBACK_ROLES)
+        setRoles(REGISTRATION_ROLES)
+        setDepartamentos(REGISTRATION_DEPARTAMENTOS)
+        setDepartamento((current) => current || REGISTRATION_DEPARTAMENTOS[0]?.nombre || '')
       } finally {
         setLoadingRoles(false)
       }
@@ -168,13 +163,13 @@ export default function RegisterForm() {
                 Registro de usuarios para la agenda operativa
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-                La cuenta queda vinculada a un perfil interno y a un rol autorizado. Los permisos de administrador no se asignan desde este formulario.
+                La cuenta queda vinculada a un perfil interno, un departamento y un rol autorizado del sistema.
               </p>
             </div>
 
             <div className="grid gap-4">
               {[
-                { icon: <BadgeCheck size={18} />, title: 'Rol validado', text: 'Solo se muestran roles permitidos por la base de datos.' },
+                { icon: <BadgeCheck size={18} />, title: 'Rol validado', text: 'Se muestran los roles operativos disponibles para la agenda.' },
                 { icon: <LockKeyhole size={18} />, title: 'Credenciales seguras', text: 'La contrasena se valida antes de crear el acceso.' },
                 { icon: <UsersRound size={18} />, title: 'Perfil operativo', text: 'El usuario queda listo para recibir tareas y avisos.' },
               ].map((item) => (
