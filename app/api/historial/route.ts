@@ -78,10 +78,6 @@ function isMissingAssignmentOwnerColumn(error: { code?: string; message?: string
   )
 }
 
-type CompletionRecipient = AdminRecipient & {
-  assignedOwner: boolean
-}
-
 function completionEmailHtml(task: TaskRow, userLabel: string) {
   return `
     <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6">
@@ -121,28 +117,7 @@ async function notifyAdminsTaskCompleted(
   task: TaskRow,
   userLabel: string
 ) {
-  let recipients: CompletionRecipient[] = []
-
-  if (task.asignado_por_usuario_id) {
-    const { data: owner, error } = await admin
-      .from('perfiles_usuario')
-      .select('id, email, nombre_completo')
-      .eq('id', task.asignado_por_usuario_id)
-      .maybeSingle()
-
-    if (error) throw error
-
-    if (owner?.id) {
-      recipients = [{ ...(owner as AdminRecipient), assignedOwner: true }]
-    }
-  }
-
-  if (recipients.length === 0) {
-    recipients = (await loadAdminRecipients(admin)).map((recipient) => ({
-      ...recipient,
-      assignedOwner: false,
-    }))
-  }
+  const recipients = await loadAdminRecipients(admin)
 
   for (const recipient of recipients) {
     const email = normalizeEmail(recipient.email)
@@ -158,9 +133,7 @@ async function notifyAdminsTaskCompleted(
           destinatario_email: email,
           titulo: title,
           mensaje: message,
-          alerta_key: recipient.assignedOwner
-            ? `completada-asignador:${task.id}:${recipient.id}`
-            : `completada:${task.id}:${recipient.id}`,
+          alerta_key: `completada:${task.id}:${recipient.id}`,
         },
         { onConflict: 'alerta_key' }
       )
