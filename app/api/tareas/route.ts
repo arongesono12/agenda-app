@@ -451,6 +451,24 @@ async function notifyAssignment(
     .eq('id', alert.id)
 }
 
+async function markAssignmentAlertsRead(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  taskId: number,
+  userId: string | null | undefined
+) {
+  if (!userId) return
+
+  const { error } = await admin
+    .from('alertas')
+    .update({ leida: true })
+    .eq('tarea_id', taskId)
+    .eq('destinatario_usuario_id', userId)
+    .eq('tipo_alerta', 'Asignada')
+    .eq('leida', false)
+
+  if (error) throw error
+}
+
 async function saveTask(request: Request, mode: 'create' | 'update') {
   try {
     const { user, profile } = await getServerSessionProfile()
@@ -504,6 +522,10 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
 
     if (responsable && (mode === 'create' || previousResponsibleUserId !== responsable.usuario_id)) {
       await notifyAssignment(admin, task, responsable)
+    }
+
+    if (mode === 'update' && previousResponsibleUserId && previousResponsibleUserId !== responsable?.usuario_id) {
+      await markAssignmentAlertsRead(admin, task.id, previousResponsibleUserId)
     }
 
     return NextResponse.json({ ok: true, task })

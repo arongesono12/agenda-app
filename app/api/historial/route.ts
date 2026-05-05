@@ -148,6 +148,22 @@ async function notifyAdminsTaskCompleted(
   }
 }
 
+async function markCurrentUserAssignmentHandled(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  taskId: number,
+  userId: string
+) {
+  const { error } = await admin
+    .from('alertas')
+    .update({ leida: true })
+    .eq('tarea_id', taskId)
+    .eq('destinatario_usuario_id', userId)
+    .eq('tipo_alerta', 'Asignada')
+    .eq('leida', false)
+
+  if (error) throw error
+}
+
 export async function GET(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
@@ -357,6 +373,10 @@ export async function POST(request: Request) {
       .single()
 
     if (updateError) throw updateError
+
+    if (isAssignedByUserId || isAssignedByName) {
+      await markCurrentUserAssignmentHandled(admin, task.id, user.id)
+    }
 
     if (shouldComplete) {
       await notifyAdminsTaskCompleted(admin, updatedTask as TaskRow, userLabel)

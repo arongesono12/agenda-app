@@ -9,7 +9,7 @@ export async function GET() {
     const { user } = await getServerSessionProfile()
 
     if (!user) {
-      return NextResponse.json({ count: 0 })
+      return NextResponse.json({ count: 0 }, { headers: { 'Cache-Control': 'no-store' } })
     }
 
     const admin = createAdminSupabaseClient()
@@ -21,8 +21,8 @@ export async function GET() {
 
     if (error) throw error
 
-    return NextResponse.json({ count: count ?? 0 })
+    return NextResponse.json({ count: count ?? 0 }, { headers: { 'Cache-Control': 'no-store' } })
   } catch {
-    return NextResponse.json({ count: 0 })
+    return NextResponse.json({ count: 0 }, { headers: { 'Cache-Control': 'no-store' } })
   }
 }
