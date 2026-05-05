@@ -208,7 +208,7 @@ function SidebarContent({
                       isActive
                         ? 'nav-active border-teal-300/10 shadow-[0_14px_36px_rgba(20,184,166,0.16)]'
                         : collapsed
-                          ? 'border-transparent text-slate-600 hover:border-teal-200/70 hover:bg-teal-50/80 hover:text-teal-800'
+                          ? 'border-transparent text-slate-600 hover:text-teal-700'
                           : 'border-transparent text-slate-700 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
                     )}
                   >
@@ -218,7 +218,7 @@ function SidebarContent({
                         isActive
                           ? 'bg-white/70 text-teal-700'
                           : collapsed
-                            ? 'bg-transparent text-slate-500 group-hover:bg-teal-100/80 group-hover:text-teal-800'
+                            ? 'bg-transparent text-slate-500 group-hover:text-teal-700'
                             : 'bg-white/60 text-slate-500 group-hover:text-slate-900'
                       )}
                     >
