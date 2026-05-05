@@ -206,7 +206,9 @@ function SidebarContent({
                       'nav-item group flex rounded-2xl border py-3 text-sm font-medium',
                       collapsed ? 'justify-center px-2' : 'items-center gap-3 px-3',
                       isActive
-                        ? 'nav-active border-teal-300/10 shadow-[0_14px_36px_rgba(20,184,166,0.16)]'
+                        ? collapsed
+                          ? 'border-transparent text-teal-700'
+                          : 'nav-active border-teal-300/10 shadow-[0_14px_36px_rgba(20,184,166,0.16)]'
                         : collapsed
                           ? 'border-transparent text-slate-600 hover:text-teal-700'
                           : 'border-transparent text-slate-700 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
@@ -215,8 +217,10 @@ function SidebarContent({
                     <span
                       className={cn(
                         'relative flex h-10 min-h-10 w-10 min-w-10 flex-shrink-0 items-center justify-center rounded-2xl transition-colors',
-                        isActive
-                          ? 'bg-white/70 text-teal-700'
+                        isActive && collapsed
+                          ? 'border border-teal-200/80 bg-teal-50 text-teal-700 shadow-[0_12px_28px_rgba(20,184,166,0.18)]'
+                          : isActive
+                            ? 'bg-white/70 text-teal-700'
                           : collapsed
                             ? 'bg-transparent text-slate-500 group-hover:text-teal-700'
                             : 'bg-white/60 text-slate-500 group-hover:text-slate-900'
