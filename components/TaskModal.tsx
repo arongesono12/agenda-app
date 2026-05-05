@@ -37,7 +37,7 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
   useEffect(() => {
     const loadResponsables = async () => {
-      const response = await window.fetch('/api/catalogos?resource=responsables')
+      const response = await window.fetch('/api/catalogos?resource=responsables&assignable=true')
       const result = (await response.json()) as { ok?: boolean; responsables?: Responsable[] }
 
       setResponsables(response.ok && result.ok ? (result.responsables ?? []).filter((item) => item.activo ?? true) : [])

@@ -5,6 +5,8 @@ import { getServerSessionProfile } from '@/lib/server-access'
 
 export const dynamic = 'force-dynamic'
 
+const ASSIGNABLE_ROLE_CODES = new Set(['responsable', 'supervisor', 'consulta'])
+
 type CatalogResource = 'departamentos' | 'responsables'
 
 type CatalogPayload = {
@@ -31,6 +33,58 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
 
+type ResponsableCatalogRow = {
+  id: number
+  nombre: string
+  email: string | null
+  usuario_id: string | null
+  departamento: string | null
+  cargo: string | null
+  activo: boolean | null
+  created_at: string | null
+}
+
+type ProfileRoleRow = {
+  id: string
+  tipo_usuario?: { codigo?: string | null } | Array<{ codigo?: string | null }> | null
+}
+
+function readRoleCode(profile: ProfileRoleRow) {
+  const role = Array.isArray(profile.tipo_usuario) ? profile.tipo_usuario[0] : profile.tipo_usuario
+  return role?.codigo?.trim().toLowerCase() ?? ''
+}
+
+async function filterAssignableResponsables(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  rows: ResponsableCatalogRow[]
+) {
+  const userIds = Array.from(
+    new Set(
+      rows
+        .filter((row) => row.activo ?? true)
+        .map((row) => row.usuario_id)
+        .filter((value): value is string => !!value)
+    )
+  )
+
+  if (userIds.length === 0) return []
+
+  const { data, error } = await admin
+    .from('perfiles_usuario')
+    .select('id, tipo_usuario:tipos_usuario(codigo)')
+    .in('id', userIds)
+
+  if (error) throw error
+
+  const assignableUserIds = new Set(
+    ((data ?? []) as ProfileRoleRow[])
+      .filter((profile) => ASSIGNABLE_ROLE_CODES.has(readRoleCode(profile)))
+      .map((profile) => profile.id)
+  )
+
+  return rows.filter((row) => row.usuario_id && assignableUserIds.has(row.usuario_id))
+}
+
 export async function GET(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
@@ -41,6 +95,7 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url)
     const resource = readResource(url)
+    const onlyAssignable = url.searchParams.get('assignable') === 'true'
     const admin = createAdminSupabaseClient()
     const result: Record<string, unknown> = {}
 
@@ -64,7 +119,8 @@ export async function GET(request: Request) {
           .order('nombre')
 
         if (error) throw error
-        result.responsables = data ?? []
+        const rows = (data ?? []) as ResponsableCatalogRow[]
+        result.responsables = onlyAssignable ? await filterAssignableResponsables(admin, rows) : rows
       }
     }
 
