@@ -24,6 +24,8 @@ type TaskRow = {
   porcentaje_avance: number
   responsable: string | null
   responsable_usuario_id?: string | null
+  asignado_por_usuario_id?: string | null
+  asignado_por_nombre?: string | null
   fecha_fin: string | null
 }
 
@@ -67,6 +69,19 @@ function isFinalization(payload: HistorialPayload) {
   )
 }
 
+function isMissingAssignmentOwnerColumn(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? ''
+  return (
+    error?.code === '42703' ||
+    error?.code === 'PGRST204' ||
+    /asignado_por_(usuario_id|nombre)|column .* does not exist/i.test(message)
+  )
+}
+
+type CompletionRecipient = AdminRecipient & {
+  assignedOwner: boolean
+}
+
 function completionEmailHtml(task: TaskRow, userLabel: string) {
   return `
     <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6">
@@ -106,10 +121,33 @@ async function notifyAdminsTaskCompleted(
   task: TaskRow,
   userLabel: string
 ) {
-  const admins = await loadAdminRecipients(admin)
+  let recipients: CompletionRecipient[] = []
 
-  for (const recipient of admins) {
+  if (task.asignado_por_usuario_id) {
+    const { data: owner, error } = await admin
+      .from('perfiles_usuario')
+      .select('id, email, nombre_completo')
+      .eq('id', task.asignado_por_usuario_id)
+      .maybeSingle()
+
+    if (error) throw error
+
+    if (owner?.id) {
+      recipients = [{ ...(owner as AdminRecipient), assignedOwner: true }]
+    }
+  }
+
+  if (recipients.length === 0) {
+    recipients = (await loadAdminRecipients(admin)).map((recipient) => ({
+      ...recipient,
+      assignedOwner: false,
+    }))
+  }
+
+  for (const recipient of recipients) {
     const email = normalizeEmail(recipient.email)
+    const title = 'Tarea asignada finalizada'
+    const message = `${userLabel} finalizo la tarea "${task.tarea}". Revisa el historial para validar lo realizado.`
     const { data: alert, error } = await admin
       .from('alertas')
       .upsert(
@@ -118,9 +156,11 @@ async function notifyAdminsTaskCompleted(
           tipo_alerta: 'Completada',
           destinatario_usuario_id: recipient.id,
           destinatario_email: email,
-          titulo: 'Tarea finalizada',
-          mensaje: `${userLabel} finalizo la tarea "${task.tarea}".`,
-          alerta_key: `completada:${task.id}:${recipient.id}`,
+          titulo: title,
+          mensaje: message,
+          alerta_key: recipient.assignedOwner
+            ? `completada-asignador:${task.id}:${recipient.id}`
+            : `completada:${task.id}:${recipient.id}`,
         },
         { onConflict: 'alerta_key' }
       )
@@ -135,7 +175,7 @@ async function notifyAdminsTaskCompleted(
       to: email,
       subject: `Tarea finalizada: ${task.tarea}`,
       html: completionEmailHtml(task, userLabel),
-      text: `${userLabel} finalizo la tarea "${task.tarea}". Revisa el historial de la agenda.`,
+      text: message,
     })
 
     await admin
@@ -308,11 +348,11 @@ export async function POST(request: Request) {
     const admin = createAdminSupabaseClient()
     const primaryTask = await admin
       .from('tareas')
-      .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, responsable_usuario_id, fecha_fin')
+      .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, responsable_usuario_id, asignado_por_usuario_id, asignado_por_nombre, fecha_fin')
       .eq('id', payload.tarea_id)
       .maybeSingle()
     const fallbackTask =
-      primaryTask.error && isTaskScopeColumnError(primaryTask.error)
+      primaryTask.error && (isTaskScopeColumnError(primaryTask.error) || isMissingAssignmentOwnerColumn(primaryTask.error))
         ? await admin
             .from('tareas')
             .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, fecha_fin')
@@ -365,12 +405,22 @@ export async function POST(request: Request) {
       ultima_actualizacion: new Date().toISOString(),
     }
 
-    const { data: updatedTask, error: updateError } = await admin
+    const updateResult = await admin
       .from('tareas')
       .update(updatePayload)
       .eq('id', task.id)
-      .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, fecha_fin')
+      .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, responsable_usuario_id, asignado_por_usuario_id, asignado_por_nombre, fecha_fin')
       .single()
+    const fallbackUpdate =
+      updateResult.error && isMissingAssignmentOwnerColumn(updateResult.error)
+        ? await admin
+            .from('tareas')
+            .update(updatePayload)
+            .eq('id', task.id)
+            .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, fecha_fin')
+            .single()
+        : updateResult
+    const { data: updatedTask, error: updateError } = fallbackUpdate
 
     if (updateError) throw updateError
 

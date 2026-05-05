@@ -18,6 +18,8 @@ const TASK_LIST_COLUMNS = [
   'responsable',
   'responsable_id',
   'responsable_usuario_id',
+  'asignado_por_usuario_id',
+  'asignado_por_nombre',
   'fecha_inicio',
   'fecha_fin',
   'dias_totales',
@@ -85,6 +87,14 @@ type ResponsableRow = {
 type TaskRow = TaskPayload & {
   id: number
   responsable_usuario_id?: string | null
+  asignado_por_usuario_id?: string | null
+  asignado_por_nombre?: string | null
+}
+
+type PreviousTaskAssignment = {
+  responsable_usuario_id?: string | null
+  asignado_por_usuario_id?: string | null
+  asignado_por_nombre?: string | null
 }
 
 type TaskFilters = {
@@ -289,7 +299,7 @@ async function loadTaskPage({
   const missingColumn =
     primary.error.code === '42703' ||
     primary.error.code === 'PGRST204' ||
-    /responsable_(id|usuario_id)|column .* does not exist/i.test(primary.error.message)
+    /responsable_(id|usuario_id)|asignado_por_(usuario_id|nombre)|column .* does not exist/i.test(primary.error.message)
 
   if (!missingColumn) {
     return primary
@@ -367,7 +377,36 @@ async function resolveResponsable(admin: ReturnType<typeof createAdminSupabaseCl
   return responsable
 }
 
-function buildTaskPayload(payload: TaskPayload, responsable: ResponsableRow | null) {
+function buildTaskPayload(
+  payload: TaskPayload,
+  responsable: ResponsableRow | null,
+  assignmentOwner: { userId: string | null; userName: string | null }
+) {
+  return {
+    codigo_id:
+      payload.codigo_id !== undefined && payload.codigo_id !== null && `${payload.codigo_id}` !== ''
+        ? Number(payload.codigo_id)
+        : null,
+    tarea: payload.tarea?.trim() ?? '',
+    prioridad: payload.prioridad ?? 'Media',
+    estado: payload.estado ?? 'Pendiente',
+    departamento: payload.departamento || null,
+    seccion: payload.seccion || null,
+    responsable: responsable?.nombre ?? null,
+    responsable_id: responsable?.id ?? null,
+    responsable_usuario_id: responsable?.usuario_id ?? null,
+    asignado_por_usuario_id: assignmentOwner.userId,
+    asignado_por_nombre: assignmentOwner.userName,
+    fecha_inicio: payload.fecha_inicio || null,
+    fecha_fin: payload.fecha_fin || null,
+    porcentaje_avance: Number(payload.porcentaje_avance ?? 0),
+    tipo_tarea: payload.tipo_tarea || null,
+    notas: payload.notas || null,
+    ultima_actualizacion: new Date().toISOString(),
+  }
+}
+
+function buildLegacyTaskPayload(payload: TaskPayload, responsable: ResponsableRow | null) {
   return {
     codigo_id:
       payload.codigo_id !== undefined && payload.codigo_id !== null && `${payload.codigo_id}` !== ''
@@ -388,6 +427,15 @@ function buildTaskPayload(payload: TaskPayload, responsable: ResponsableRow | nu
     notas: payload.notas || null,
     ultima_actualizacion: new Date().toISOString(),
   }
+}
+
+function isMissingAssignmentOwnerColumn(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? ''
+  return (
+    error?.code === '42703' ||
+    error?.code === 'PGRST204' ||
+    /asignado_por_(usuario_id|nombre)|column .* does not exist/i.test(message)
+  )
 }
 
 function assignmentEmailHtml(task: TaskRow, responsable: ResponsableRow) {
@@ -489,32 +537,68 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
 
     const admin = createAdminSupabaseClient()
     const responsable = await resolveResponsable(admin, payload)
-    const taskPayload = buildTaskPayload(payload, responsable)
+    const userLabel = profile?.nombre_completo?.trim() || profile?.email || user.email || null
     let previousResponsibleUserId: string | null = null
+    let previousAssignmentOwner: { userId: string | null; userName: string | null } = {
+      userId: null,
+      userName: null,
+    }
     let task: TaskRow
 
     if (mode === 'update') {
       const taskId = Number(payload.id)
-      const { data: previous, error: previousError } = await admin
+      const previousResult = await admin
         .from('tareas')
-        .select('responsable_usuario_id')
+        .select('responsable_usuario_id, asignado_por_usuario_id, asignado_por_nombre')
         .eq('id', taskId)
         .maybeSingle()
+      const fallbackPrevious =
+        previousResult.error && isMissingAssignmentOwnerColumn(previousResult.error)
+          ? await admin.from('tareas').select('responsable_usuario_id').eq('id', taskId).maybeSingle()
+          : previousResult
+      const { data: previous, error: previousError } = fallbackPrevious
 
       if (previousError) throw previousError
-      previousResponsibleUserId = previous?.responsable_usuario_id ?? null
+      const previousAssignment = previous as PreviousTaskAssignment | null
+      previousResponsibleUserId = previousAssignment?.responsable_usuario_id ?? null
+      previousAssignmentOwner = {
+        userId: previousAssignment?.asignado_por_usuario_id ?? null,
+        userName: previousAssignment?.asignado_por_nombre ?? null,
+      }
 
-      const { data, error } = await admin
+      const assignmentChanged = previousResponsibleUserId !== responsable?.usuario_id
+      const taskPayload = buildTaskPayload(payload, responsable, {
+        userId: assignmentChanged ? user.id : previousAssignmentOwner.userId ?? user.id,
+        userName: assignmentChanged ? userLabel : previousAssignmentOwner.userName ?? userLabel,
+      })
+      const legacyTaskPayload = buildLegacyTaskPayload(payload, responsable)
+
+      const updateResult = await admin
         .from('tareas')
         .update(taskPayload)
         .eq('id', taskId)
         .select('*')
         .single()
+      const fallbackUpdate =
+        updateResult.error && isMissingAssignmentOwnerColumn(updateResult.error)
+          ? await admin.from('tareas').update(legacyTaskPayload).eq('id', taskId).select('*').single()
+          : updateResult
+      const { data, error } = fallbackUpdate
 
       if (error) throw error
       task = data as TaskRow
     } else {
-      const { data, error } = await admin.from('tareas').insert(taskPayload).select('*').single()
+      const taskPayload = buildTaskPayload(payload, responsable, {
+        userId: user.id,
+        userName: userLabel,
+      })
+      const legacyTaskPayload = buildLegacyTaskPayload(payload, responsable)
+      const insertResult = await admin.from('tareas').insert(taskPayload).select('*').single()
+      const fallbackInsert =
+        insertResult.error && isMissingAssignmentOwnerColumn(insertResult.error)
+          ? await admin.from('tareas').insert(legacyTaskPayload).select('*').single()
+          : insertResult
+      const { data, error } = fallbackInsert
 
       if (error) throw error
       task = data as TaskRow

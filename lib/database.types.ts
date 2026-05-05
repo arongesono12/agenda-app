@@ -146,6 +146,8 @@ export type Database = {
           responsable: string | null
           responsable_id: number | null
           responsable_usuario_id: string | null
+          asignado_por_usuario_id: string | null
+          asignado_por_nombre: string | null
           fecha_inicio: string | null
           fecha_fin: string | null
           dias_totales: number | null
@@ -169,6 +171,8 @@ export type Database = {
           responsable?: string | null
           responsable_id?: number | null
           responsable_usuario_id?: string | null
+          asignado_por_usuario_id?: string | null
+          asignado_por_nombre?: string | null
           fecha_inicio?: string | null
           fecha_fin?: string | null
           porcentaje_avance?: number | null

@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Bell, RefreshCw, AlertTriangle, Clock, Calendar, CheckCircle, Check } from 'lucide-react'
 import { useToast } from '@/components/ToastProvider'
 import {
@@ -17,6 +18,7 @@ import KPICard from '@/components/ui/KPICard'
 
 type AlertaInterna = {
   id: number
+  tarea_id?: number | null
   tipo_alerta: string
   titulo?: string | null
   mensaje?: string | null
@@ -210,7 +212,10 @@ export default function AlertasPage() {
             {personalAlerts.map((alert) => (
               <div key={alert.id} className="group relative px-5 py-4 transition-colors hover:bg-slate-50/50">
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
+                  <Link
+                    href={alert.tarea_id ? `/historial?tarea_id=${alert.tarea_id}` : '/alertas'}
+                    className="flex-1"
+                  >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={alert.leida ? 'h-2.5 w-2.5 rounded-full bg-slate-200' : 'h-2.5 w-2.5 rounded-full bg-teal-500'} />
                       <span className="badge border-teal-200 bg-teal-50 text-teal-700">{alert.tipo_alerta}</span>
@@ -220,7 +225,7 @@ export default function AlertasPage() {
                     </div>
                     <p className="mt-2 text-sm font-semibold text-slate-900">{alert.titulo ?? 'Alerta de agenda'}</p>
                     {alert.mensaje && <p className="mt-1 text-xs text-slate-500">{alert.mensaje}</p>}
-                  </div>
+                  </Link>
 
                   {!alert.leida && (
                     <button

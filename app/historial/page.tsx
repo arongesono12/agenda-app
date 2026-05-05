@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { Suspense, useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { History, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { Historial } from '@/lib/types'
 import PageHeader from '@/components/ui/PageHeader'
@@ -18,7 +19,9 @@ const CHANGE_COLOR: Record<string, string> = {
   'Eliminación': 'bg-rose-50 text-rose-700 border-rose-200',
 }
 
-export default function HistorialPage() {
+function HistorialContent() {
+  const searchParams = useSearchParams()
+  const taskId = searchParams.get('tarea_id')
   const [rows, setRows] = useState<Historial[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
@@ -30,12 +33,13 @@ export default function HistorialPage() {
       page: String(page),
       pageSize: String(PAGE_SIZE),
     })
+    if (taskId) params.set('tarea_id', taskId)
     const response = await window.fetch(`/api/historial?${params.toString()}`)
     const result = (await response.json()) as { ok?: boolean; rows?: Historial[]; total?: number }
     setRows(response.ok && result.ok ? (result.rows ?? []) as Historial[] : [])
     setTotal(response.ok && result.ok ? result.total ?? 0 : 0)
     setLoading(false)
-  }, [page])
+  }, [page, taskId])
 
   useEffect(() => {
     fetch()
@@ -55,7 +59,7 @@ export default function HistorialPage() {
     <div className="page-stack">
       <PageHeader
         title="Historial de cambios"
-        subtitle="Auditoria y trazabilidad de acciones registradas sobre tareas y avances."
+        subtitle={taskId ? `Auditoria y trazabilidad de la tarea #${taskId}.` : 'Auditoria y trazabilidad de acciones registradas sobre tareas y avances.'}
         icon={<History size={22} />}
         actions={
           <button onClick={fetch} className="action-btn h-12 w-12 rounded-2xl p-0">
@@ -184,5 +188,13 @@ export default function HistorialPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function HistorialPage() {
+  return (
+    <Suspense fallback={<div className="surface-panel py-20 text-center text-sm text-slate-500">Cargando historial...</div>}>
+      <HistorialContent />
+    </Suspense>
   )
 }
