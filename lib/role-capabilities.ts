@@ -1,4 +1,4 @@
-import { normalizarRoleCode } from '@/lib/access-control'
+import { getLandingPathForRole, getAllowedRoutesForRole, normalizarRoleCode } from '@/lib/access-control'
 import type { PerfilUsuario } from '@/lib/types'
 
 export type RoleCapabilitySet = {
@@ -21,10 +21,11 @@ export type RoleCapabilitySet = {
   navItems: string[]
 }
 
-const ADMIN_NAV = ['/', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos']
-const SUPERVISOR_NAV = ['/', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial']
-const RESPONSABLE_NAV = ['/', '/dashboard', '/alertas', '/cronograma', '/historial']
-const CONSULTA_NAV = ['/dashboard', '/busqueda', '/cronograma', '/estadisticas']
+const NAV_ONLY = new Set(['/', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos'])
+
+function navItemsForRole(roleCode: string) {
+  return getAllowedRoutesForRole(roleCode).filter((route) => NAV_ONLY.has(route))
+}
 
 export function getRoleCapabilities(profile?: PerfilUsuario | null): RoleCapabilitySet {
   const roleCode = normalizarRoleCode(profile)
@@ -32,7 +33,7 @@ export function getRoleCapabilities(profile?: PerfilUsuario | null): RoleCapabil
   if (roleCode === 'administrador' || roleCode === 'administradora') {
     return {
       roleCode,
-      landingPath: '/dashboard',
+      landingPath: getLandingPathForRole(roleCode),
       dashboardTitle: 'Dashboard ejecutivo',
       dashboardSubtitle: 'Indicadores globales de rendimiento, carga operativa y estado del equipo.',
       agendaTitle: 'Agenda de control',
@@ -47,14 +48,14 @@ export function getRoleCapabilities(profile?: PerfilUsuario | null): RoleCapabil
       canViewStatistics: true,
       canViewResponsibleBoard: true,
       canViewHistory: true,
-      navItems: ADMIN_NAV,
+      navItems: navItemsForRole(roleCode),
     }
   }
 
   if (roleCode === 'supervisor') {
     return {
       roleCode,
-      landingPath: '/dashboard',
+      landingPath: getLandingPathForRole(roleCode),
       dashboardTitle: 'Dashboard de seguimiento',
       dashboardSubtitle: 'Indicadores del alcance operativo que supervisas y tareas que requieren atencion.',
       agendaTitle: 'Agenda de seguimiento',
@@ -69,14 +70,14 @@ export function getRoleCapabilities(profile?: PerfilUsuario | null): RoleCapabil
       canViewStatistics: true,
       canViewResponsibleBoard: true,
       canViewHistory: true,
-      navItems: SUPERVISOR_NAV,
+      navItems: navItemsForRole(roleCode),
     }
   }
 
   if (roleCode === 'responsable') {
     return {
       roleCode,
-      landingPath: '/',
+      landingPath: getLandingPathForRole(roleCode),
       dashboardTitle: 'Mis indicadores',
       dashboardSubtitle: 'Resumen de tus tareas asignadas, vencimientos y avance personal.',
       agendaTitle: 'Mis tareas asignadas',
@@ -91,13 +92,13 @@ export function getRoleCapabilities(profile?: PerfilUsuario | null): RoleCapabil
       canViewStatistics: false,
       canViewResponsibleBoard: false,
       canViewHistory: true,
-      navItems: RESPONSABLE_NAV,
+      navItems: navItemsForRole(roleCode),
     }
   }
 
   return {
     roleCode,
-    landingPath: '/dashboard',
+    landingPath: getLandingPathForRole(roleCode),
     dashboardTitle: 'Panel de consulta',
     dashboardSubtitle: 'Vista de solo lectura con la informacion permitida para tu perfil.',
     agendaTitle: 'Agenda en modo consulta',
@@ -112,6 +113,6 @@ export function getRoleCapabilities(profile?: PerfilUsuario | null): RoleCapabil
     canViewStatistics: true,
     canViewResponsibleBoard: false,
     canViewHistory: false,
-    navItems: CONSULTA_NAV,
+    navItems: navItemsForRole(roleCode),
   }
 }

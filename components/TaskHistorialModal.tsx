@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowRight, Ban, History, Loader2, NotebookPen, Plus, X } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { supabase } from '@/lib/supabase'
 import { TIPOS_ORDEN } from '@/lib/types'
 import type { Historial, Tarea, TipoOrden } from '@/lib/types'
 import { useUserSession } from '@/components/UserSessionProvider'
@@ -56,17 +55,14 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
   const fetchHistorial = useCallback(async () => {
     setLoading(true)
 
-    const { data, error: fetchError } = await supabase
-      .from('historial')
-      .select('*')
-      .eq('tarea_id', task.id)
-      .order('fecha', { ascending: false })
+    const response = await window.fetch(`/api/historial?tarea_id=${task.id}&page=0&pageSize=100`)
+    const result = (await response.json()) as { ok?: boolean; rows?: Historial[]; error?: string }
 
-    if (fetchError) {
+    if (!response.ok || !result.ok) {
       setRows([])
-      toast.error('No se pudo cargar el historial: ' + fetchError.message)
+      toast.error('No se pudo cargar el historial: ' + (result.error ?? 'Error desconocido.'))
     } else {
-      setRows((data ?? []) as Historial[])
+      setRows((result.rows ?? []) as Historial[])
     }
 
     setLoading(false)

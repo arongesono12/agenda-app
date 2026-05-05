@@ -12,7 +12,6 @@ import {
   Tag,
   ShieldAlert,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import PageHeader from '@/components/ui/PageHeader'
 import { ESTADOS, TIPOS_TAREA, PRIORIDADES } from '@/lib/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -54,12 +53,17 @@ export default function CatalogosPage() {
 
   const fetch = useCallback(async () => {
     setLoading(true)
-    const [d, r] = await Promise.all([
-      supabase.from('departamentos').select('*').order('nombre'),
-      supabase.from('responsables').select('*').order('nombre'),
-    ])
-    setDeptos((d.data ?? []).map((row) => ({ id: row.id, nombre: row.nombre, activo: row.activo ?? true })))
-    setResps((r.data ?? []).map((row) => ({ ...row, activo: row.activo ?? true })) as Responsable[])
+    const response = await window.fetch('/api/catalogos')
+    const result = (await response.json()) as {
+      ok?: boolean
+      departamentos?: Depto[]
+      responsables?: Responsable[]
+    }
+
+    if (response.ok && result.ok) {
+      setDeptos((result.departamentos ?? []).map((row) => ({ id: row.id, nombre: row.nombre, activo: row.activo ?? true })))
+      setResps((result.responsables ?? []).map((row) => ({ ...row, activo: row.activo ?? true })) as Responsable[])
+    }
     setLoading(false)
   }, [])
 
@@ -70,7 +74,19 @@ export default function CatalogosPage() {
   const addDepto = async () => {
     if (!newDepto.trim()) return
     setSaving(true)
-    await supabase.from('departamentos').insert({ nombre: newDepto.trim() })
+    const response = await window.fetch('/api/catalogos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resource: 'departamentos', nombre: newDepto.trim() }),
+    })
+    const result = (await response.json()) as { ok?: boolean; error?: string }
+
+    if (!response.ok || !result.ok) {
+      setFormError(result.error ?? 'No se pudo guardar el departamento.')
+      setSaving(false)
+      return
+    }
+
     setNewDepto('')
     setSaving(false)
     void fetch()
@@ -92,15 +108,21 @@ export default function CatalogosPage() {
 
     setFormError('')
     setSaving(true)
-    const { error } = await supabase.from('responsables').insert({
-      nombre: newResp.nombre.trim(),
-      email,
-      departamento: newResp.departamento || null,
-      cargo: newResp.cargo || null,
+    const response = await window.fetch('/api/catalogos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        resource: 'responsables',
+        nombre: newResp.nombre.trim(),
+        email,
+        departamento: newResp.departamento || null,
+        cargo: newResp.cargo || null,
+      }),
     })
+    const result = (await response.json()) as { ok?: boolean; error?: string }
 
-    if (error) {
-      setFormError(error.message)
+    if (!response.ok || !result.ok) {
+      setFormError(result.error ?? 'No se pudo guardar el responsable.')
       setSaving(false)
       return
     }
@@ -116,15 +138,12 @@ export default function CatalogosPage() {
     setDeleting(true)
     setDeleteError('')
 
-    const query =
-      deleteTarget.type === 'depto'
-        ? supabase.from('departamentos').delete().eq('id', deleteTarget.id)
-        : supabase.from('responsables').delete().eq('id', deleteTarget.id)
+    const resource = deleteTarget.type === 'depto' ? 'departamentos' : 'responsables'
+    const response = await window.fetch(`/api/catalogos?resource=${resource}&id=${deleteTarget.id}`, { method: 'DELETE' })
+    const result = (await response.json()) as { ok?: boolean; error?: string }
 
-    const { error } = await query
-
-    if (error) {
-      setDeleteError(error.message)
+    if (!response.ok || !result.ok) {
+      setDeleteError(result.error ?? 'No se pudo eliminar el registro.')
       setDeleting(false)
       return
     }

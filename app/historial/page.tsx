@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { History, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import type { Historial } from '@/lib/types'
 import PageHeader from '@/components/ui/PageHeader'
 import { format, parseISO } from 'date-fns'
@@ -27,15 +26,14 @@ export default function HistorialPage() {
 
   const fetch = useCallback(async () => {
     setLoading(true)
-    const from = page * PAGE_SIZE
-    const to = from + PAGE_SIZE - 1
-    const { data, count } = await supabase
-      .from('historial')
-      .select('*', { count: 'exact' })
-      .order('fecha', { ascending: false })
-      .range(from, to)
-    setRows((data ?? []) as Historial[])
-    setTotal(count ?? 0)
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(PAGE_SIZE),
+    })
+    const response = await window.fetch(`/api/historial?${params.toString()}`)
+    const result = (await response.json()) as { ok?: boolean; rows?: Historial[]; total?: number }
+    setRows(response.ok && result.ok ? (result.rows ?? []) as Historial[] : [])
+    setTotal(response.ok && result.ok ? result.total ?? 0 : 0)
     setLoading(false)
   }, [page])
 

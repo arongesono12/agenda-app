@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { ADMIN_ROLE_CODES } from '@/lib/access-control'
+import { canAccessPathForRole, getLandingPathForRole } from '@/lib/access-control'
 import type { Database } from '@/lib/database.types'
 import { DOMAIN_WARNING_ROUTE, isDomainAcquisitionExpired } from '@/lib/domain-acquisition'
 
@@ -62,8 +62,25 @@ export async function updateSession(request: NextRequest) {
   const isRegisterApi = pathname === '/api/register'
   const isBootstrapApi = pathname === '/api/bootstrap/agenda-users'
   const isProtectedRoute = !isLoginRoute && !isDomainWarningRoute && !isRegisterRoute && !isRegisterApi && !isBootstrapApi
-  const isAdminOnlyRoute = pathname === '/catalogos'
   const domainExpired = isDomainAcquisitionExpired()
+  let resolvedRoleCode: string | null = null
+
+  const loadRoleCode = async () => {
+    if (!claims?.sub) return 'consulta'
+    if (resolvedRoleCode) return resolvedRoleCode
+
+    const { data: profile } = await supabase
+      .from('perfiles_usuario')
+      .select('tipo_usuario:tipos_usuario(codigo)')
+      .eq('id', claims.sub)
+      .maybeSingle()
+
+    const roleRow = profile as { tipo_usuario?: { codigo?: string } | Array<{ codigo?: string }> | null } | null
+    const rawRole = Array.isArray(roleRow?.tipo_usuario) ? roleRow?.tipo_usuario[0]?.codigo : roleRow?.tipo_usuario?.codigo
+    resolvedRoleCode = rawRole?.trim().toLowerCase() || 'consulta'
+
+    return resolvedRoleCode
+  }
 
   if (!claims && domainExpired && isLoginRoute) {
     const warningUrl = request.nextUrl.clone()
@@ -101,28 +118,10 @@ export async function updateSession(request: NextRequest) {
     return redirectResponse
   }
 
-  if (claims && isAdminOnlyRoute) {
-    const { data: profile } = await supabase
-      .from('perfiles_usuario')
-      .select('tipo_usuario:tipos_usuario(codigo)')
-      .eq('id', claims.sub)
-      .maybeSingle()
+  if (claims && !isApiRoute(pathname) && isProtectedRoute) {
+    const roleCode = await loadRoleCode()
 
-    const roleRow = profile as { tipo_usuario?: { codigo?: string } | Array<{ codigo?: string }> | null } | null
-    const rawRole = Array.isArray(roleRow?.tipo_usuario) ? roleRow?.tipo_usuario[0]?.codigo : roleRow?.tipo_usuario?.codigo
-    const roleCode = rawRole?.trim().toLowerCase() ?? ''
-
-    if (!ADMIN_ROLE_CODES.includes(roleCode as (typeof ADMIN_ROLE_CODES)[number])) {
-      if (isApiRoute(pathname)) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: 'No tienes permisos para acceder a este recurso.',
-          },
-          { status: 403 }
-        )
-      }
-
+    if (!canAccessPathForRole(roleCode, pathname)) {
       const forbiddenUrl = request.nextUrl.clone()
       forbiddenUrl.pathname = '/forbidden'
       forbiddenUrl.search = ''
@@ -134,8 +133,9 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (claims && isLoginRoute) {
+    const roleCode = await loadRoleCode()
     const appUrl = request.nextUrl.clone()
-    appUrl.pathname = '/'
+    appUrl.pathname = getLandingPathForRole(roleCode)
     appUrl.search = ''
 
     const redirectResponse = NextResponse.redirect(appUrl)

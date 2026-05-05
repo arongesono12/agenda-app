@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { X, Save, Loader2, CalendarDays, FileText, Flag, UserRound } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import { DEPARTAMENTOS, PRIORIDADES, ESTADOS, TIPOS_TAREA } from '@/lib/types'
 import type { Responsable, Tarea } from '@/lib/types'
 import { useToast } from '@/components/ToastProvider'
@@ -38,13 +37,10 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
   useEffect(() => {
     const loadResponsables = async () => {
-      const { data } = await supabase
-        .from('responsables')
-        .select('id, nombre, email, usuario_id, departamento, cargo, activo')
-        .eq('activo', true)
-        .order('nombre')
+      const response = await window.fetch('/api/catalogos?resource=responsables')
+      const result = (await response.json()) as { ok?: boolean; responsables?: Responsable[] }
 
-      setResponsables((data ?? []) as Responsable[])
+      setResponsables(response.ok && result.ok ? (result.responsables ?? []).filter((item) => item.activo ?? true) : [])
     }
 
     void loadResponsables()

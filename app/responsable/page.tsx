@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { User, RefreshCw, ChevronDown, CheckCircle2, Clock, AlertTriangle, Target } from 'lucide-react'
-import { normalizarTareas, supabase } from '@/lib/supabase'
+import { normalizarTareas } from '@/lib/supabase'
 import type { Tarea } from '@/lib/types'
 import { formatDateShort } from '@/lib/utils'
 import PageHeader from '@/components/ui/PageHeader'
@@ -25,8 +25,11 @@ export default function ResponsablePage() {
 
   const fetchResponsables = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('responsables').select('nombre').eq('activo', true).order('nombre')
-    const unique = (data ?? []).map((row) => row.nombre).filter(Boolean)
+    const response = await window.fetch('/api/catalogos?resource=responsables')
+    const result = (await response.json()) as { ok?: boolean; responsables?: Array<{ nombre: string; activo?: boolean | null }> }
+    const unique = response.ok && result.ok
+      ? (result.responsables ?? []).filter((row) => row.activo ?? true).map((row) => row.nombre).filter(Boolean)
+      : []
     setResponsables(unique.sort())
     if (unique.length > 0 && !selected) setSelected(unique[0])
     setLoading(false)

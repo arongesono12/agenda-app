@@ -33,6 +33,12 @@ type AdminRecipient = {
   nombre_completo: string | null
 }
 
+function toPositiveInt(value: string | null, fallback: number, max = Number.MAX_SAFE_INTEGER) {
+  const parsed = Number.parseInt(value ?? '', 10)
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback
+  return Math.min(parsed, max)
+}
+
 function normalizeEmail(value?: string | null) {
   const email = value?.trim().toLowerCase()
   return email || null
@@ -139,6 +145,127 @@ async function notifyAdminsTaskCompleted(
         email_error: result.ok ? null : result.error,
       })
       .eq('id', alert.id)
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const { user, profile } = await getServerSessionProfile()
+
+    if (!user || !hasAnyRole(profile, [...MANAGER_ROLE_CODES, 'responsable'])) {
+      return NextResponse.json({ ok: false, error: 'No tienes permiso para consultar historial.' }, { status: 403 })
+    }
+
+    const url = new URL(request.url)
+    const taskId = Number(url.searchParams.get('tarea_id'))
+    const page = toPositiveInt(url.searchParams.get('page'), 0)
+    const pageSize = toPositiveInt(url.searchParams.get('pageSize'), 25, 100)
+    const from = page * pageSize
+    const to = from + pageSize - 1
+    const admin = createAdminSupabaseClient()
+    const isManager = hasAnyRole(profile, MANAGER_ROLE_CODES)
+
+    if (Number.isInteger(taskId) && taskId > 0) {
+      if (!isManager) {
+        const taskResult = await admin
+          .from('tareas')
+          .select('id, responsable, responsable_usuario_id')
+          .eq('id', taskId)
+          .maybeSingle()
+        const fallbackTask =
+          taskResult.error && isTaskScopeColumnError(taskResult.error)
+            ? await admin.from('tareas').select('id, responsable').eq('id', taskId).maybeSingle()
+            : taskResult
+        const { data: task, error: taskError } = fallbackTask
+
+        if (taskError) throw taskError
+        if (!task) return NextResponse.json({ ok: false, error: 'La tarea no existe.' }, { status: 404 })
+
+        const scope = buildTaskScope(user, profile)
+        const scopedTask = task as { responsable?: string | null; responsable_usuario_id?: string | null }
+        const isAssigned =
+          scopedTask.responsable_usuario_id === user.id ||
+          (!!scopedTask.responsable && scope.assignedNames.includes(scopedTask.responsable))
+
+        if (!isAssigned) {
+          return NextResponse.json({ ok: false, error: 'Solo puedes consultar historial de tus tareas asignadas.' }, { status: 403 })
+        }
+      }
+
+      const { data, count, error } = await admin
+        .from('historial')
+        .select('*', { count: 'exact' })
+        .eq('tarea_id', taskId)
+        .order('fecha', { ascending: false })
+        .range(from, to)
+
+      if (error) throw error
+
+      return NextResponse.json({
+        ok: true,
+        rows: data ?? [],
+        total: count ?? 0,
+        page,
+        pageSize,
+        totalPages: Math.ceil((count ?? 0) / pageSize),
+      })
+    }
+
+    if (!isManager) {
+      const scope = buildTaskScope(user, profile)
+      const primaryTasks = await admin.from('tareas').select('id').eq('responsable_usuario_id', user.id)
+      const fallbackTasks =
+        primaryTasks.error && isTaskScopeColumnError(primaryTasks.error) && scope.assignedNames.length
+          ? await admin.from('tareas').select('id').in('responsable', scope.assignedNames)
+          : primaryTasks
+
+      if (fallbackTasks.error) throw fallbackTasks.error
+
+      const taskIds = (fallbackTasks.data ?? []).map((task) => task.id)
+      if (taskIds.length === 0) {
+        return NextResponse.json({ ok: true, rows: [], total: 0, page, pageSize, totalPages: 0 })
+      }
+
+      const { data, count, error } = await admin
+        .from('historial')
+        .select('*', { count: 'exact' })
+        .in('tarea_id', taskIds)
+        .order('fecha', { ascending: false })
+        .range(from, to)
+
+      if (error) throw error
+
+      return NextResponse.json({
+        ok: true,
+        rows: data ?? [],
+        total: count ?? 0,
+        page,
+        pageSize,
+        totalPages: Math.ceil((count ?? 0) / pageSize),
+      })
+    }
+
+    const { data, count, error } = await admin
+      .from('historial')
+      .select('*', { count: 'exact' })
+      .order('fecha', { ascending: false })
+      .range(from, to)
+
+    if (error) throw error
+
+    return NextResponse.json({
+      ok: true,
+      rows: data ?? [],
+      total: count ?? 0,
+      page,
+      pageSize,
+      totalPages: Math.ceil((count ?? 0) / pageSize),
+    })
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : 'No se pudo consultar el historial.' },
+      { status: 500 }
+    )
   }
 }
 

@@ -7,7 +7,6 @@ import {
   SEMAFORO_PROXIMA,
   SEMAFORO_URGENTE,
   SEMAFORO_VENCIDA,
-  supabase,
 } from '@/lib/supabase'
 import type { Tarea } from '@/lib/types'
 import { formatDateShort } from '@/lib/utils'
@@ -15,7 +14,6 @@ import PageHeader from '@/components/ui/PageHeader'
 import { PrioridadBadge, EstadoBadge } from '@/components/ui/Badge'
 import ProgressBar from '@/components/ui/ProgressBar'
 import KPICard from '@/components/ui/KPICard'
-import { useUserSession } from '@/components/UserSessionProvider'
 
 type AlertaInterna = {
   id: number
@@ -27,7 +25,6 @@ type AlertaInterna = {
 }
 
 export default function AlertasPage() {
-  const { user } = useUserSession()
   const toast = useToast()
   const [tasks, setTasks] = useState<Tarea[]>([])
   const [personalAlerts, setPersonalAlerts] = useState<AlertaInterna[]>([])
@@ -50,21 +47,12 @@ export default function AlertasPage() {
     const result = (await response.json()) as { ok?: boolean; tasks?: Tarea[] }
     setTasks(response.ok && result.ok ? normalizarTareas(result.tasks ?? []) : [])
 
-    if (user?.id) {
-      const { data: alerts } = await supabase
-        .from('alertas')
-        .select('id, tipo_alerta, titulo, mensaje, leida, created_at')
-        .eq('destinatario_usuario_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(8)
-
-      setPersonalAlerts((alerts ?? []) as AlertaInterna[])
-    } else {
-      setPersonalAlerts([])
-    }
+    const alertsResponse = await window.fetch('/api/alertas?limit=8')
+    const alertsResult = (await alertsResponse.json()) as { ok?: boolean; alertas?: AlertaInterna[] }
+    setPersonalAlerts(alertsResponse.ok && alertsResult.ok ? (alertsResult.alertas ?? []) as AlertaInterna[] : [])
 
     setLoading(false)
-  }, [user?.id])
+  }, [])
 
   useEffect(() => {
     void fetchData()
