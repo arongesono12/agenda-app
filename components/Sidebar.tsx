@@ -93,7 +93,7 @@ function SidebarContent({
 
     const fetchUnread = async () => {
       try {
-        const res = await fetch('/api/alertas/unread')
+        const res = await fetch('/api/alertas/unread', { cache: 'no-store' })
         if (!cancelled && res.ok) {
           const data = (await res.json()) as { count: number }
           setAlertCount(data.count)

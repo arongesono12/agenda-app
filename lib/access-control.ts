@@ -10,7 +10,7 @@ export type RoleCode = (typeof READER_ROLE_CODES)[number]
 const ADMIN_ROUTES = ['/', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos']
 const SUPERVISOR_ROUTES = ['/', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial']
 const RESPONSABLE_ROUTES = ['/', '/dashboard', '/alertas', '/cronograma', '/historial']
-const CONSULTA_ROUTES = ['/dashboard', '/busqueda', '/cronograma', '/estadisticas']
+const CONSULTA_ROUTES = ['/dashboard', '/alertas', '/busqueda', '/cronograma', '/estadisticas']
 const COMMON_AUTH_ROUTES = ['/perfil', '/configuracion', '/forbidden']
 
 export function getLandingPathForRole(roleCode: string) {
