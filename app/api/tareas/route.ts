@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { getServerSessionProfile } from '@/lib/server-access'
-import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, READER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
+import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, READER_ROLE_CODES, hasAnyRole, normalizarRoleCode } from '@/lib/access-control'
 import { escapeHtml, sendAgendaEmail } from '@/lib/email/resend'
 import { applyTaskScope, buildTaskScope, isTaskScopeColumnError, type TaskScope } from '@/lib/task-scope'
 
@@ -82,6 +82,7 @@ type ResponsableRow = {
   nombre: string
   email: string | null
   usuario_id: string | null
+  departamento: string | null
 }
 
 type TaskRow = TaskPayload & {
@@ -93,6 +94,8 @@ type TaskRow = TaskPayload & {
 
 type PreviousTaskAssignment = {
   responsable_usuario_id?: string | null
+  responsable?: string | null
+  departamento?: string | null
   asignado_por_usuario_id?: string | null
   asignado_por_nombre?: string | null
 }
@@ -332,7 +335,7 @@ async function resolveResponsable(admin: ReturnType<typeof createAdminSupabaseCl
   if (payload.responsable_id) {
     const { data, error } = await admin
       .from('responsables')
-      .select('id, nombre, email, usuario_id')
+      .select('id, nombre, email, usuario_id, departamento')
       .eq('id', payload.responsable_id)
       .maybeSingle()
 
@@ -341,7 +344,7 @@ async function resolveResponsable(admin: ReturnType<typeof createAdminSupabaseCl
   } else if (payload.responsable?.trim()) {
     const { data, error } = await admin
       .from('responsables')
-      .select('id, nombre, email, usuario_id')
+      .select('id, nombre, email, usuario_id, departamento')
       .eq('nombre', payload.responsable.trim())
       .maybeSingle()
 
@@ -436,6 +439,101 @@ function isMissingAssignmentOwnerColumn(error: { code?: string; message?: string
     error?.code === 'PGRST204' ||
     /asignado_por_(usuario_id|nombre)|column .* does not exist/i.test(message)
   )
+}
+
+async function loadUserRoleCode(admin: ReturnType<typeof createAdminSupabaseClient>, userId: string | null | undefined) {
+  if (!userId) return ''
+
+  const { data, error } = await admin
+    .from('perfiles_usuario')
+    .select('tipo_usuario:tipos_usuario(codigo)')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (error) throw error
+
+  const row = data as { tipo_usuario?: { codigo?: string } | Array<{ codigo?: string }> | null } | null
+  const role = Array.isArray(row?.tipo_usuario) ? row?.tipo_usuario[0] : row?.tipo_usuario
+  return role?.codigo?.trim().toLowerCase() ?? ''
+}
+
+async function loadUserDepartments(admin: ReturnType<typeof createAdminSupabaseClient>, userId: string) {
+  const { data, error } = await admin
+    .from('responsables')
+    .select('departamento')
+    .eq('usuario_id', userId)
+    .eq('activo', true)
+
+  if (error) throw error
+
+  return Array.from(
+    new Set(
+      (data ?? [])
+        .map((row) => row.departamento?.trim())
+        .filter((value): value is string => !!value)
+    )
+  )
+}
+
+async function validateSupervisorAssignment({
+  admin,
+  userId,
+  mode,
+  responsable,
+  previous,
+}: {
+  admin: ReturnType<typeof createAdminSupabaseClient>
+  userId: string
+  mode: 'create' | 'update'
+  responsable: ResponsableRow | null
+  previous: PreviousTaskAssignment | null
+}) {
+  const targetRole = await loadUserRoleCode(admin, responsable?.usuario_id)
+
+  if (targetRole !== 'responsable') {
+    throw new Error('Los supervisores solo pueden asignar tareas a usuarios con rol Responsable.')
+  }
+
+  const supervisorDepartments = await loadUserDepartments(admin, userId)
+  const targetDepartment = responsable?.departamento?.trim()
+
+  if (!targetDepartment || !supervisorDepartments.includes(targetDepartment)) {
+    throw new Error('Solo puedes asignar tareas a responsables de tu mismo departamento.')
+  }
+
+  if (mode === 'update' && previous?.responsable_usuario_id !== userId) {
+    throw new Error('Solo puedes reasignar tareas que un administrador te haya asignado previamente.')
+  }
+}
+
+async function recordTaskReassignment({
+  admin,
+  taskId,
+  taskName,
+  userLabel,
+  previousResponsible,
+  nextResponsible,
+}: {
+  admin: ReturnType<typeof createAdminSupabaseClient>
+  taskId: number
+  taskName: string
+  userLabel: string | null
+  previousResponsible?: string | null
+  nextResponsible?: string | null
+}) {
+  const { error } = await admin.from('historial').insert({
+    fecha: new Date().toISOString(),
+    usuario: userLabel || 'Sistema',
+    tarea_id: taskId,
+    tarea_nombre: taskName,
+    modulo: 'Agenda de Control',
+    tipo_cambio: 'Asignacion',
+    valor_anterior: previousResponsible || 'Sin responsable',
+    valor_nuevo: nextResponsible || 'Sin responsable',
+    observaciones: `Tarea reasignada por ${userLabel || 'Sistema'}.`,
+  })
+
+  if (error) throw error
 }
 
 function assignmentEmailHtml(task: TaskRow, responsable: ResponsableRow) {
@@ -538,7 +636,9 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
     const admin = createAdminSupabaseClient()
     const responsable = await resolveResponsable(admin, payload)
     const userLabel = profile?.nombre_completo?.trim() || profile?.email || user.email || null
+    const roleCode = normalizarRoleCode(profile)
     let previousResponsibleUserId: string | null = null
+    let previousResponsibleName: string | null = null
     let previousAssignmentOwner: { userId: string | null; userName: string | null } = {
       userId: null,
       userName: null,
@@ -549,24 +649,36 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
       const taskId = Number(payload.id)
       const previousResult = await admin
         .from('tareas')
-        .select('responsable_usuario_id, asignado_por_usuario_id, asignado_por_nombre')
+        .select('responsable, departamento, responsable_usuario_id, asignado_por_usuario_id, asignado_por_nombre')
         .eq('id', taskId)
         .maybeSingle()
       const fallbackPrevious =
         previousResult.error && isMissingAssignmentOwnerColumn(previousResult.error)
-          ? await admin.from('tareas').select('responsable_usuario_id').eq('id', taskId).maybeSingle()
+          ? await admin.from('tareas').select('responsable, departamento, responsable_usuario_id').eq('id', taskId).maybeSingle()
           : previousResult
       const { data: previous, error: previousError } = fallbackPrevious
 
       if (previousError) throw previousError
       const previousAssignment = previous as PreviousTaskAssignment | null
       previousResponsibleUserId = previousAssignment?.responsable_usuario_id ?? null
+      previousResponsibleName = previousAssignment?.responsable ?? null
       previousAssignmentOwner = {
         userId: previousAssignment?.asignado_por_usuario_id ?? null,
         userName: previousAssignment?.asignado_por_nombre ?? null,
       }
 
       const assignmentChanged = previousResponsibleUserId !== responsable?.usuario_id
+
+      if (roleCode === 'supervisor') {
+        await validateSupervisorAssignment({
+          admin,
+          userId: user.id,
+          mode,
+          responsable,
+          previous: previousAssignment,
+        })
+      }
+
       const taskPayload = buildTaskPayload(payload, responsable, {
         userId: assignmentChanged ? user.id : previousAssignmentOwner.userId ?? user.id,
         userName: assignmentChanged ? userLabel : previousAssignmentOwner.userName ?? userLabel,
@@ -587,7 +699,28 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
 
       if (error) throw error
       task = data as TaskRow
+
+      if (assignmentChanged) {
+        await recordTaskReassignment({
+          admin,
+          taskId: task.id,
+          taskName: task.tarea ?? payload.tarea ?? 'Tarea',
+          userLabel,
+          previousResponsible: previousResponsibleName,
+          nextResponsible: responsable?.nombre,
+        })
+      }
     } else {
+      if (roleCode === 'supervisor') {
+        await validateSupervisorAssignment({
+          admin,
+          userId: user.id,
+          mode,
+          responsable,
+          previous: null,
+        })
+      }
+
       const taskPayload = buildTaskPayload(payload, responsable, {
         userId: user.id,
         userName: userLabel,

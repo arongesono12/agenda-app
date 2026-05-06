@@ -5,7 +5,7 @@ import { getServerSessionProfile } from '@/lib/server-access'
 
 export const dynamic = 'force-dynamic'
 
-const ASSIGNABLE_ROLE_CODES = new Set(['responsable', 'supervisor', 'consulta'])
+const DEFAULT_ASSIGNABLE_ROLE_CODES = ['responsable', 'supervisor', 'consulta']
 
 type CatalogResource = 'departamentos' | 'responsables'
 
@@ -56,12 +56,18 @@ function readRoleCode(profile: ProfileRoleRow) {
 
 async function filterAssignableResponsables(
   admin: ReturnType<typeof createAdminSupabaseClient>,
-  rows: ResponsableCatalogRow[]
+  rows: ResponsableCatalogRow[],
+  options: { roleCodes?: string[]; departamento?: string | null } = {}
 ) {
+  const allowedRoles = new Set(
+    (options.roleCodes?.length ? options.roleCodes : DEFAULT_ASSIGNABLE_ROLE_CODES).map((role) => role.trim().toLowerCase())
+  )
+  const departamento = options.departamento?.trim().toLowerCase()
   const userIds = Array.from(
     new Set(
       rows
         .filter((row) => row.activo ?? true)
+        .filter((row) => !departamento || row.departamento?.trim().toLowerCase() === departamento)
         .map((row) => row.usuario_id)
         .filter((value): value is string => !!value)
     )
@@ -78,11 +84,14 @@ async function filterAssignableResponsables(
 
   const assignableUserIds = new Set(
     ((data ?? []) as ProfileRoleRow[])
-      .filter((profile) => ASSIGNABLE_ROLE_CODES.has(readRoleCode(profile)))
+      .filter((profile) => allowedRoles.has(readRoleCode(profile)))
       .map((profile) => profile.id)
   )
 
-  return rows.filter((row) => row.usuario_id && assignableUserIds.has(row.usuario_id))
+  return rows.filter((row) => {
+    if (!row.usuario_id || !assignableUserIds.has(row.usuario_id)) return false
+    return !departamento || row.departamento?.trim().toLowerCase() === departamento
+  })
 }
 
 export async function GET(request: Request) {
@@ -96,6 +105,8 @@ export async function GET(request: Request) {
     const url = new URL(request.url)
     const resource = readResource(url)
     const onlyAssignable = url.searchParams.get('assignable') === 'true'
+    const roleFilter = url.searchParams.get('role')?.trim().toLowerCase()
+    const departamentoFilter = url.searchParams.get('departamento')
     const admin = createAdminSupabaseClient()
     const result: Record<string, unknown> = {}
 
@@ -120,7 +131,12 @@ export async function GET(request: Request) {
 
         if (error) throw error
         const rows = (data ?? []) as ResponsableCatalogRow[]
-        result.responsables = onlyAssignable ? await filterAssignableResponsables(admin, rows) : rows
+        result.responsables = onlyAssignable
+          ? await filterAssignableResponsables(admin, rows, {
+              roleCodes: roleFilter ? [roleFilter] : undefined,
+              departamento: departamentoFilter,
+            })
+          : rows
       }
     }
 

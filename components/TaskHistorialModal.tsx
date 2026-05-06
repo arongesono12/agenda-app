@@ -1,11 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Ban, History, Loader2, NotebookPen, Plus, X } from 'lucide-react'
+import { ArrowRight, Ban, History, Loader2, NotebookPen, Plus, UserPlus, X } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { TIPOS_ORDEN } from '@/lib/types'
-import type { Historial, Tarea, TipoOrden } from '@/lib/types'
+import type { Historial, Responsable, Tarea, TipoOrden } from '@/lib/types'
 import { useUserSession } from '@/components/UserSessionProvider'
 import { useToast } from '@/components/ToastProvider'
 
@@ -22,6 +22,7 @@ const CHANGE_COLOR: Record<string, string> = {
   'Cambio de Estado': 'bg-sky-50 text-sky-700 border-sky-200',
   Incidencia: 'bg-rose-50 text-rose-700 border-rose-200',
   Recordatorio: 'bg-teal-50 text-teal-700 border-teal-200',
+  Asignacion: 'bg-teal-50 text-teal-700 border-teal-200',
   Creacion: 'bg-teal-50 text-teal-700 border-teal-200',
   'Creación': 'bg-teal-50 text-teal-700 border-teal-200',
   'Actualizacion % Avance': 'bg-amber-50 text-amber-700 border-amber-200',
@@ -39,17 +40,30 @@ const EMPTY_FORM: { tipo_cambio: TipoOrden; observaciones: string; valor_nuevo: 
 }
 
 export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHistorialModalProps) {
-  const { capabilities } = useUserSession()
+  const { capabilities, profile } = useUserSession()
   const toast = useToast()
   const [rows, setRows] = useState<Historial[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [assigning, setAssigning] = useState(false)
+  const [reassignmentDone, setReassignmentDone] = useState(false)
+  const [assignableResponsables, setAssignableResponsables] = useState<Responsable[]>([])
+  const [nextResponsableId, setNextResponsableId] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [finalizar, setFinalizar] = useState(false)
 
   const canAdd = useMemo(
     () => (capabilities.canUpdateAssignedTasks || capabilities.canEditTasks) && !BLOCKED_STATES.has(task.estado),
     [capabilities.canEditTasks, capabilities.canUpdateAssignedTasks, task.estado]
+  )
+  const canReassign = useMemo(
+    () =>
+      capabilities.roleCode === 'supervisor' &&
+      !reassignmentDone &&
+      !BLOCKED_STATES.has(task.estado) &&
+      !!profile?.id &&
+      task.responsable_usuario_id === profile.id,
+    [capabilities.roleCode, profile?.id, reassignmentDone, task.estado, task.responsable_usuario_id]
   )
 
   const fetchHistorial = useCallback(async () => {
@@ -73,8 +87,35 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
   }, [fetchHistorial])
 
   useEffect(() => {
+    if (!canReassign) {
+      setAssignableResponsables([])
+      setNextResponsableId('')
+      return
+    }
+
+    const loadAssignableResponsables = async () => {
+      const params = new URLSearchParams({
+        resource: 'responsables',
+        assignable: 'true',
+        role: 'responsable',
+      })
+      if (task.departamento) params.set('departamento', task.departamento)
+
+      const response = await window.fetch(`/api/catalogos?${params.toString()}`)
+      const result = (await response.json()) as { ok?: boolean; responsables?: Responsable[] }
+      const responsables = response.ok && result.ok ? result.responsables ?? [] : []
+
+      setAssignableResponsables(responsables.filter((responsable) => responsable.usuario_id !== profile?.id))
+      setNextResponsableId('')
+    }
+
+    void loadAssignableResponsables()
+  }, [canReassign, profile?.id, task.departamento])
+
+  useEffect(() => {
     setForm(EMPTY_FORM)
     setFinalizar(false)
+    setReassignmentDone(false)
   }, [task.id])
 
   useEffect(() => {
@@ -136,6 +177,53 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
     await fetchHistorial()
     if (onUpdate) onUpdate()
     setSubmitting(false)
+  }
+
+  const handleReassign = async () => {
+    if (!canReassign || !nextResponsableId) return
+
+    const responsable = assignableResponsables.find((item) => item.id === Number(nextResponsableId))
+    if (!responsable) {
+      toast.error('Selecciona un responsable valido.')
+      return
+    }
+
+    setAssigning(true)
+
+    const response = await fetch('/api/tareas', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: task.id,
+        codigo_id: task.codigo_id ?? null,
+        tarea: task.tarea,
+        prioridad: task.prioridad,
+        estado: task.estado,
+        departamento: task.departamento || null,
+        seccion: task.seccion || null,
+        responsable: responsable.nombre,
+        responsable_id: responsable.id,
+        fecha_inicio: task.fecha_inicio || null,
+        fecha_fin: task.fecha_fin || null,
+        porcentaje_avance: Number(task.porcentaje_avance ?? 0),
+        tipo_tarea: task.tipo_tarea || null,
+        notas: task.notas || null,
+      }),
+    })
+    const result = (await response.json()) as { ok?: boolean; error?: string }
+
+    if (!response.ok || !result.ok) {
+      toast.error(result.error ?? 'No se pudo reasignar la tarea.')
+      setAssigning(false)
+      return
+    }
+
+    toast.success(`Tarea reasignada a ${responsable.nombre}.`)
+    setNextResponsableId('')
+    setReassignmentDone(true)
+    await fetchHistorial()
+    if (onUpdate) onUpdate()
+    setAssigning(false)
   }
 
   return (
@@ -298,6 +386,51 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                     {submitting ? 'Registrando...' : 'Registrar entrada'}
                   </button>
                 </form>
+
+                {canReassign && (
+                  <div className="mt-5 rounded-[24px] border border-teal-100 bg-teal-50/60 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl bg-white/80 text-teal-700">
+                        <UserPlus size={18} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-slate-900">Asignar a responsable</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          Puedes transferir esta tarea a un responsable de tu mismo departamento.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      <select
+                        value={nextResponsableId}
+                        onChange={(event) => setNextResponsableId(event.target.value)}
+                        className="input-shell"
+                        disabled={assigning || assignableResponsables.length === 0}
+                      >
+                        <option value="">Seleccionar responsable</option>
+                        {assignableResponsables.map((responsable) => (
+                          <option key={responsable.id} value={responsable.id}>
+                            {responsable.nombre}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => void handleReassign()}
+                        disabled={assigning || !nextResponsableId}
+                        className="action-btn-primary w-full justify-center disabled:translate-y-0 disabled:opacity-60"
+                      >
+                        {assigning ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
+                        {assigning ? 'Asignando...' : 'Asignar tarea'}
+                      </button>
+                      {assignableResponsables.length === 0 && (
+                        <p className="text-xs text-amber-700">
+                          No hay responsables disponibles en el departamento de esta tarea.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex min-h-0 flex-col">
