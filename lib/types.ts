@@ -19,6 +19,7 @@ export interface Tarea {
   responsable_id?: number | null
   responsable_usuario_id?: string | null
   responsable?: string
+  asignaciones?: TareaAsignacion[]
   fecha_inicio?: string
   fecha_fin?: string
   dias_totales?: number
@@ -31,6 +32,21 @@ export interface Tarea {
   notas?: string
   created_at?: string
   updated_at?: string
+}
+
+export interface TareaAsignacion {
+  id?: number
+  tarea_id?: number
+  responsable_id?: number | null
+  responsable_usuario_id?: string | null
+  responsable_nombre: string
+  responsable_email?: string | null
+  departamento?: string | null
+  rol_codigo?: string | null
+  asignado_por_usuario_id?: string | null
+  asignado_por_nombre?: string | null
+  activo?: boolean | null
+  created_at?: string | null
 }
 
 export interface Historial {
@@ -102,6 +118,7 @@ export interface Responsable {
   usuario_id?: string | null
   departamento?: string | null
   cargo?: string | null
+  tipo_usuario_codigo?: string | null
   activo: boolean
   created_at?: string
 }

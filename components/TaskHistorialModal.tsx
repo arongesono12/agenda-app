@@ -62,8 +62,9 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
       !reassignmentDone &&
       !BLOCKED_STATES.has(task.estado) &&
       !!profile?.id &&
-      task.responsable_usuario_id === profile.id,
-    [capabilities.roleCode, profile?.id, reassignmentDone, task.estado, task.responsable_usuario_id]
+      (task.responsable_usuario_id === profile.id ||
+        !!task.asignaciones?.some((assignment) => assignment.responsable_usuario_id === profile.id)),
+    [capabilities.roleCode, profile?.id, reassignmentDone, task.asignaciones, task.estado, task.responsable_usuario_id]
   )
 
   const fetchHistorial = useCallback(async () => {

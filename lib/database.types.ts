@@ -188,6 +188,38 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['tareas']['Insert']>
         Relationships: []
       }
+      tarea_asignaciones: {
+        Row: {
+          id: number
+          tarea_id: number
+          responsable_id: number | null
+          responsable_usuario_id: string | null
+          responsable_nombre: string
+          responsable_email: string | null
+          departamento: string | null
+          rol_codigo: string | null
+          asignado_por_usuario_id: string | null
+          asignado_por_nombre: string | null
+          activo: boolean | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: number
+          tarea_id: number
+          responsable_id?: number | null
+          responsable_usuario_id?: string | null
+          responsable_nombre: string
+          responsable_email?: string | null
+          departamento?: string | null
+          rol_codigo?: string | null
+          asignado_por_usuario_id?: string | null
+          asignado_por_nombre?: string | null
+          activo?: boolean | null
+          created_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['tarea_asignaciones']['Insert']>
+        Relationships: []
+      }
       tipos_usuario: {
         Row: {
           id: number

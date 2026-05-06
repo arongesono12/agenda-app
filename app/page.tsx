@@ -59,6 +59,15 @@ type TasksResponse = {
   summary?: TaskSummary | null
 }
 
+function getResponsablesLabel(task: Tarea) {
+  const assignedNames = task.asignaciones
+    ?.map((assignment) => assignment.responsable_nombre?.trim())
+    .filter((value): value is string => !!value)
+
+  if (assignedNames?.length) return assignedNames.join(', ')
+  return task.responsable ?? '-'
+}
+
 export default function AgendaDiariaPage() {
   const { profile, capabilities } = useUserSession()
   const canCreateTask = capabilities.canCreateTasks
@@ -373,7 +382,7 @@ export default function AgendaDiariaPage() {
                   <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500">
                     <div>
                       <p className="font-semibold text-slate-700">Responsable</p>
-                      <p className="mt-1">{task.responsable ?? '-'}</p>
+                      <p className="mt-1">{getResponsablesLabel(task)}</p>
                     </div>
                     <div>
                       <p className="font-semibold text-slate-700">Fecha fin</p>
@@ -452,7 +461,7 @@ export default function AgendaDiariaPage() {
                         <td className="px-4 py-3"><PrioridadBadge value={task.prioridad} /></td>
                         <td className="px-4 py-3 text-xs font-medium text-slate-600">{task.departamento ?? '-'}</td>
                         <td className="max-w-[150px] px-4 py-3 text-xs font-medium text-slate-700">
-                          <span className="block truncate">{task.responsable ?? '-'}</span>
+                          <span className="block truncate">{getResponsablesLabel(task)}</span>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-600">
                           {formatDateShort(task.fecha_fin)}
@@ -611,7 +620,7 @@ export default function AgendaDiariaPage() {
               #{taskToDelete.codigo_id ?? taskToDelete.id} · {taskToDelete.tarea}
             </p>
             <p className="mt-2 text-xs text-slate-500">
-              Responsable: {taskToDelete.responsable ?? 'Sin asignar'}
+              Responsable: {getResponsablesLabel(taskToDelete)}
             </p>
           </div>
         )}

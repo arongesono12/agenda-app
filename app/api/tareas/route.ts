@@ -69,6 +69,7 @@ type TaskPayload = {
   seccion?: string | null
   responsable?: string | null
   responsable_id?: number | null
+  responsable_ids?: number[]
   fecha_inicio?: string | null
   fecha_fin?: string | null
   porcentaje_avance?: number
@@ -83,6 +84,22 @@ type ResponsableRow = {
   email: string | null
   usuario_id: string | null
   departamento: string | null
+  rol_codigo?: string | null
+}
+
+type TaskAssignmentRow = {
+  id?: number
+  tarea_id: number
+  responsable_id: number | null
+  responsable_usuario_id: string | null
+  responsable_nombre: string
+  responsable_email: string | null
+  departamento: string | null
+  rol_codigo: string | null
+  asignado_por_usuario_id?: string | null
+  asignado_por_nombre?: string | null
+  activo?: boolean | null
+  created_at?: string | null
 }
 
 type TaskRow = TaskPayload & {
@@ -212,6 +229,24 @@ async function countTasks(
 ) {
   const supabase = await createServerSupabaseClient()
 
+  if (!scope.unrestricted) {
+    const admin = createAdminSupabaseClient()
+    const scopedTaskIds = await loadScopedTaskIds(admin, scope)
+
+    if (!scopedTaskIds || scopedTaskIds.length === 0) return 0
+
+    const baseQuery = admin.from('tareas').select('id', { count: 'exact', head: true }).in('id', scopedTaskIds)
+    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters) as unknown as typeof baseQuery
+
+    if (filters.fechaFinLt) query = query.lt('fecha_fin', filters.fechaFinLt)
+    if (filters.fechaFinGte) query = query.gte('fecha_fin', filters.fechaFinGte)
+    if (filters.fechaFinLte) query = query.lte('fecha_fin', filters.fechaFinLte)
+
+    const result = await query
+    if (result.error) throw result.error
+    return result.count ?? 0
+  }
+
   const runCount = async (includeUserColumn: boolean) => {
     const baseQuery = supabase.from('tareas').select('id', { count: 'exact', head: true })
     let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters) as unknown as typeof baseQuery
@@ -282,6 +317,31 @@ async function loadTaskPage({
 }) {
   const supabase = await createServerSupabaseClient()
 
+  if (!scope.unrestricted) {
+    const admin = createAdminSupabaseClient()
+    const scopedTaskIds = await loadScopedTaskIds(admin, scope)
+
+    if (!scopedTaskIds || scopedTaskIds.length === 0) {
+      return { data: [], count: 0, error: null }
+    }
+
+    const baseQuery = admin
+      .from('tareas')
+      .select(TASK_LIST_COLUMNS, { count: 'exact' })
+      .in('id', scopedTaskIds)
+      .order(orderBy, { ascending })
+      .range(from, to)
+    const query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters) as unknown as typeof baseQuery
+    const result = await query
+
+    if (result.error) return result
+
+    return {
+      ...result,
+      data: await attachTaskAssignments((result.data ?? []) as unknown as Array<Record<string, unknown>>),
+    }
+  }
+
   const runQuery = async (columns: string, includeUserColumn: boolean) => {
     const baseQuery = supabase
       .from('tareas')
@@ -296,7 +356,10 @@ async function loadTaskPage({
   const primary = await runQuery(TASK_LIST_COLUMNS, true)
 
   if (!primary.error) {
-    return primary
+    return {
+      ...primary,
+      data: await attachTaskAssignments((primary.data ?? []) as unknown as Array<Record<string, unknown>>),
+    }
   }
 
   const missingColumn =
@@ -312,17 +375,117 @@ async function loadTaskPage({
 
   return {
     ...fallback,
-    data: ((fallback.data ?? []) as unknown as Array<Record<string, unknown>>).map((task) => ({
-      ...task,
-      responsable_id: null,
-      responsable_usuario_id: null,
-    })),
+    data: await attachTaskAssignments(
+      ((fallback.data ?? []) as unknown as Array<Record<string, unknown>>).map((task) => ({
+        ...task,
+        responsable_id: null,
+        responsable_usuario_id: null,
+      }))
+    ),
   }
+}
+
+async function loadTaskAssignments(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  taskIds: number[]
+) {
+  const ids = Array.from(new Set(taskIds.filter((id) => Number.isInteger(id) && id > 0)))
+  if (ids.length === 0) return []
+
+  const { data, error } = await admin
+    .from('tarea_asignaciones')
+    .select('*')
+    .in('tarea_id', ids)
+    .eq('activo', true)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    if (isMissingTaskAssignmentsTable(error)) return []
+    throw error
+  }
+
+  return (data ?? []) as TaskAssignmentRow[]
+}
+
+async function attachTaskAssignments(
+  tasks: Array<Record<string, unknown>>
+) {
+  const admin = createAdminSupabaseClient()
+  const assignments = await loadTaskAssignments(admin, tasks.map((task) => Number(task.id)))
+  if (assignments.length === 0) return tasks
+
+  const byTask = new Map<number, TaskAssignmentRow[]>()
+  for (const assignment of assignments) {
+    const rows = byTask.get(assignment.tarea_id) ?? []
+    rows.push(assignment)
+    byTask.set(assignment.tarea_id, rows)
+  }
+
+  return tasks.map((task) => ({
+    ...task,
+    asignaciones: byTask.get(Number(task.id)) ?? [],
+  }))
+}
+
+async function loadScopedTaskIds(admin: ReturnType<typeof createAdminSupabaseClient>, scope: TaskScope) {
+  if (scope.unrestricted) return null
+
+  const taskIds = new Set<number>()
+
+  if (scope.userId) {
+    const assignmentResult = await admin
+      .from('tarea_asignaciones')
+      .select('tarea_id')
+      .eq('responsable_usuario_id', scope.userId)
+      .eq('activo', true)
+
+    if (assignmentResult.error && !isMissingTaskAssignmentsTable(assignmentResult.error)) {
+      throw assignmentResult.error
+    }
+
+    for (const assignment of assignmentResult.data ?? []) {
+      taskIds.add(Number(assignment.tarea_id))
+    }
+
+    const legacyResult = await admin.from('tareas').select('id').eq('responsable_usuario_id', scope.userId)
+    if (!legacyResult.error) {
+      for (const task of legacyResult.data ?? []) taskIds.add(Number(task.id))
+    }
+  }
+
+  if (taskIds.size === 0 && scope.assignedNames.length > 0) {
+    const nameResult = await admin.from('tareas').select('id').in('responsable', scope.assignedNames)
+    if (!nameResult.error) {
+      for (const task of nameResult.data ?? []) taskIds.add(Number(task.id))
+    }
+  }
+
+  return Array.from(taskIds)
 }
 
 function normalizeEmail(value?: string | null) {
   const email = value?.trim().toLowerCase()
   return email || null
+}
+
+function isMissingTaskAssignmentsTable(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? ''
+  return (
+    error?.code === '42P01' ||
+    error?.code === 'PGRST205' ||
+    error?.code === 'PGRST204' ||
+    /tarea_asignaciones|schema cache|relation .* does not exist/i.test(message)
+  )
+}
+
+function uniquePositiveIds(values?: number[] | null) {
+  return Array.from(
+    new Set(
+      (values ?? [])
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    )
+  )
 }
 
 async function resolveResponsable(admin: ReturnType<typeof createAdminSupabaseClient>, payload: TaskPayload) {
@@ -378,6 +541,90 @@ async function resolveResponsable(admin: ReturnType<typeof createAdminSupabaseCl
   }
 
   return responsable
+}
+
+async function attachResponsableRoleCodes(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  responsables: ResponsableRow[]
+) {
+  const userIds = Array.from(new Set(responsables.map((item) => item.usuario_id).filter((value): value is string => !!value)))
+  if (userIds.length === 0) return responsables
+
+  const { data, error } = await admin
+    .from('perfiles_usuario')
+    .select('id, tipo_usuario:tipos_usuario(codigo)')
+    .in('id', userIds)
+
+  if (error) throw error
+
+  const roles = new Map(
+    ((data ?? []) as Array<{ id: string; tipo_usuario?: { codigo?: string } | Array<{ codigo?: string }> | null }>).map((profile) => {
+      const role = Array.isArray(profile.tipo_usuario) ? profile.tipo_usuario[0] : profile.tipo_usuario
+      return [profile.id, role?.codigo?.trim().toLowerCase() ?? '']
+    })
+  )
+
+  return responsables.map((responsable) => ({
+    ...responsable,
+    rol_codigo: responsable.usuario_id ? roles.get(responsable.usuario_id) ?? null : null,
+  }))
+}
+
+async function resolveResponsables(admin: ReturnType<typeof createAdminSupabaseClient>, payload: TaskPayload) {
+  const ids = uniquePositiveIds(payload.responsable_ids)
+
+  if (ids.length === 0) {
+    const single = await resolveResponsable(admin, payload)
+    return single ? attachResponsableRoleCodes(admin, [single]) : []
+  }
+
+  const { data, error } = await admin
+    .from('responsables')
+    .select('id, nombre, email, usuario_id, departamento')
+    .in('id', ids)
+
+  if (error) throw error
+
+  const rows = (data ?? []) as ResponsableRow[]
+  if (rows.length !== ids.length) {
+    throw new Error('Uno o mas responsables seleccionados no existen en Catalogos.')
+  }
+
+  const orderedRows = ids
+    .map((id) => rows.find((row) => row.id === id))
+    .filter((row): row is ResponsableRow => !!row)
+
+  for (const responsable of orderedRows) {
+    const email = normalizeEmail(responsable.email)
+
+    if (!responsable.usuario_id && email) {
+      const { data: profile, error: profileError } = await admin
+        .from('perfiles_usuario')
+        .select('id')
+        .ilike('email', email)
+        .maybeSingle()
+
+      if (profileError) throw profileError
+
+      if (profile?.id) {
+        responsable.usuario_id = profile.id
+        await admin.from('responsables').update({ usuario_id: profile.id }).eq('id', responsable.id)
+      }
+    }
+
+    if (!responsable.usuario_id) {
+      throw new Error(`El responsable ${responsable.nombre} debe tener un usuario de la aplicacion asociado a su correo.`)
+    }
+  }
+
+  const uniqueByUser = new Map<string, ResponsableRow>()
+  for (const responsable of orderedRows) {
+    if (responsable.usuario_id && !uniqueByUser.has(responsable.usuario_id)) {
+      uniqueByUser.set(responsable.usuario_id, responsable)
+    }
+  }
+
+  return attachResponsableRoleCodes(admin, Array.from(uniqueByUser.values()))
 }
 
 function buildTaskPayload(
@@ -481,12 +728,14 @@ async function validateSupervisorAssignment({
   mode,
   responsable,
   previous,
+  previousAssignments = [],
 }: {
   admin: ReturnType<typeof createAdminSupabaseClient>
   userId: string
   mode: 'create' | 'update'
   responsable: ResponsableRow | null
   previous: PreviousTaskAssignment | null
+  previousAssignments?: TaskAssignmentRow[]
 }) {
   const targetRole = await loadUserRoleCode(admin, responsable?.usuario_id)
 
@@ -501,9 +750,27 @@ async function validateSupervisorAssignment({
     throw new Error('Solo puedes asignar tareas a responsables de tu mismo departamento.')
   }
 
-  if (mode === 'update' && previous?.responsable_usuario_id !== userId) {
+  const wasAssignedToSupervisor =
+    previous?.responsable_usuario_id === userId ||
+    previousAssignments.some((assignment) => assignment.responsable_usuario_id === userId)
+
+  if (mode === 'update' && !wasAssignedToSupervisor) {
     throw new Error('Solo puedes reasignar tareas que un administrador te haya asignado previamente.')
   }
+}
+
+function validateAdminAssignments(responsables: ResponsableRow[]) {
+  for (const responsable of responsables) {
+    const roleCode = responsable.rol_codigo?.trim().toLowerCase()
+
+    if (!roleCode || ADMIN_ROLE_CODES.includes(roleCode as (typeof ADMIN_ROLE_CODES)[number])) {
+      throw new Error('Los administradores solo pueden asignar tareas a supervisores, responsables o usuarios de consulta.')
+    }
+  }
+}
+
+function assignmentUserIds(assignments: Array<{ responsable_usuario_id?: string | null }>) {
+  return new Set(assignments.map((assignment) => assignment.responsable_usuario_id).filter((value): value is string => !!value))
 }
 
 async function recordTaskReassignment({
@@ -597,6 +864,62 @@ async function notifyAssignment(
     .eq('id', alert.id)
 }
 
+async function syncTaskAssignments({
+  admin,
+  task,
+  responsables,
+  assignmentOwner,
+  previousAssignments,
+}: {
+  admin: ReturnType<typeof createAdminSupabaseClient>
+  task: TaskRow
+  responsables: ResponsableRow[]
+  assignmentOwner: { userId: string | null; userName: string | null }
+  previousAssignments: TaskAssignmentRow[]
+}) {
+  const previousUserIds = assignmentUserIds(previousAssignments)
+  const nextUserIds = assignmentUserIds(
+    responsables.map((responsable) => ({ responsable_usuario_id: responsable.usuario_id }))
+  )
+
+  const deleteResult = await admin.from('tarea_asignaciones').delete().eq('tarea_id', task.id)
+  if (deleteResult.error) {
+    if (isMissingTaskAssignmentsTable(deleteResult.error)) return false
+    throw deleteResult.error
+  }
+
+  if (responsables.length > 0) {
+    const rows = responsables.map((responsable) => ({
+      tarea_id: task.id,
+      responsable_id: responsable.id,
+      responsable_usuario_id: responsable.usuario_id,
+      responsable_nombre: responsable.nombre,
+      responsable_email: normalizeEmail(responsable.email),
+      departamento: responsable.departamento,
+      rol_codigo: responsable.rol_codigo ?? null,
+      asignado_por_usuario_id: assignmentOwner.userId,
+      asignado_por_nombre: assignmentOwner.userName,
+      activo: true,
+    }))
+    const insertResult = await admin.from('tarea_asignaciones').insert(rows)
+    if (insertResult.error) throw insertResult.error
+  }
+
+  for (const responsable of responsables) {
+    if (responsable.usuario_id && !previousUserIds.has(responsable.usuario_id)) {
+      await notifyAssignment(admin, task, responsable)
+    }
+  }
+
+  for (const previousUserId of previousUserIds) {
+    if (!nextUserIds.has(previousUserId)) {
+      await markAssignmentAlertsRead(admin, task.id, previousUserId)
+    }
+  }
+
+  return true
+}
+
 async function markAssignmentAlertsRead(
   admin: ReturnType<typeof createAdminSupabaseClient>,
   taskId: number,
@@ -634,11 +957,13 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
     }
 
     const admin = createAdminSupabaseClient()
-    const responsable = await resolveResponsable(admin, payload)
+    const responsables = await resolveResponsables(admin, payload)
+    const responsable = responsables[0] ?? null
     const userLabel = profile?.nombre_completo?.trim() || profile?.email || user.email || null
     const roleCode = normalizarRoleCode(profile)
     let previousResponsibleUserId: string | null = null
     let previousResponsibleName: string | null = null
+    let previousAssignments: TaskAssignmentRow[] = []
     let previousAssignmentOwner: { userId: string | null; userName: string | null } = {
       userId: null,
       userName: null,
@@ -666,17 +991,40 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
         userId: previousAssignment?.asignado_por_usuario_id ?? null,
         userName: previousAssignment?.asignado_por_nombre ?? null,
       }
+      previousAssignments = await loadTaskAssignments(admin, [taskId])
+      if (previousAssignments.length === 0 && previousResponsibleUserId) {
+        previousAssignments = [{
+          tarea_id: taskId,
+          responsable_id: null,
+          responsable_usuario_id: previousResponsibleUserId,
+          responsable_nombre: previousResponsibleName ?? 'Responsable',
+          responsable_email: null,
+          departamento: previousAssignment?.departamento ?? null,
+          rol_codigo: null,
+          activo: true,
+        }]
+      }
 
-      const assignmentChanged = previousResponsibleUserId !== responsable?.usuario_id
+      const previousUserIds = assignmentUserIds(previousAssignments)
+      const nextUserIds = assignmentUserIds(responsables.map((item) => ({ responsable_usuario_id: item.usuario_id })))
+      const assignmentChanged =
+        previousUserIds.size !== nextUserIds.size ||
+        Array.from(nextUserIds).some((userId) => !previousUserIds.has(userId))
 
       if (roleCode === 'supervisor') {
+        if (responsables.length > 1) {
+          throw new Error('Los supervisores solo pueden reasignar una tarea a un responsable a la vez.')
+        }
         await validateSupervisorAssignment({
           admin,
           userId: user.id,
           mode,
           responsable,
           previous: previousAssignment,
+          previousAssignments,
         })
+      } else {
+        validateAdminAssignments(responsables)
       }
 
       const taskPayload = buildTaskPayload(payload, responsable, {
@@ -712,6 +1060,9 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
       }
     } else {
       if (roleCode === 'supervisor') {
+        if (responsables.length > 1) {
+          throw new Error('Los supervisores solo pueden asignar una tarea a un responsable a la vez.')
+        }
         await validateSupervisorAssignment({
           admin,
           userId: user.id,
@@ -719,6 +1070,8 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
           responsable,
           previous: null,
         })
+      } else {
+        validateAdminAssignments(responsables)
       }
 
       const taskPayload = buildTaskPayload(payload, responsable, {
@@ -737,15 +1090,28 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
       task = data as TaskRow
     }
 
-    if (responsable && (mode === 'create' || previousResponsibleUserId !== responsable.usuario_id)) {
+    const syncedAssignments = await syncTaskAssignments({
+      admin,
+      task,
+      responsables,
+      assignmentOwner: {
+        userId: mode === 'update' ? task.asignado_por_usuario_id ?? user.id : user.id,
+        userName: mode === 'update' ? task.asignado_por_nombre ?? userLabel : userLabel,
+      },
+      previousAssignments,
+    })
+
+    if (!syncedAssignments && responsable && (mode === 'create' || previousResponsibleUserId !== responsable.usuario_id)) {
       await notifyAssignment(admin, task, responsable)
     }
 
-    if (mode === 'update' && previousResponsibleUserId && previousResponsibleUserId !== responsable?.usuario_id) {
+    if (!syncedAssignments && mode === 'update' && previousResponsibleUserId && previousResponsibleUserId !== responsable?.usuario_id) {
       await markAssignmentAlertsRead(admin, task.id, previousResponsibleUserId)
     }
 
-    return NextResponse.json({ ok: true, task })
+    const [taskWithAssignments] = await attachTaskAssignments([task as unknown as Record<string, unknown>])
+
+    return NextResponse.json({ ok: true, task: taskWithAssignments ?? task })
   } catch (error: unknown) {
     return NextResponse.json(
       {

@@ -87,11 +87,19 @@ async function filterAssignableResponsables(
       .filter((profile) => allowedRoles.has(readRoleCode(profile)))
       .map((profile) => profile.id)
   )
+  const roleByUserId = new Map(
+    ((data ?? []) as ProfileRoleRow[]).map((profile) => [profile.id, readRoleCode(profile)])
+  )
 
-  return rows.filter((row) => {
-    if (!row.usuario_id || !assignableUserIds.has(row.usuario_id)) return false
-    return !departamento || row.departamento?.trim().toLowerCase() === departamento
-  })
+  return rows
+    .filter((row) => {
+      if (!row.usuario_id || !assignableUserIds.has(row.usuario_id)) return false
+      return !departamento || row.departamento?.trim().toLowerCase() === departamento
+    })
+    .map((row) => ({
+      ...row,
+      tipo_usuario_codigo: row.usuario_id ? roleByUserId.get(row.usuario_id) ?? null : null,
+    }))
 }
 
 export async function GET(request: Request) {

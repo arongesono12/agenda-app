@@ -1,9 +1,10 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { X, Save, Loader2, CalendarDays, FileText, Flag, UserRound } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { X, Save, Loader2, CalendarDays, FileText, Flag, UserRound, UsersRound } from 'lucide-react'
 import { DEPARTAMENTOS, PRIORIDADES, ESTADOS, TIPOS_TAREA } from '@/lib/types'
 import type { Responsable, Tarea } from '@/lib/types'
 import { useToast } from '@/components/ToastProvider'
+import { useUserSession } from '@/components/UserSessionProvider'
 
 interface TaskModalProps {
   task?: Tarea | null
@@ -26,13 +27,34 @@ const empty: Partial<Tarea> = {
 
 export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   const toast = useToast()
+  const { isAdmin } = useUserSession()
   const [form, setForm] = useState<Partial<Tarea>>(task ?? empty)
   const [responsables, setResponsables] = useState<Responsable[]>([])
+  const [selectedResponsableIds, setSelectedResponsableIds] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
   const isEdit = !!task
+  const selectedResponsables = useMemo(
+    () => selectedResponsableIds
+      .map((id) => responsables.find((responsable) => responsable.id === id))
+      .filter((responsable): responsable is Responsable => !!responsable),
+    [responsables, selectedResponsableIds]
+  )
 
   useEffect(() => {
     setForm(task ?? empty)
+  }, [task])
+
+  useEffect(() => {
+    const assignedIds = task?.asignaciones
+      ?.map((assignment) => assignment.responsable_id)
+      .filter((id): id is number => typeof id === 'number')
+
+    if (assignedIds?.length) {
+      setSelectedResponsableIds(Array.from(new Set(assignedIds)))
+      return
+    }
+
+    setSelectedResponsableIds(task?.responsable_id ? [task.responsable_id] : [])
   }, [task])
 
   useEffect(() => {
@@ -51,16 +73,37 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   const setResponsable = (id: string) => {
     if (!id) {
       setForm((f) => ({ ...f, responsable_id: null, responsable_usuario_id: null, responsable: '' }))
+      setSelectedResponsableIds([])
       return
     }
 
     const responsable = responsables.find((item) => item.id === Number(id))
+    setSelectedResponsableIds(responsable ? [responsable.id] : [])
     setForm((f) => ({
       ...f,
       responsable_id: responsable?.id ?? null,
       responsable_usuario_id: responsable?.usuario_id ?? null,
       responsable: responsable?.nombre ?? '',
     }))
+  }
+
+  const toggleResponsable = (responsable: Responsable) => {
+    setSelectedResponsableIds((current) => {
+      const exists = current.includes(responsable.id)
+      const next = exists ? current.filter((id) => id !== responsable.id) : [...current, responsable.id]
+      const primary = next
+        .map((id) => responsables.find((item) => item.id === id))
+        .find((item): item is Responsable => !!item)
+
+      setForm((f) => ({
+        ...f,
+        responsable_id: primary?.id ?? null,
+        responsable_usuario_id: primary?.usuario_id ?? null,
+        responsable: primary?.nombre ?? '',
+      }))
+
+      return next
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,6 +133,7 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
         seccion: form.seccion || null,
         responsable: form.responsable || null,
         responsable_id: form.responsable_id || null,
+        responsable_ids: isAdmin ? selectedResponsableIds : form.responsable_id ? [form.responsable_id] : [],
         fecha_inicio: form.fecha_inicio || null,
         fecha_fin: form.fecha_fin || null,
         porcentaje_avance: Number(form.porcentaje_avance ?? 0),
@@ -241,22 +285,72 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="label-field">Responsable</label>
-                  <select
-                    value={form.responsable_id ?? responsables.find((item) => item.nombre === form.responsable)?.id ?? ''}
-                    onChange={(e) => setResponsable(e.target.value)}
-                    className="input-shell"
-                  >
-                    <option value="">Seleccionar responsable</option>
-                    {responsables.map((responsable) => (
-                      <option key={responsable.id} value={responsable.id}>
-                        {responsable.nombre}
-                        {responsable.usuario_id ? '' : ' - sin usuario'}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="label-field">{isAdmin ? 'Responsables' : 'Responsable'}</label>
+                  {isAdmin ? (
+                    <div className="rounded-[18px] border border-slate-200 bg-white/80">
+                      <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2">
+                        <span className="inline-flex min-w-0 items-center gap-2 text-xs font-semibold text-slate-600">
+                          <UsersRound size={14} className="text-teal-600" />
+                          <span>{selectedResponsableIds.length} seleccionados</span>
+                        </span>
+                        {selectedResponsableIds.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedResponsableIds([])
+                              setForm((f) => ({ ...f, responsable_id: null, responsable_usuario_id: null, responsable: '' }))
+                            }}
+                            className="text-xs font-semibold text-slate-500 transition-colors hover:text-rose-600"
+                          >
+                            Limpiar
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-44 overflow-y-auto p-2">
+                        {responsables.map((responsable) => (
+                          <label
+                            key={responsable.id}
+                            className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 text-sm transition-colors hover:bg-slate-50"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedResponsableIds.includes(responsable.id)}
+                              onChange={() => toggleResponsable(responsable)}
+                              className="h-4 w-4 rounded border-slate-300 accent-teal-600"
+                            />
+                            <span className="min-w-0">
+                              <span className="block truncate font-semibold text-slate-700">{responsable.nombre}</span>
+                              <span className="block truncate text-xs text-slate-500">
+                                {[responsable.tipo_usuario_codigo, responsable.departamento, responsable.cargo].filter(Boolean).join(' - ') || 'Sin detalle'}
+                                {responsable.usuario_id ? '' : ' - sin usuario'}
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                        {responsables.length === 0 && (
+                          <p className="px-2 py-4 text-sm text-slate-500">No hay responsables disponibles.</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <select
+                      value={form.responsable_id ?? responsables.find((item) => item.nombre === form.responsable)?.id ?? ''}
+                      onChange={(e) => setResponsable(e.target.value)}
+                      className="input-shell"
+                    >
+                      <option value="">Seleccionar responsable</option>
+                      {responsables.map((responsable) => (
+                        <option key={responsable.id} value={responsable.id}>
+                          {responsable.nombre}
+                          {responsable.usuario_id ? '' : ' - sin usuario'}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <p className="mt-2 text-xs text-slate-500">
-                    Para notificar en la aplicacion, el responsable debe tener un usuario asociado a su correo.
+                    {isAdmin && selectedResponsables.length > 0
+                      ? selectedResponsables.map((item) => item.nombre).join(', ')
+                      : 'Para notificar en la aplicacion, el responsable debe tener un usuario asociado a su correo.'}
                   </p>
                 </div>
                 <div>

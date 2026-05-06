@@ -78,6 +78,57 @@ function isMissingAssignmentOwnerColumn(error: { code?: string; message?: string
   )
 }
 
+function isMissingTaskAssignmentsTable(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? ''
+  return (
+    error?.code === '42P01' ||
+    error?.code === 'PGRST205' ||
+    error?.code === 'PGRST204' ||
+    /tarea_asignaciones|schema cache|relation .* does not exist/i.test(message)
+  )
+}
+
+async function isUserAssignedToTask(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  taskId: number,
+  userId: string
+) {
+  const { data, error } = await admin
+    .from('tarea_asignaciones')
+    .select('id')
+    .eq('tarea_id', taskId)
+    .eq('responsable_usuario_id', userId)
+    .eq('activo', true)
+    .maybeSingle()
+
+  if (error) {
+    if (isMissingTaskAssignmentsTable(error)) return false
+    throw error
+  }
+
+  return !!data?.id
+}
+
+async function loadAssignedTaskIds(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  userId: string
+) {
+  const ids = new Set<number>()
+  const { data, error } = await admin
+    .from('tarea_asignaciones')
+    .select('tarea_id')
+    .eq('responsable_usuario_id', userId)
+    .eq('activo', true)
+
+  if (error) {
+    if (!isMissingTaskAssignmentsTable(error)) throw error
+  } else {
+    for (const assignment of data ?? []) ids.add(Number(assignment.tarea_id))
+  }
+
+  return Array.from(ids)
+}
+
 function completionEmailHtml(task: TaskRow, userLabel: string) {
   return `
     <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6">
@@ -212,7 +263,9 @@ export async function GET(request: Request) {
 
         const scope = buildTaskScope(user, profile)
         const scopedTask = task as { responsable?: string | null; responsable_usuario_id?: string | null }
+        const isAssignedByAssignment = await isUserAssignedToTask(admin, taskId, user.id)
         const isAssigned =
+          isAssignedByAssignment ||
           scopedTask.responsable_usuario_id === user.id ||
           (!!scopedTask.responsable && scope.assignedNames.includes(scopedTask.responsable))
 
@@ -242,6 +295,7 @@ export async function GET(request: Request) {
 
     if (!isManager) {
       const scope = buildTaskScope(user, profile)
+      const assignedIds = new Set(await loadAssignedTaskIds(admin, user.id))
       const primaryTasks = await admin.from('tareas').select('id').eq('responsable_usuario_id', user.id)
       const fallbackTasks =
         primaryTasks.error && isTaskScopeColumnError(primaryTasks.error) && scope.assignedNames.length
@@ -250,7 +304,9 @@ export async function GET(request: Request) {
 
       if (fallbackTasks.error) throw fallbackTasks.error
 
-      const taskIds = (fallbackTasks.data ?? []).map((task) => task.id)
+      for (const task of fallbackTasks.data ?? []) assignedIds.add(Number(task.id))
+
+      const taskIds = Array.from(assignedIds)
       if (taskIds.length === 0) {
         return NextResponse.json({ ok: true, rows: [], total: 0, page, pageSize, totalPages: 0 })
       }
@@ -344,8 +400,9 @@ export async function POST(request: Request) {
     const isManager = hasAnyRole(profile, MANAGER_ROLE_CODES)
     const isAssignedByUserId = !!task.responsable_usuario_id && task.responsable_usuario_id === user.id
     const isAssignedByName = !!task.responsable && scope.assignedNames.includes(task.responsable)
+    const isAssignedByAssignment = await isUserAssignedToTask(admin, task.id, user.id)
 
-    if (!isManager && !isAssignedByUserId && !isAssignedByName) {
+    if (!isManager && !isAssignedByUserId && !isAssignedByName && !isAssignedByAssignment) {
       return NextResponse.json({ ok: false, error: 'Solo puedes actualizar tareas asignadas a tu usuario.' }, { status: 403 })
     }
 
@@ -397,7 +454,7 @@ export async function POST(request: Request) {
 
     if (updateError) throw updateError
 
-    if (isAssignedByUserId || isAssignedByName) {
+    if (isAssignedByUserId || isAssignedByName || isAssignedByAssignment) {
       await markCurrentUserAssignmentHandled(admin, task.id, user.id)
     }
 
