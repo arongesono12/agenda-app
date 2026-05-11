@@ -307,6 +307,11 @@ body {
     color: var(--input-placeholder);
   }
 
+  .input-shell option {
+    background: var(--input-bg);
+    color: var(--input-text);
+  }
+
   .input-shell:focus {
     border-color: var(--input-focus-border);
     box-shadow: var(--input-inner-shadow), var(--input-focus-shadow);

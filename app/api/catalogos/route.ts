@@ -5,8 +5,6 @@ import { getServerSessionProfile } from '@/lib/server-access'
 
 export const dynamic = 'force-dynamic'
 
-const DEFAULT_ASSIGNABLE_ROLE_CODES = ['responsable', 'supervisor', 'consulta']
-
 type CatalogResource = 'departamentos' | 'responsables'
 
 type CatalogPayload = {
@@ -59,9 +57,10 @@ async function filterAssignableResponsables(
   rows: ResponsableCatalogRow[],
   options: { roleCodes?: string[]; departamento?: string | null } = {}
 ) {
-  const allowedRoles = new Set(
-    (options.roleCodes?.length ? options.roleCodes : DEFAULT_ASSIGNABLE_ROLE_CODES).map((role) => role.trim().toLowerCase())
-  )
+  const allowedRoles = options.roleCodes?.length
+    ? new Set(options.roleCodes.map((role) => role.trim().toLowerCase()))
+    : null
+  const adminRoles = new Set(ADMIN_ROLE_CODES)
   const departamento = options.departamento?.trim().toLowerCase()
   const userIds = Array.from(
     new Set(
@@ -84,7 +83,11 @@ async function filterAssignableResponsables(
 
   const assignableUserIds = new Set(
     ((data ?? []) as ProfileRoleRow[])
-      .filter((profile) => allowedRoles.has(readRoleCode(profile)))
+      .filter((profile) => {
+        const roleCode = readRoleCode(profile)
+        if (!roleCode || adminRoles.has(roleCode as (typeof ADMIN_ROLE_CODES)[number])) return false
+        return allowedRoles ? allowedRoles.has(roleCode) : true
+      })
       .map((profile) => profile.id)
   )
   const roleByUserId = new Map(

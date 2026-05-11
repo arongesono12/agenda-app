@@ -764,7 +764,7 @@ function validateAdminAssignments(responsables: ResponsableRow[]) {
     const roleCode = responsable.rol_codigo?.trim().toLowerCase()
 
     if (!roleCode || ADMIN_ROLE_CODES.includes(roleCode as (typeof ADMIN_ROLE_CODES)[number])) {
-      throw new Error('Los administradores solo pueden asignar tareas a supervisores, responsables o usuarios de consulta.')
+      throw new Error('Los administradores no pueden asignar tareas a usuarios administradores.')
     }
   }
 }
