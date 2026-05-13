@@ -60,6 +60,27 @@ export default function DomainAcquisitionWarning({
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(62,207,142,0.16),transparent_32%),radial-gradient(circle_at_80%_0%,rgba(36,144,91,0.12),transparent_26%),linear-gradient(180deg,#0b0f0c_0%,#111714_56%,#080b09_100%)]" />
       <div className="absolute inset-0 opacity-[0.08] [background-image:linear-gradient(rgba(255,255,255,.16)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.16)_1px,transparent_1px)] [background-size:44px_44px]" />
 
+      {expired && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="expired-domain-warning-title"
+        >
+          <div className="w-full max-w-lg rounded-[24px] border border-red-400/30 bg-[#111714] p-6 text-center shadow-[0_24px_90px_rgba(0,0,0,0.55)]">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-red-400/30 bg-red-500/10 text-red-200">
+              <ShieldAlert size={28} />
+            </div>
+            <h2 id="expired-domain-warning-title" className="mt-5 text-2xl font-semibold text-red-100">
+              Acceso al login bloqueado
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-red-100/80">
+              Usuarios de la agenda: el periodo por usar la app sin dominio se expiro. No se puede volver a acceder al login hasta adquirir o renovar el servidor/dominio.
+            </p>
+          </div>
+        </div>
+      )}
+
       <section className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-5xl items-center">
         <div className="w-full overflow-hidden rounded-[28px] border border-[#2a3b32] bg-[#101712]/90 shadow-[0_24px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           <div className="border-b border-[#26372f] bg-[#0f1712] px-5 py-4 sm:px-7">
