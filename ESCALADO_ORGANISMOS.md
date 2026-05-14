@@ -1,119 +1,294 @@
-# Plan de escalado: Organismos Funcionales
+# Agenda App — Organismos Funcionales
+### Architecture Design Document
 
-> Documento de arquitectura para transformar Agenda App en una plataforma multi-organismo con facturación integrada.
+| | |
+|---|---|
+| **Estado** | Borrador v1.0 |
+| **Fecha** | Mayo 2026 |
+| **Autor** | Aron Esono Ondo Eyang|
+| **Revisión requerida** | Ingeniería · Producto · Seguridad |
+
+---
+
+## TL;DR
+
+Agenda App opera hoy como un sistema de agenda de tarea única para una sola organización. Este documento describe cómo convertirla en una **plataforma multi-organismo** donde cada entidad —empresa, institución o equipo— tenga su propio espacio aislado, con usuarios propios, roles internos y una suscripción de pago. El modelo se inspira directamente en cómo Dropbox separa equipos (Business, Teams) dentro de una infraestructura compartida, manteniendo aislamiento de datos por defecto y enrutando cada acción al contexto correcto del tenant.
 
 ---
 
 ## Índice
 
-1. [Visión general](#1-visión-general)
-2. [Qué cambia del proyecto actual](#2-qué-cambia-del-proyecto-actual)
-3. [Modelo de datos: nuevas tablas](#3-modelo-de-datos-nuevas-tablas)
-4. [Roles por organismo](#4-roles-por-organismo)
-5. [Tipos de cuenta: individual vs. corporativa](#5-tipos-de-cuenta-individual-vs-corporativa)
-6. [Sistema de planes y pagos](#6-sistema-de-planes-y-pagos)
-7. [Aislamiento de datos entre organismos](#7-aislamiento-de-datos-entre-organismos)
-8. [Cambios en la aplicación existente](#8-cambios-en-la-aplicación-existente)
-9. [Flujo completo de alta de organismo](#9-flujo-completo-de-alta-de-organismo)
-10. [Migración desde el estado actual](#10-migración-desde-el-estado-actual)
-11. [Roadmap de implementación](#11-roadmap-de-implementación)
+- [1. Motivación y contexto](#1-motivación-y-contexto)
+- [2. Principios de diseño](#2-principios-de-diseño)
+- [3. Arquitectura de alto nivel](#3-arquitectura-de-alto-nivel)
+- [4. Modelo de datos](#4-modelo-de-datos)
+- [5. Sistema de roles por organismo](#5-sistema-de-roles-por-organismo)
+- [6. Tipos de cuenta y planes](#6-tipos-de-cuenta-y-planes)
+- [7. Pipeline de pagos](#7-pipeline-de-pagos)
+- [8. Aislamiento y seguridad de datos](#8-aislamiento-y-seguridad-de-datos)
+- [9. Cambios en la capa de aplicación](#9-cambios-en-la-capa-de-aplicación)
+- [10. Flujos críticos](#10-flujos-críticos)
+- [11. Migración sin downtime](#11-migración-sin-downtime)
+- [12. Roadmap de implementación](#12-roadmap-de-implementación)
+- [13. Trade-offs y decisiones abiertas](#13-trade-offs-y-decisiones-abiertas)
 
 ---
 
-## 1. Visión general
+## 1. Motivación y contexto
 
-La aplicación actual opera como un sistema de agenda **monorganismo**: una sola instancia de tareas, responsables y departamentos compartida por todos los usuarios. El objetivo es convertirla en una plataforma donde cada **Organismo** (empresa, institución o equipo) tenga su propio espacio aislado, con sus propios usuarios, roles, tareas y configuración, pagando una suscripción según el plan contratado.
+### El problema
+
+El sistema actual asume que existe exactamente un organismo. Todas las tareas, responsables, departamentos y alertas comparten la misma base de datos sin ninguna frontera de tenant:
 
 ```
-ANTES (monorganismo)
-─────────────────────────────────────
-  Supabase DB  →  1 conjunto de tareas  →  Todos los usuarios
+                     ┌─────────────────────────────────┐
+                     │          Supabase DB             │
+                     │                                  │
+  Usuario A ─────────┤──► tareas (sin scope)            │
+  Usuario B ─────────┤──► responsables (sin scope)      │
+  Usuario C ─────────┤──► alertas (sin scope)           │
+                     │                                  │
+                     └─────────────────────────────────┘
+```
 
-DESPUÉS (multi-organismo)
-─────────────────────────────────────
-  Supabase DB
-    ├── Organismo A (plan Básico)   →  usuarios A  →  tareas A
-    ├── Organismo B (plan Pro)      →  usuarios B  →  tareas B
-    └── Organismo C (plan Empresa)  →  usuarios C  →  tareas C
+Esto significa que escalar a un segundo cliente requiere levantar una nueva instancia completa del proyecto, lo que es insostenible operativamente y imposible de mantener.
+
+### La solución
+
+Introducir el concepto de **Organismo** como la unidad raíz del sistema. Cada organismo es un tenant aislado. Los usuarios pertenecen a uno o varios organismos con roles independientes en cada uno. Los datos nunca atraviesan la frontera del organismo.
+
+```
+                     ┌─────────────────────────────────────────┐
+                     │             Supabase DB (shared)         │
+                     │                                          │
+                     │  ┌─────────────────┐                    │
+  Usuarios A ────────┼──│  Organismo A    │── tareas_A         │
+                     │  │  (plan Pro)     │── responsables_A   │
+                     │  └─────────────────┘                    │
+                     │                                          │
+                     │  ┌─────────────────┐                    │
+  Usuarios B ────────┼──│  Organismo B    │── tareas_B         │
+                     │  │  (plan Básico)  │── responsables_B   │
+                     │  └─────────────────┘                    │
+                     │                                          │
+                     │  ┌─────────────────┐                    │
+  Usuarios C,D ──────┼──│  Organismo C    │── tareas_C         │
+                     │  │  (plan Empresa) │── responsables_C   │
+                     │  └─────────────────┘                    │
+                     └─────────────────────────────────────────┘
+```
+
+### Por qué este modelo y no otro
+
+Dropbox utiliza un modelo de **shared database, shared schema** con aislamiento a nivel de Row Level Security. Elegimos el mismo enfoque porque:
+
+- Evita la complejidad operativa de múltiples bases de datos.
+- Las políticas RLS de Supabase hacen el aislamiento de forma nativa y auditable.
+- Una sola instancia de la aplicación sirve a todos los organismos.
+- Los costes de infraestructura escalan linealmente con los datos, no con el número de organismos.
+
+---
+
+## 2. Principios de diseño
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  1. AISLAMIENTO POR DEFECTO                                     │
+│     Ninguna query devuelve datos fuera del organismo activo.    │
+│     El filtro no es opcional; es estructural.                   │
+│                                                                 │
+│  2. CERO CAMBIOS EN LA LÓGICA DE NEGOCIO                        │
+│     Los 4 roles, el semáforo, la agenda y las alertas operan    │
+│     exactamente igual. Solo cambia el scope de los datos.       │
+│                                                                 │
+│  3. UN USUARIO, MÚLTIPLES ORGANISMOS                            │
+│     Un usuario puede pertenecer a varios organismos con         │
+│     roles distintos en cada uno. La sesión recuerda cuál        │
+│     está activo.                                                │
+│                                                                 │
+│  4. PAGO PRIMERO, DATOS DESPUÉS                                 │
+│     Un organismo no puede insertar datos de producción          │
+│     sin una suscripción activa o un periodo de prueba.          │
+│                                                                 │
+│  5. MIGRACIÓN SIN ROTURAS                                       │
+│     Los datos de Segesa (organismo semilla) se migran           │
+│     automáticamente. Los usuarios existentes no perciben        │
+│     ningún cambio en su flujo de trabajo.                       │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Qué cambia del proyecto actual
+## 3. Arquitectura de alto nivel
 
-| Área | Situación actual | Con organismos |
-|---|---|---|
-| `tareas` | Sin `organismo_id` | Cada fila lleva `organismo_id` |
-| `responsables` | Catálogo global | Catálogo por organismo |
-| `departamentos` | Catálogo global | Catálogo por organismo |
-| `historial` | Historial global | Historial por organismo |
-| `alertas` | Alertas globales | Alertas por organismo |
-| Roles (`tipo_usuario`) | 4 roles fijos globales | 4 roles asignados por organismo |
-| Registro de usuario | Crea perfil global | Crea perfil + lo vincula a un organismo |
-| Auth middleware | Comprueba rol global | Comprueba rol dentro del organismo activo |
+### Vista de capas
+
+```
+ ┌──────────────────────────────────────────────────────────────────┐
+ │  CLIENTE (Browser)                                               │
+ │                                                                  │
+ │  Next.js App Router                                              │
+ │  ┌────────────┐  ┌──────────────┐  ┌──────────────────────────┐ │
+ │  │  /planes   │  │ /organismos  │  │  /organismos/[slug]/...  │ │
+ │  │  (pública) │  │  /nuevo      │  │  agenda · dashboard      │ │
+ │  └────────────┘  └──────────────┘  │  alertas · estadísticas  │ │
+ │                                    │  miembros · facturación  │ │
+ │                                    └──────────────────────────┘ │
+ └──────────────────────────┬───────────────────────────────────────┘
+                            │
+ ┌──────────────────────────▼───────────────────────────────────────┐
+ │  MIDDLEWARE (Edge)                                               │
+ │                                                                  │
+ │  1. Verificar sesión Supabase Auth                               │
+ │  2. Resolver organismo activo  ──► cookie organismo_activo_id   │
+ │  3. Verificar membresía activa en ese organismo                  │
+ │  4. Verificar suscripción activa  ──► si no, → /facturación     │
+ │  5. Inyectar x-organismo-id en headers de la request            │
+ └──────────────────────────┬───────────────────────────────────────┘
+                            │
+ ┌──────────────────────────▼───────────────────────────────────────┐
+ │  API ROUTES (Next.js Server)                                     │
+ │                                                                  │
+ │  /api/tareas         /api/alertas       /api/dashboard           │
+ │  /api/responsables   /api/historial     /api/estadisticas        │
+ │  /api/catalogos      /api/organismos    /api/billing/*           │
+ │                                                                  │
+ │  Todas las queries llevan .eq('organismo_id', organismoId)       │
+ └──────────────────────────┬───────────────────────────────────────┘
+                            │
+ ┌──────────────────────────▼───────────────────────────────────────┐
+ │  SUPABASE                                                        │
+ │                                                                  │
+ │  PostgreSQL + RLS  ◄── segunda barrera de aislamiento            │
+ │  Auth (JWT)                                                      │
+ │  Storage (logos, adjuntos)                                       │
+ └──────────────────────────┬───────────────────────────────────────┘
+                            │
+ ┌──────────────────────────▼───────────────────────────────────────┐
+ │  SERVICIOS EXTERNOS                                              │
+ │                                                                  │
+ │  Stripe Billing  ──► suscripciones · checkout · portal · webhook │
+ │  Resend          ──► invitaciones · notificaciones de tarea      │
+ └──────────────────────────────────────────────────────────────────┘
+```
+
+### Resolución del organismo activo
+
+```
+Request entrante
+      │
+      ▼
+¿Cookie organismo_activo_id?
+      │
+      ├── SÍ ──► ¿usuario es miembro activo? ──► SÍ ──► usar ese organismo
+      │                                       │
+      │                                       └── NO ──► limpiar cookie
+      │
+      └── NO ──► ¿cuántos organismos tiene el usuario?
+                      │
+                      ├── 1 ──► establecer ese como activo
+                      │
+                      ├── >1 ──► redirigir a /seleccionar-organismo
+                      │
+                      └── 0 ──► redirigir a /organismos/nuevo
+```
 
 ---
 
-## 3. Modelo de datos: nuevas tablas
+## 4. Modelo de datos
 
-### 3.1 `organismos`
+### Diagrama entidad-relación
+
+```
+ auth.users (Supabase)
+      │
+      │ 1
+      ▼ N
+ perfiles ──────────────────────────────────────────────────────┐
+      │                                                          │
+      │ N                                                        │
+      ▼                                                          │
+ organismo_miembros ──── N ──► organismos ◄── 1 ── organismo_suscripciones
+      │                              │                    │
+      │                              │                    │
+      │                              │ 1                  │ N
+      │                              ▼ N                  ▼
+      │                         ┌──────────────────┐  organismo_facturas
+      │                         │  tareas          │
+      │                         │  responsables    │
+      │                         │  departamentos   │
+      │                         │  historial       │
+      │                         │  alertas         │
+      │                         └──────────────────┘
+      │
+      └── asignado_por / invitado_por (FK circular, nullable)
+```
+
+### Tablas nuevas
+
+#### `organismos`
 
 ```sql
 CREATE TABLE organismos (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  nombre        TEXT NOT NULL,
-  slug          TEXT NOT NULL UNIQUE,           -- identificador URL-safe
-  tipo          TEXT NOT NULL DEFAULT 'corporativo'
-                  CHECK (tipo IN ('individual', 'corporativo')),
-  logo_url      TEXT,
-  website       TEXT,
-  sector        TEXT,                           -- sector de actividad
-  pais          TEXT DEFAULT 'ES',
-  activo        BOOLEAN DEFAULT true,
-  creado_por    UUID REFERENCES auth.users(id),
-  created_at    TIMESTAMPTZ DEFAULT NOW(),
-  updated_at    TIMESTAMPTZ DEFAULT NOW()
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  nombre      TEXT NOT NULL,
+  slug        TEXT NOT NULL UNIQUE,
+  -- 'individual': 1 usuario, límites reducidos, sin invitaciones
+  -- 'corporativo': múltiples usuarios, límites según plan
+  tipo        TEXT NOT NULL DEFAULT 'corporativo'
+                CHECK (tipo IN ('individual', 'corporativo')),
+  logo_url    TEXT,
+  website     TEXT,
+  sector      TEXT,
+  pais        TEXT DEFAULT 'ES',
+  activo      BOOLEAN DEFAULT true,
+  creado_por  UUID REFERENCES auth.users(id),
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
-### 3.2 `organismo_miembros`
-
-Vincula usuarios a organismos con un rol específico dentro de ese organismo.
+#### `organismo_miembros`
 
 ```sql
+-- Cada fila es un contrato: "este usuario tiene este rol en este organismo".
+-- Un usuario puede tener filas en varios organismos con roles distintos.
 CREATE TABLE organismo_miembros (
-  id              BIGSERIAL PRIMARY KEY,
-  organismo_id    UUID NOT NULL REFERENCES organismos(id) ON DELETE CASCADE,
-  usuario_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  rol_codigo      TEXT NOT NULL DEFAULT 'responsable'
-                    CHECK (rol_codigo IN ('administrador', 'supervisor', 'responsable', 'consulta')),
-  activo          BOOLEAN DEFAULT true,
-  invitado_por    UUID REFERENCES auth.users(id),
-  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  id            BIGSERIAL PRIMARY KEY,
+  organismo_id  UUID NOT NULL REFERENCES organismos(id) ON DELETE CASCADE,
+  usuario_id    UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  rol_codigo    TEXT NOT NULL DEFAULT 'responsable'
+                  CHECK (rol_codigo IN ('administrador', 'supervisor', 'responsable', 'consulta')),
+  activo        BOOLEAN DEFAULT true,
+  invitado_por  UUID REFERENCES auth.users(id),
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (organismo_id, usuario_id)
 );
 ```
 
-### 3.3 `organismo_suscripciones`
+#### `organismo_suscripciones`
 
 ```sql
 CREATE TABLE organismo_suscripciones (
-  id                    BIGSERIAL PRIMARY KEY,
-  organismo_id          UUID NOT NULL REFERENCES organismos(id) ON DELETE CASCADE,
-  plan_codigo           TEXT NOT NULL CHECK (plan_codigo IN ('basico', 'pro', 'empresa')),
-  estado                TEXT NOT NULL DEFAULT 'activa'
-                          CHECK (estado IN ('activa', 'pausada', 'cancelada', 'prueba')),
-  stripe_customer_id    TEXT UNIQUE,
-  stripe_subscription_id TEXT UNIQUE,
-  periodo_inicio        TIMESTAMPTZ,
-  periodo_fin           TIMESTAMPTZ,
-  trial_fin             TIMESTAMPTZ,
-  created_at            TIMESTAMPTZ DEFAULT NOW(),
-  updated_at            TIMESTAMPTZ DEFAULT NOW()
+  id                      BIGSERIAL PRIMARY KEY,
+  organismo_id            UUID NOT NULL REFERENCES organismos(id) ON DELETE CASCADE,
+  plan_codigo             TEXT NOT NULL
+                            CHECK (plan_codigo IN ('individual', 'basico', 'pro', 'empresa')),
+  estado                  TEXT NOT NULL DEFAULT 'prueba'
+                            CHECK (estado IN ('activa', 'pausada', 'cancelada', 'prueba')),
+  stripe_customer_id      TEXT UNIQUE,
+  stripe_subscription_id  TEXT UNIQUE,
+  periodo_inicio          TIMESTAMPTZ,
+  periodo_fin             TIMESTAMPTZ,
+  trial_fin               TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '14 days'),
+  created_at              TIMESTAMPTZ DEFAULT NOW(),
+  updated_at              TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
-### 3.4 `organismo_facturas`
+#### `organismo_facturas`
 
 ```sql
 CREATE TABLE organismo_facturas (
@@ -130,136 +305,203 @@ CREATE TABLE organismo_facturas (
 );
 ```
 
-### 3.5 Columna `organismo_id` en tablas existentes
+#### `organismo_invitaciones`
 
 ```sql
--- Añadir a cada tabla que contiene datos del organismo
+-- Token de un solo uso para invitar a nuevos miembros.
+CREATE TABLE organismo_invitaciones (
+  id            BIGSERIAL PRIMARY KEY,
+  organismo_id  UUID NOT NULL REFERENCES organismos(id) ON DELETE CASCADE,
+  email         TEXT NOT NULL,
+  rol_codigo    TEXT NOT NULL DEFAULT 'responsable',
+  token         TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex'),
+  usado         BOOLEAN DEFAULT false,
+  expira_at     TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '48 hours'),
+  invitado_por  UUID REFERENCES auth.users(id),
+  created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Columna `organismo_id` en tablas existentes
+
+```sql
 ALTER TABLE tareas          ADD COLUMN organismo_id UUID REFERENCES organismos(id);
 ALTER TABLE responsables    ADD COLUMN organismo_id UUID REFERENCES organismos(id);
 ALTER TABLE departamentos   ADD COLUMN organismo_id UUID REFERENCES organismos(id);
 ALTER TABLE historial       ADD COLUMN organismo_id UUID REFERENCES organismos(id);
 ALTER TABLE alertas         ADD COLUMN organismo_id UUID REFERENCES organismos(id);
 
--- Índices para rendimiento
-CREATE INDEX idx_tareas_organismo          ON tareas(organismo_id);
-CREATE INDEX idx_responsables_organismo    ON responsables(organismo_id);
-CREATE INDEX idx_departamentos_organismo   ON departamentos(organismo_id);
-CREATE INDEX idx_historial_organismo       ON historial(organismo_id);
-CREATE INDEX idx_alertas_organismo         ON alertas(organismo_id);
+-- Índices. Sin estos, cada query de tenant escanea la tabla completa.
+CREATE INDEX idx_tareas_org        ON tareas(organismo_id);
+CREATE INDEX idx_responsables_org  ON responsables(organismo_id);
+CREATE INDEX idx_departamentos_org ON departamentos(organismo_id);
+CREATE INDEX idx_historial_org     ON historial(organismo_id);
+CREATE INDEX idx_alertas_org       ON alertas(organismo_id);
 ```
 
 ---
 
-## 4. Roles por organismo
+## 5. Sistema de roles por organismo
 
-Los 4 roles actuales (`administrador/a`, `supervisor`, `responsable`, `consulta`) se mantienen exactamente igual en su lógica de permisos, pero ahora son **por organismo**, no globales.
+Los 4 roles actuales no cambian en su definición de permisos. Lo que cambia es que **el rol es una propiedad del organismo, no del usuario**. El mismo usuario puede ser `administrador` en el Organismo A y `responsable` en el Organismo B.
 
 ```
-Organismo A                    Organismo B
-───────────────────────        ───────────────────────
-  Usuario X → administrador      Usuario X → responsable
-  Usuario Y → supervisor         Usuario Z → consulta
-  Usuario Z → responsable
+ Usuario: Carlos García
+ ┌────────────────────────────────────────────────────────┐
+ │  Organismo A (Segesa)      → rol: administrador        │
+ │  Organismo B (Filial Sur)  → rol: supervisor           │
+ │  Organismo C (Cliente X)   → rol: consulta             │
+ └────────────────────────────────────────────────────────┘
 ```
 
-### Permisos por rol (sin cambios)
+### Matriz de permisos (sin cambios respecto al sistema actual)
 
-| Capacidad | administrador | supervisor | responsable | consulta |
-|---|:---:|:---:|:---:|:---:|
-| Ver todas las tareas del organismo | ✓ | ✓ | Solo asignadas | ✓ |
-| Crear tareas | ✓ | ✓ | — | — |
-| Editar tareas | ✓ | ✓ | Solo asignadas | — |
-| Eliminar tareas | ✓ | — | — | — |
-| Gestionar miembros del organismo | ✓ | — | — | — |
-| Ver estadísticas completas | ✓ | ✓ | — | — |
-| Gestionar suscripción | ✓ | — | — | — |
-| Invitar nuevos usuarios | ✓ | ✓ | — | — |
+```
+                          │ admin │ supervisor │ responsable │ consulta │
+──────────────────────────┼───────┼────────────┼─────────────┼──────────┤
+Ver todas las tareas      │   ✓   │     ✓      │  solo asig. │    ✓     │
+Crear tareas              │   ✓   │     ✓      │      –      │    –     │
+Editar tareas             │   ✓   │     ✓      │  solo asig. │    –     │
+Eliminar tareas           │   ✓   │     –      │      –      │    –     │
+Ver estadísticas          │   ✓   │     ✓      │      –      │    –     │
+Gestionar miembros        │   ✓   │     –      │      –      │    –     │
+Gestionar suscripción     │   ✓   │     –      │      –      │    –     │
+Invitar usuarios          │   ✓   │     ✓      │      –      │    –     │
+──────────────────────────┴───────┴────────────┴─────────────┴──────────┘
+```
 
-### Resolución del rol activo en middleware
+### Resolución del rol en el middleware
 
 ```typescript
-// lib/organismo-access.ts  (nuevo archivo)
-export async function getOrganismoActivo(
+// lib/organismo-access.ts
+export async function resolverRolActivo(
   supabase: SupabaseClient,
-  usuarioId: string
-): Promise<{ organismoId: string; rolCodigo: string } | null> {
-  // 1. Leer organismo_id de la cookie de sesión del organismo
-  // 2. Verificar que el usuario es miembro activo
-  // 3. Devolver organismo + rol resuelto
+  usuarioId: string,
+  organismoId: string
+): Promise<RolCodigo | null> {
+  const { data } = await supabase
+    .from('organismo_miembros')
+    .select('rol_codigo')
+    .eq('usuario_id', usuarioId)
+    .eq('organismo_id', organismoId)
+    .eq('activo', true)
+    .single()
+
+  return (data?.rol_codigo as RolCodigo) ?? null
 }
 ```
 
 ---
 
-## 5. Tipos de cuenta: individual vs. corporativa
+## 6. Tipos de cuenta y planes
 
-### Cuenta individual
+### Cuenta Individual
 
-- Un solo usuario es propietario y único miembro del organismo.
-- Límite: **1 usuario, hasta 50 tareas activas**.
-- Caso de uso: freelance, uso personal.
-- El campo `organismos.tipo = 'individual'`.
-- No puede invitar otros miembros (UI desactiva la sección de miembros).
+```
+┌─────────────────────────────────────────────────────────┐
+│  INDIVIDUAL                                             │
+│                                                         │
+│  • 1 usuario (propietario = administrador)              │
+│  • Máx. 50 tareas activas                               │
+│  • Historial: 90 días                                   │
+│  • Sin invitaciones a otros miembros                    │
+│  • Sin alertas por correo                               │
+│  • Precio: Gratis                                       │
+└─────────────────────────────────────────────────────────┘
+```
 
-### Cuenta corporativa
+### Cuenta Corporativa
 
-- Un administrador crea el organismo e invita miembros.
-- Límites según el plan contratado (ver sección 6).
-- Puede tener múltiples administradores.
-- El campo `organismos.tipo = 'corporativo'`.
+```
+┌───────────────────┬───────────────────┬────────────────────────┐
+│     BÁSICO        │       PRO         │       EMPRESA          │
+├───────────────────┼───────────────────┼────────────────────────┤
+│  9 €/mes          │  29 €/mes         │  79 €/mes              │
+│  90 €/año         │  290 €/año        │  790 €/año             │
+├───────────────────┼───────────────────┼────────────────────────┤
+│  Hasta 5 usuarios │  Hasta 25 usuarios│  Ilimitados            │
+│  200 tareas       │  1.000 tareas     │  Ilimitadas            │
+│  Historial 1 año  │  Historial 2 años │  Historial ilimitado   │
+│  Alertas correo ✓ │  Alertas correo ✓ │  Alertas correo ✓      │
+│  Exportar datos – │  Exportar datos ✓ │  Exportar datos ✓      │
+│  API externa –    │  API externa –    │  API externa ✓         │
+│  Soporte email    │  Soporte priorit. │  Soporte dedicado      │
+└───────────────────┴───────────────────┴────────────────────────┘
+```
 
-### Comparativa
+### Validación de límites de plan
 
-| | Individual | Corporativa Básica | Corporativa Pro | Corporativa Empresa |
-|---|---|---|---|---|
-| Usuarios | 1 | Hasta 5 | Hasta 25 | Ilimitados |
-| Tareas activas | 50 | 200 | 1 000 | Ilimitadas |
-| Historial | 90 días | 1 año | 2 años | Ilimitado |
-| Alertas por correo | — | ✓ | ✓ | ✓ |
-| Exportar datos | — | — | ✓ | ✓ |
-| API externa | — | — | — | ✓ |
-| Soporte | — | Email | Prioritario | Dedicado |
+Los límites se comprueban en el servidor antes de insertar datos, no solo en la UI.
+
+```typescript
+// lib/plan-limits.ts
+export async function verificarLimiteTareas(
+  supabase: SupabaseClient,
+  organismoId: string
+): Promise<{ permitido: boolean; motivo?: string }> {
+  const [{ count }, suscripcion] = await Promise.all([
+    supabase.from('tareas').select('*', { count: 'exact', head: true })
+      .eq('organismo_id', organismoId)
+      .neq('estado', 'Cancelado'),
+    obtenerSuscripcion(organismoId)
+  ])
+
+  const limite = LIMITES_POR_PLAN[suscripcion.plan_codigo].tareas
+  if (limite !== Infinity && (count ?? 0) >= limite) {
+    return { permitido: false, motivo: `El plan ${suscripcion.plan_codigo} admite máximo ${limite} tareas activas.` }
+  }
+  return { permitido: true }
+}
+```
 
 ---
 
-## 6. Sistema de planes y pagos
+## 7. Pipeline de pagos
 
-### 6.1 Planes y precios (referencia inicial)
-
-```
-INDIVIDUAL   →  Gratis (con límites)
-BÁSICO       →  9 €/mes  o  90 €/año
-PRO          →  29 €/mes o 290 €/año
-EMPRESA      →  79 €/mes o 790 €/año  (o precio negociado)
-```
-
-### 6.2 Integración con Stripe
-
-La integración recomendada es **Stripe Billing** con webhooks para mantener el estado de suscripción en `organismo_suscripciones`.
-
-**Nuevos archivos a crear:**
+### Componentes
 
 ```
-lib/
-  stripe.ts                  # cliente Stripe singleton
-  billing/
-    plans.ts                 # definición de planes y precios
-    checkout.ts              # crear sesión de pago
-    portal.ts                # portal de cliente Stripe
-    webhooks.ts              # manejador de eventos Stripe
-
-app/api/
-  billing/
-    checkout/route.ts        # POST → crear Stripe Checkout Session
-    portal/route.ts          # POST → abrir portal de cliente
-    webhook/route.ts         # POST → recibir eventos de Stripe
+ ┌──────────────────────────────────────────────────────────────────┐
+ │  STRIPE BILLING PIPELINE                                         │
+ │                                                                  │
+ │  app/planes             → Página pública de precios             │
+ │  (pública)                                                       │
+ │       │                                                          │
+ │       │ usuario elige plan                                       │
+ │       ▼                                                          │
+ │  POST /api/billing/checkout                                      │
+ │       │                                                          │
+ │       │ devuelve Stripe Checkout Session URL                     │
+ │       ▼                                                          │
+ │  stripe.com/checkout (hosted)                                    │
+ │       │                                                          │
+ │       ├── éxito → redirect a /organismos/[slug]/dashboard        │
+ │       │                                                          │
+ │       └── cancelar → redirect a /planes                         │
+ │                                                                  │
+ │  POST /api/billing/webhook   ◄── Stripe envía eventos aquí      │
+ │       │                                                          │
+ │       ├── checkout.session.completed  → activar suscripción      │
+ │       ├── invoice.paid                → registrar factura        │
+ │       ├── invoice.payment_failed      → pausar + notificar       │
+ │       ├── subscription.deleted        → cancelar                 │
+ │       └── subscription.updated        → actualizar plan          │
+ │                                                                  │
+ │  POST /api/billing/portal                                        │
+ │       │                                                          │
+ │       └── devuelve Stripe Customer Portal URL                    │
+ │           (gestión de tarjeta, facturas, cancelar)               │
+ └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Variables de entorno necesarias:**
+### Variables de entorno necesarias
 
 ```bash
+# Stripe
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+
+# IDs de precio de Stripe (crear en el dashboard de Stripe)
 STRIPE_PRICE_BASICO_MENSUAL=price_...
 STRIPE_PRICE_BASICO_ANUAL=price_...
 STRIPE_PRICE_PRO_MENSUAL=price_...
@@ -268,317 +510,438 @@ STRIPE_PRICE_EMPRESA_MENSUAL=price_...
 STRIPE_PRICE_EMPRESA_ANUAL=price_...
 ```
 
-**Eventos de Stripe a manejar en el webhook:**
+> **Importante:** ninguna variable de Stripe lleva el prefijo `NEXT_PUBLIC_`. La clave secreta nunca llega al cliente.
 
-| Evento Stripe | Acción en BD |
-|---|---|
-| `checkout.session.completed` | Activar suscripción, guardar `stripe_customer_id` |
-| `invoice.paid` | Registrar factura como pagada, extender `periodo_fin` |
-| `invoice.payment_failed` | Marcar suscripción como `pausada`, notificar admin |
-| `customer.subscription.deleted` | Marcar suscripción como `cancelada` |
-| `customer.subscription.updated` | Actualizar plan y período |
-
-### 6.3 Flujo de pago al crear un organismo
+### Nuevos archivos
 
 ```
-Usuario elige plan
-        ↓
-POST /api/billing/checkout
-  { organismoId, planCodigo, intervalo: 'mensual' | 'anual' }
-        ↓
-Stripe Checkout Session
-        ↓
-Usuario introduce tarjeta en Stripe
-        ↓
-Stripe → webhook checkout.session.completed
-        ↓
-organismo_suscripciones.estado = 'activa'
-        ↓
-Redirect a /organismo/[slug]/dashboard
+lib/
+  stripe.ts                  ← cliente Stripe singleton (server-only)
+  plan-limits.ts             ← validación de límites por plan
+  billing/
+    plans.ts                 ← definición de planes, precios y límites
+    checkout.ts              ← crear Stripe Checkout Session
+    portal.ts                ← abrir Stripe Customer Portal
+    webhooks.ts              ← handleWebhookEvent()
+
+app/api/billing/
+  checkout/route.ts          ← POST
+  portal/route.ts            ← POST
+  webhook/route.ts           ← POST (sin autenticación de sesión, firma Stripe)
+
+app/
+  planes/page.tsx            ← página pública de precios
+  organismos/
+    nuevo/page.tsx
+    [slug]/
+      facturacion/page.tsx
 ```
 
 ---
 
-## 7. Aislamiento de datos entre organismos
+## 8. Aislamiento y seguridad de datos
 
-### Row Level Security (RLS) en Supabase
+### Dos barreras de aislamiento
 
-Toda consulta a tablas de datos debe estar restringida al organismo activo del usuario. Esto se consigue con políticas RLS.
+```
+ Request de Usuario A (Organismo A)
+           │
+           ▼
+ ┌─────────────────────────────────────┐
+ │  BARRERA 1: Middleware + API        │
+ │                                     │
+ │  organismoId = resolverOrganismo()  │
+ │  query.eq('organismo_id', id)       │
+ └──────────────────┬──────────────────┘
+                    │
+                    ▼
+ ┌─────────────────────────────────────┐
+ │  BARRERA 2: Supabase RLS            │
+ │                                     │
+ │  POLICY: solo filas donde           │
+ │  organismo_id IN (mis organismos)   │
+ └──────────────────┬──────────────────┘
+                    │
+                    ▼
+             Datos de Organismo A
+             (Organismo B invisible)
+```
+
+### Políticas RLS
 
 ```sql
--- Ejemplo para la tabla tareas
-ALTER TABLE tareas ENABLE ROW LEVEL SECURITY;
+-- Habilitar RLS en todas las tablas de datos
+ALTER TABLE tareas          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE responsables    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE departamentos   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE historial       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alertas         ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "tareas_por_organismo" ON tareas
-  FOR ALL
-  USING (
+-- Política reutilizable (mismo patrón para todas las tablas)
+CREATE POLICY "aislamiento_por_organismo" ON tareas
+  FOR ALL USING (
     organismo_id IN (
       SELECT organismo_id FROM organismo_miembros
+      WHERE usuario_id = auth.uid() AND activo = true
+    )
+  );
+
+-- Miembros: solo el propio organismo puede ver su lista de miembros
+CREATE POLICY "miembros_visibles_en_organismo" ON organismo_miembros
+  FOR SELECT USING (
+    organismo_id IN (
+      SELECT organismo_id FROM organismo_miembros m2
+      WHERE m2.usuario_id = auth.uid() AND m2.activo = true
+    )
+  );
+
+-- Solo administradores del organismo pueden insertar/actualizar miembros
+CREATE POLICY "solo_admin_gestiona_miembros" ON organismo_miembros
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM organismo_miembros
       WHERE usuario_id = auth.uid()
+        AND organismo_id = organismo_miembros.organismo_id
+        AND rol_codigo = 'administrador'
         AND activo = true
     )
   );
 ```
 
-```sql
--- Ejemplo para responsables
-ALTER TABLE responsables ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "responsables_por_organismo" ON responsables
-  FOR ALL
-  USING (
-    organismo_id IN (
-      SELECT organismo_id FROM organismo_miembros
-      WHERE usuario_id = auth.uid()
-        AND activo = true
-    )
-  );
-```
-
-### Propagación del `organismo_id` en las APIs
-
-Cada API route que actualmente opera sin contexto de organismo debe recibir el `organismo_id` desde la sesión:
+### Seguridad del webhook de Stripe
 
 ```typescript
-// Patrón a aplicar en todos los route handlers
-export async function GET(request: Request) {
-  const supabase = await createSupabaseServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
+// app/api/billing/webhook/route.ts
+export async function POST(request: Request) {
+  const body = await request.text()
+  const signature = request.headers.get('stripe-signature') ?? ''
 
-  // Obtener organismo activo desde cookie o header
-  const organismoId = await getOrganismoActivoId(request, user?.id)
-  if (!organismoId) return NextResponse.json({ error: 'Sin organismo activo' }, { status: 403 })
+  let event: Stripe.Event
+  try {
+    // Verificar firma criptográfica antes de procesar nada
+    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!)
+  } catch {
+    return NextResponse.json({ error: 'Firma inválida' }, { status: 400 })
+  }
 
-  // Todas las queries llevan .eq('organismo_id', organismoId)
-  const { data } = await supabase
-    .from('tareas')
-    .select('*')
-    .eq('organismo_id', organismoId)
-    ...
+  await handleWebhookEvent(event)
+  return NextResponse.json({ received: true })
 }
 ```
 
 ---
 
-## 8. Cambios en la aplicación existente
+## 9. Cambios en la capa de aplicación
 
-### 8.1 Nuevas rutas de la app
+### Nuevas rutas
 
 ```
 app/
+  planes/                           ← pública, sin auth
+  seleccionar-organismo/            ← para usuarios con múltiples organismos
   organismos/
-    nuevo/page.tsx               # Crear organismo (paso 1: datos básicos)
+    nuevo/                          ← crear organismo (datos + pago)
     [slug]/
-      page.tsx                   # Dashboard del organismo (= actual app/dashboard)
-      ajustes/page.tsx           # Configuración del organismo
-      miembros/page.tsx          # Gestión de miembros e invitaciones
-      facturacion/page.tsx       # Plan, método de pago, facturas
-      agenda/page.tsx            # Agenda de tareas (= actual app/page.tsx)
-      ...resto de secciones
-  seleccionar-organismo/page.tsx # Si el usuario pertenece a varios organismos
-  planes/page.tsx                # Página pública de precios
+      page.tsx → redirige a agenda
+      agenda/                       ← ex app/page.tsx
+      dashboard/                    ← ex app/dashboard/
+      alertas/                      ← ex app/alertas/
+      cronograma/                   ← ex app/cronograma/
+      estadisticas/                 ← ex app/estadisticas/
+      busqueda/                     ← ex app/busqueda/
+      historial/                    ← ex app/historial/
+      responsable/                  ← ex app/responsable/
+      catalogos/                    ← ex app/catalogos/
+      miembros/                     ← NUEVO: gestión de miembros
+      ajustes/                      ← NUEVO: configuración del organismo
+      facturacion/                  ← NUEVO: plan, pago, facturas
 ```
 
-### 8.2 Selector de organismo activo
+### Cambios mínimos en componentes existentes
 
-Los usuarios que pertenecen a más de un organismo necesitan un selector en el sidebar o en el header.
+```
+Sidebar.tsx
+  + Logo e identificador del organismo activo en la cabecera
+  + Enlace a /miembros (visible solo para admin/supervisor)
+  + Enlace a /facturacion (visible solo para admin)
+  + Componente OrganismoSelector (dropdown si tiene múltiples)
 
-```tsx
-// components/OrganismoSelector.tsx  (nuevo)
-// Muestra el organismo activo con un dropdown para cambiar
-// Al cambiar: actualiza cookie organismo_activo_id y hace router.refresh()
+UserSessionProvider.tsx
+  + organismoActivo: Organismo | null
+  + miOrganismos: OrganismoMiembro[]
+  + rolEnOrganismo: RolCodigo | null    ← sustituye al rol global actual
+
+middleware.ts
+  + pasos 2-5 descritos en la sección 3
 ```
 
-### 8.3 Cambios en el Sidebar
+### Nuevos componentes
 
-El `Sidebar.tsx` actual no necesita cambiar su estructura, solo añadir:
-
-- Logo e identificador del organismo activo en la cabecera del sidebar.
-- Enlace a `/organismos/[slug]/miembros` (solo admins).
-- Enlace a `/organismos/[slug]/facturacion` (solo admins).
-
-### 8.4 Cambios en el middleware (`middleware.ts`)
-
-```typescript
-// middleware.ts (ampliado)
-// 1. Verificar sesión de usuario (ya existe)
-// 2. Resolver organismo activo de la cookie
-// 3. Verificar que el usuario es miembro activo de ese organismo
-// 4. Verificar que la suscripción del organismo está activa
-//    → Si no: redirigir a /organismos/[slug]/facturacion
-// 5. Propagar organismo_id en headers de la request para los route handlers
 ```
-
-### 8.5 Cambios en `UserSessionProvider.tsx`
-
-Ampliar el contexto con:
-
-```typescript
-interface UserSessionContextValue {
-  // ... campos actuales ...
-  organismoActivo: Organismo | null
-  miOrganismos: OrganismoMiembro[]
-  rolEnOrganismo: RolCodigo | null   // rol del usuario en el organismo activo
-}
+components/
+  OrganismoSelector.tsx       ← dropdown para cambiar de organismo activo
+  MiembrosTable.tsx           ← tabla de miembros con rol y estado
+  InvitarMiembroModal.tsx     ← formulario de invitación por email
+  PlanBadge.tsx               ← badge del plan activo del organismo
+  BillingCard.tsx             ← resumen de suscripción en /facturacion
 ```
 
 ---
 
-## 9. Flujo completo de alta de organismo
+## 10. Flujos críticos
 
-### Paso 1 — El usuario se registra (ya existe, sin cambios)
-
-El usuario crea su cuenta en `/registro`. No queda asignado a ningún organismo todavía.
-
-### Paso 2 — Crear organismo (`/organismos/nuevo`)
+### Alta de organismo con pago
 
 ```
-Formulario:
-  - Nombre del organismo (requerido)
-  - Tipo: Individual / Corporativo
-  - Sector (opcional)
-  - País
-
-Al enviar → POST /api/organismos
-  1. Crear fila en organismos
-  2. Crear fila en organismo_miembros (usuario = administrador)
-  3. Si plan de pago → iniciar Stripe Checkout
-  4. Si plan gratuito → activar suscripción directamente
+ 1. Usuario autenticado visita /organismos/nuevo
+         │
+         ▼
+ 2. Rellena: nombre, tipo (individual/corporativo), sector, país
+         │
+         ▼
+ 3. Elige plan + intervalo (mensual/anual)
+         │
+         ├── Plan Individual (gratis)
+         │         │
+         │         ▼
+         │   POST /api/organismos
+         │   → crea organismo
+         │   → crea miembro (rol: administrador)
+         │   → crea suscripción (estado: activa, plan: individual)
+         │   → redirect a /organismos/[slug]/agenda
+         │
+         └── Plan de pago
+                   │
+                   ▼
+             POST /api/billing/checkout
+             → crea organismo (pendiente de activación)
+             → crea suscripción (estado: prueba)
+             → devuelve Stripe Checkout URL
+                   │
+                   ▼
+             Usuario paga en Stripe
+                   │
+                   ▼
+             Webhook: checkout.session.completed
+             → actualiza suscripción (estado: activa)
+             → redirect a /organismos/[slug]/agenda
 ```
 
-### Paso 3 — Pago (si aplica)
-
-Stripe Checkout en nueva pestaña o redirección. Al completarse, el webhook activa la suscripción.
-
-### Paso 4 — Configurar organismo
-
-Tras el pago, el administrador aterriza en `/organismos/[slug]/ajustes` para:
-- Subir logo.
-- Configurar departamentos del organismo.
-- Invitar miembros por correo.
-
-### Paso 5 — Invitación de miembros
+### Invitación de miembro
 
 ```
-POST /api/organismos/[slug]/invitaciones
-  { email, rolCodigo }
-
-→ Registra invitación pendiente en BD
-→ Envía email con enlace firmado (token de 48 h)
-→ Al aceptar: se crea la fila en organismo_miembros
+ Admin visita /organismos/[slug]/miembros
+         │
+         ▼
+ Introduce email + elige rol
+         │
+         ▼
+ POST /api/organismos/[slug]/invitaciones
+ → verifica límite de usuarios del plan
+ → crea fila en organismo_invitaciones (token, expira en 48h)
+ → envía email con enlace firmado (Resend)
+         │
+         ▼
+ Destinatario hace clic en el enlace
+         │
+         ├── ¿tiene cuenta?
+         │     ├── SÍ → POST /api/organismos/aceptar-invitacion?token=...
+         │     │         → crea organismo_miembros
+         │     │         → marca invitación como usada
+         │     │         → redirect al organismo
+         │     │
+         │     └── NO → redirect a /registro?invitacion=...
+         │               → tras registrarse, acepta automáticamente
+         │
+         └── ¿token expirado o ya usado?
+               → mensaje de error + enlace para pedir nueva invitación
 ```
 
 ---
 
-## 10. Migración desde el estado actual
+## 11. Migración sin downtime
 
-El organismo actualmente existente (Segesa) se convierte en el primer organismo de la plataforma.
+El objetivo es que los usuarios de Segesa no perciban ningún cambio.
 
-### Script de migración
+```
+FASE A — Preparar esquema (sin tocar datos existentes)
+──────────────────────────────────────────────────────
+  1. Crear las 5 tablas nuevas (organismos, miembros, suscripciones, etc.)
+  2. Añadir columna organismo_id NULLABLE a tareas, responsables, etc.
+  3. Crear índices en organismo_id
+  4. NO activar RLS todavía
+
+FASE B — Migrar datos de Segesa
+──────────────────────────────────────────────────────
+  1. Crear el organismo semilla "Segesa" con UUID fijo
+  2. Asignar todos los perfiles existentes como miembros (con su rol actual)
+  3. Actualizar todas las filas con organismo_id = UUID_SEGESA
+  4. Establecer NOT NULL en organismo_id
+  5. Crear suscripción "empresa" activa para Segesa
+
+FASE C — Activar aislamiento
+──────────────────────────────────────────────────────
+  1. Activar RLS en todas las tablas migradas
+  2. Desplegar nueva versión de la app (middleware + context)
+  3. Verificar que los usuarios de Segesa siguen viendo sus datos
+
+FASE D — Abrir registro multi-organismo
+──────────────────────────────────────────────────────
+  1. Publicar /planes
+  2. Activar /organismos/nuevo
+  3. Configurar Stripe en modo live
+```
+
+### Script SQL de migración
 
 ```sql
--- 1. Crear el organismo "Segesa" (organismo semilla)
-INSERT INTO organismos (id, nombre, slug, tipo, activo)
+-- FASE B completa
+
+BEGIN;
+
+-- 1. Organismo semilla
+INSERT INTO organismos (id, nombre, slug, tipo, activo, creado_por)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
   'Segesa',
   'segesa',
   'corporativo',
-  true
+  true,
+  (SELECT id FROM auth.users LIMIT 1)  -- primer usuario como propietario
 );
 
--- 2. Asignar todos los usuarios existentes al organismo Segesa
+-- 2. Migrar todos los perfiles como miembros
 INSERT INTO organismo_miembros (organismo_id, usuario_id, rol_codigo)
 SELECT
   '00000000-0000-0000-0000-000000000001',
   p.id,
   COALESCE(tu.codigo, 'responsable')
 FROM perfiles p
-LEFT JOIN tipos_usuario tu ON tu.id = p.tipo_usuario_id;
+LEFT JOIN tipos_usuario tu ON tu.id = p.tipo_usuario_id
+ON CONFLICT (organismo_id, usuario_id) DO NOTHING;
 
--- 3. Marcar todas las filas existentes con el organismo Segesa
-UPDATE tareas       SET organismo_id = '00000000-0000-0000-0000-000000000001';
-UPDATE responsables SET organismo_id = '00000000-0000-0000-0000-000000000001';
-UPDATE departamentos SET organismo_id = '00000000-0000-0000-0000-000000000001';
-UPDATE historial    SET organismo_id = '00000000-0000-0000-0000-000000000001';
-UPDATE alertas      SET organismo_id = '00000000-0000-0000-0000-000000000001';
+-- 3. Asignar organismo_id a todas las filas existentes
+UPDATE tareas          SET organismo_id = '00000000-0000-0000-0000-000000000001';
+UPDATE responsables    SET organismo_id = '00000000-0000-0000-0000-000000000001';
+UPDATE departamentos   SET organismo_id = '00000000-0000-0000-0000-000000000001';
+UPDATE historial       SET organismo_id = '00000000-0000-0000-0000-000000000001';
+UPDATE alertas         SET organismo_id = '00000000-0000-0000-0000-000000000001';
 
--- 4. Añadir NOT NULL una vez que todas las filas tienen valor
-ALTER TABLE tareas        ALTER COLUMN organismo_id SET NOT NULL;
-ALTER TABLE responsables  ALTER COLUMN organismo_id SET NOT NULL;
-ALTER TABLE departamentos ALTER COLUMN organismo_id SET NOT NULL;
-ALTER TABLE historial     ALTER COLUMN organismo_id SET NOT NULL;
-ALTER TABLE alertas       ALTER COLUMN organismo_id SET NOT NULL;
+-- 4. Hacer NOT NULL
+ALTER TABLE tareas          ALTER COLUMN organismo_id SET NOT NULL;
+ALTER TABLE responsables    ALTER COLUMN organismo_id SET NOT NULL;
+ALTER TABLE departamentos   ALTER COLUMN organismo_id SET NOT NULL;
+ALTER TABLE historial       ALTER COLUMN organismo_id SET NOT NULL;
+ALTER TABLE alertas         ALTER COLUMN organismo_id SET NOT NULL;
 
--- 5. Crear suscripción gratuita/empresa para Segesa
+-- 5. Suscripción activa para Segesa
 INSERT INTO organismo_suscripciones (organismo_id, plan_codigo, estado)
 VALUES ('00000000-0000-0000-0000-000000000001', 'empresa', 'activa');
+
+COMMIT;
 ```
 
-### Compatibilidad de código durante la migración
+---
 
-Durante la transición, las APIs pueden tomar el `organismo_id` de un header inyectado por el middleware y continuar funcionando sin cambios internos. Solo se añade el `.eq('organismo_id', organismoId)` como filtro adicional.
+## 12. Roadmap de implementación
+
+```
+ FASE 1 ──── Semanas 1-2: Esquema y migración de datos
+ ┌──────────────────────────────────────────────────────────────┐
+ │  [ ] Tablas nuevas: organismos, miembros, suscripciones      │
+ │  [ ] Columna organismo_id + índices en tablas existentes     │
+ │  [ ] Script de migración de Segesa                           │
+ │  [ ] Políticas RLS (activar tras migración)                  │
+ │  [ ] Actualizar lib/types.ts con nuevas interfaces           │
+ └──────────────────────────────────────────────────────────────┘
+
+ FASE 2 ──── Semanas 3-4: Aislamiento en la app
+ ┌──────────────────────────────────────────────────────────────┐
+ │  [ ] lib/organismo-access.ts                                 │
+ │  [ ] Middleware ampliado (resolver organismo + suscripción)  │
+ │  [ ] .eq('organismo_id') en todos los route handlers         │
+ │  [ ] UserSessionProvider con contexto de organismo           │
+ │  [ ] Sidebar: logo organismo + OrganismoSelector             │
+ └──────────────────────────────────────────────────────────────┘
+
+ FASE 3 ──── Semanas 5-6: Alta y gestión de organismos
+ ┌──────────────────────────────────────────────────────────────┐
+ │  [ ] Página /organismos/nuevo                                │
+ │  [ ] POST /api/organismos                                    │
+ │  [ ] Página /organismos/[slug]/miembros                      │
+ │  [ ] Sistema de invitaciones (BD + email + aceptación)       │
+ │  [ ] Página /organismos/[slug]/ajustes                       │
+ └──────────────────────────────────────────────────────────────┘
+
+ FASE 4 ──── Semanas 7-8: Planes y pagos
+ ┌──────────────────────────────────────────────────────────────┐
+ │  [ ] lib/stripe.ts + lib/billing/*                           │
+ │  [ ] Productos y precios en Stripe dashboard                 │
+ │  [ ] /api/billing/checkout, portal, webhook                  │
+ │  [ ] Página /planes (pública)                                │
+ │  [ ] Página /organismos/[slug]/facturacion                   │
+ │  [ ] Validación de límites de plan en APIs                   │
+ │  [ ] Gate de suscripción en middleware                       │
+ └──────────────────────────────────────────────────────────────┘
+
+ FASE 5 ──── Semana 9: Producción
+ ┌──────────────────────────────────────────────────────────────┐
+ │  [ ] Tests del flujo de pago en modo Stripe test             │
+ │  [ ] Mensajes de UI cuando se alcanza el límite del plan     │
+ │  [ ] Email de bienvenida al crear organismo                  │
+ │  [ ] Logging de webhooks fallidos                            │
+ │  [ ] Activar Stripe en modo live                             │
+ └──────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 11. Roadmap de implementación
+## 13. Trade-offs y decisiones abiertas
 
-### Fase 1 — Base de datos multi-organismo (1–2 semanas)
+### Decisiones tomadas
 
-- [ ] Crear tablas `organismos`, `organismo_miembros`, `organismo_suscripciones`, `organismo_facturas`.
-- [ ] Añadir columna `organismo_id` a todas las tablas de datos.
-- [ ] Ejecutar script de migración sobre datos existentes.
-- [ ] Configurar políticas RLS en Supabase.
-- [ ] Actualizar `lib/types.ts` con los nuevos tipos.
+| Decisión | Alternativa descartada | Motivo |
+|---|---|---|
+| Shared DB + RLS | Una DB por organismo | Coste operativo insostenible con muchos organismos pequeños |
+| Stripe Billing hosted | Implementación propia del pago | Stripe gestiona PCI DSS, reintentos, facturas y portal |
+| Slug en URL `/organismos/[slug]` | Solo UUID | El slug es legible y compartible; el UUID va en headers internos |
+| Cookie para organismo activo | Solo en JWT | El JWT no se puede modificar sin re-login; la cookie es mutable |
+| 14 días de prueba gratis | No trial | Reduce la fricción para organismos nuevos |
 
-### Fase 2 — Aislamiento en la aplicación (1–2 semanas)
+### Decisiones abiertas
 
-- [ ] Crear `lib/organismo-access.ts` para resolver el organismo activo.
-- [ ] Actualizar middleware para propagar `organismo_id`.
-- [ ] Añadir `.eq('organismo_id', organismoId)` en todos los route handlers de la API.
-- [ ] Actualizar `UserSessionProvider` con contexto de organismo.
-- [ ] Crear componente `OrganismoSelector`.
-
-### Fase 3 — Alta y gestión de organismos (2 semanas)
-
-- [ ] Página `/organismos/nuevo` (formulario de creación).
-- [ ] API `POST /api/organismos`.
-- [ ] Página `/organismos/[slug]/miembros` con sistema de invitaciones por email.
-- [ ] Página `/organismos/[slug]/ajustes`.
-- [ ] Selector de organismo en el sidebar.
-
-### Fase 4 — Planes y pagos (2 semanas)
-
-- [ ] Instalar `stripe` y configurar `lib/stripe.ts`.
-- [ ] Definir productos y precios en el dashboard de Stripe.
-- [ ] Crear route handlers de checkout, portal y webhook.
-- [ ] Página `/planes` (pública, con comparativa de planes).
-- [ ] Página `/organismos/[slug]/facturacion`.
-- [ ] Aplicar límites de plan en las APIs (tareas, usuarios).
-- [ ] Redirigir a facturación cuando la suscripción está vencida.
-
-### Fase 5 — Pulido y producción (1 semana)
-
-- [ ] Tests de integración del flujo de pago en modo Stripe test.
-- [ ] Validación de límites de plan en UI (mensajes cuando se alcanza el límite).
-- [ ] Email de bienvenida al crear un organismo.
-- [ ] Logging y monitorización de webhooks fallidos.
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  1. ¿Permitir que un organismo tenga múltiples admins?           │
+│     Sí: más flexibilidad. Riesgo: conflictos de configuración.   │
+│                                                                  │
+│  2. ¿Subdominios por organismo?                                  │
+│     (segesa.agendaapp.com vs agendaapp.com/organismos/segesa)    │
+│     Subdominios requieren wildcard SSL y DNS dinámico.           │
+│                                                                  │
+│  3. ¿Exportación de datos al cancelar?                           │
+│     GDPR recomienda ofrecer export antes de borrar datos.        │
+│     Añadir endpoint /api/organismos/[slug]/export.               │
+│                                                                  │
+│  4. ¿Retención de datos tras cancelación?                        │
+│     Sugerido: 30 días con datos inactivos, luego borrado.        │
+│     Requiere job de limpieza programado.                         │
+│                                                                  │
+│  5. ¿Plan Enterprise con precio negociado?                       │
+│     Flujo de contacto manual en lugar de Stripe checkout.        │
+└──────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## Resumen de dependencias nuevas
+### Dependencias nuevas
 
 ```bash
-npm install stripe               # Procesador de pagos
-npm install @stripe/stripe-js    # Cliente Stripe (checkout)
+npm install stripe               # Servidor: Stripe Node SDK
+npm install @stripe/stripe-js    # Cliente: Stripe.js para redirect al checkout
 ```
 
 ---
 
-## Consideraciones de seguridad
-
-1. **El webhook de Stripe** debe verificar la firma con `stripe.webhooks.constructEvent` antes de procesar cualquier evento.
-2. **Las APIs de organismo** deben comprobar que el usuario es miembro activo antes de operar. Nunca confiar únicamente en el `organismo_id` enviado por el cliente.
-3. **Los tokens de invitación** deben tener caducidad (48 h) y ser de un solo uso.
-4. **El `STRIPE_SECRET_KEY`** solo debe existir en el servidor. Nunca añadir `NEXT_PUBLIC_` a variables de Stripe.
-5. Los límites de plan deben validarse en el servidor (API), no solo en el cliente (UI).
+*Este documento debe revisarse antes del inicio de cada fase.*
+*Las decisiones abiertas deben resolverse antes de comenzar la Fase 3.*
