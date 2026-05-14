@@ -1,5 +1,5 @@
 -- ============================================================
--- CONTROL AUTOMATIZADO AGENDA - Esquema Supabase
+-- Agenda Segesa AGENDA - Esquema Supabase
 -- ============================================================
 
 -- Tabla principal de tareas

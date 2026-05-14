@@ -18,7 +18,7 @@ const poppinsDisplay = Poppins({
 })
 
 export const metadata: Metadata = {
-  title: 'Control Automatizado - Plan de Trabajo',
+  title: 'Agenda Segesa - Plan de Trabajo',
   description: 'Sistema de gestion de tareas, alertas y seguimiento operativo.',
   icons: {
     icon: '/logo/Icon-segesa.ico',

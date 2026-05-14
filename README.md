@@ -1,4 +1,4 @@
-# Control Automatizado - Plan de Trabajo
+# Agenda Segesa - Plan de Trabajo
 
 Sistema de gestion de tareas y seguimiento operativo construido con Next.js y Supabase.
 
