@@ -113,22 +113,29 @@ export default function AgendaDiariaPage() {
       if (value) params.set(key, value)
     })
 
-    const response = await window.fetch(`/api/tareas?${params.toString()}`)
-    const result = (await response.json()) as TasksResponse
+    try {
+      const response = await window.fetch(`/api/tareas?${params.toString()}`)
+      const result = (await response.json()) as TasksResponse
 
-    if (response.ok && result.ok) {
-      setTasks(normalizarTareas(result.tasks ?? []))
-      setTotalTasks(result.total ?? 0)
-      setTotalPages(result.totalPages ?? 0)
-      if (result.summary) {
-        setSummary(result.summary)
+      if (response.ok && result.ok) {
+        setTasks(normalizarTareas(result.tasks ?? []))
+        setTotalTasks(result.total ?? 0)
+        setTotalPages(result.totalPages ?? 0)
+        if (result.summary) {
+          setSummary(result.summary)
+        }
+      } else {
+        setTasks([])
+        setTotalTasks(0)
+        setTotalPages(0)
       }
-    } else {
+    } catch {
       setTasks([])
       setTotalTasks(0)
       setTotalPages(0)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [filters, page])
 
   useEffect(() => {

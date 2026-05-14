@@ -187,7 +187,7 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
       onSave()
       onClose()
     } catch (err: unknown) {
-      toast.error((err as Error)?.message ?? 'Error al guardar')
+      toast.error(err instanceof Error ? err.message : 'Error al guardar')
     } finally {
       setSaving(false)
     }

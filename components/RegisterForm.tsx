@@ -78,7 +78,7 @@ export default function RegisterForm() {
     }
 
     void loadRoles()
-  }, [roleCode])
+  }, [])
 
   const selectedRole = useMemo(
     () => roles.find((role) => role.codigo === roleCode) ?? roles[0],
