@@ -1,14 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertCircle, Eye, EyeOff, Loader2, LockKeyhole, Mail, ShieldAlert } from 'lucide-react'
+import { AlertCircle, Eye, EyeOff, Loader2, LockKeyhole, Mail } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
 import { supabase } from '@/lib/supabase'
 import { getRoleCapabilities } from '@/lib/role-capabilities'
-import { DOMAIN_ACQUISITION_DEADLINE, DOMAIN_WARNING_ROUTE } from '@/lib/domain-acquisition'
 import type { PerfilUsuario, TipoUsuario } from '@/lib/types'
 
 type LoginProfileRow = Omit<PerfilUsuario, 'tipo_usuario'> & {
@@ -27,31 +26,9 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [domainExpired, setDomainExpired] = useState(false)
-
-  useEffect(() => {
-    const deadline = new Date(DOMAIN_ACQUISITION_DEADLINE).getTime()
-
-    const verifyDomainPeriod = () => {
-      if (Date.now() >= deadline) {
-        setDomainExpired(true)
-        setSubmitting(false)
-      }
-    }
-
-    verifyDomainPeriod()
-    const interval = window.setInterval(verifyDomainPeriod, 1000)
-
-    return () => window.clearInterval(interval)
-  }, [])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (domainExpired) {
-      setError('El periodo por usar la app sin dominio se expiro. El acceso al login queda bloqueado.')
-      return
-    }
-
     setSubmitting(true)
     setError('')
 
@@ -159,7 +136,7 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
             Usa tus credenciales corporativas para acceder al sistema de agenda y seguimiento.
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4" aria-hidden={domainExpired}>
+          <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 <div className="flex items-start gap-2">
@@ -179,7 +156,6 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
                   onChange={(event) => setEmail(event.target.value)}
                   autoComplete="email"
                   required
-                  disabled={domainExpired}
                   className="input-shell pl-11"
                   placeholder="usuario@segesa.gq"
                 />
@@ -196,14 +172,12 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
                   onChange={(event) => setPassword(event.target.value)}
                   autoComplete="current-password"
                   required
-                  disabled={domainExpired}
                   className="input-shell pl-11 pr-12"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((current) => !current)}
-                  disabled={domainExpired}
                   className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
                   aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                 >
@@ -214,7 +188,7 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
 
             <button
               type="submit"
-              disabled={submitting || domainExpired}
+              disabled={submitting}
               className="action-btn-primary mt-2 w-full justify-center disabled:translate-y-0 disabled:opacity-60"
             >
               {submitting ? <Loader2 size={16} className="animate-spin" /> : <LockKeyhole size={16} />}
@@ -234,34 +208,6 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
         </div>
       </section>
 
-      {domainExpired && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="domain-expired-title"
-        >
-          <div className="w-full max-w-md rounded-[24px] border border-rose-200 bg-white p-6 text-center shadow-[0_24px_80px_rgba(15,23,42,0.35)]">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-              <ShieldAlert size={28} />
-            </div>
-            <h2 id="domain-expired-title" className="mt-5 text-xl font-semibold text-slate-950">
-              Periodo de uso sin dominio expirado
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Usuarios de la agenda: el periodo por usar la app sin dominio se expiro. El acceso al login queda bloqueado hasta adquirir o renovar el servidor/dominio.
-            </p>
-            <button
-              type="button"
-              onClick={() => router.replace(DOMAIN_WARNING_ROUTE)}
-              className="action-btn-primary mt-6 w-full justify-center"
-            >
-              <ShieldAlert size={16} />
-              Ver alerta de acceso
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

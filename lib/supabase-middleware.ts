@@ -2,7 +2,6 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { canAccessPathForRole, getLandingPathForRole } from '@/lib/access-control'
 import type { Database } from '@/lib/database.types'
-import { DOMAIN_WARNING_ROUTE, isDomainAcquisitionExpired } from '@/lib/domain-acquisition'
 
 type CookieMutation = {
   name: string
@@ -57,12 +56,10 @@ export async function updateSession(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
   const isLoginRoute = pathname === '/login'
-  const isDomainWarningRoute = pathname === DOMAIN_WARNING_ROUTE
   const isRegisterRoute = pathname === '/registro'
   const isRegisterApi = pathname === '/api/register'
   const isBootstrapApi = pathname === '/api/bootstrap/agenda-users'
-  const isProtectedRoute = !isLoginRoute && !isDomainWarningRoute && !isRegisterRoute && !isRegisterApi && !isBootstrapApi
-  const domainExpired = isDomainAcquisitionExpired()
+  const isProtectedRoute = !isLoginRoute && !isRegisterRoute && !isRegisterApi && !isBootstrapApi
   let resolvedRoleCode: string | null = null
 
   const loadRoleCode = async () => {
@@ -82,16 +79,6 @@ export async function updateSession(request: NextRequest) {
     return resolvedRoleCode
   }
 
-  if (!claims && domainExpired && isLoginRoute) {
-    const warningUrl = request.nextUrl.clone()
-    warningUrl.pathname = DOMAIN_WARNING_ROUTE
-    warningUrl.search = ''
-
-    const redirectResponse = NextResponse.redirect(warningUrl)
-    copyCookies(response, redirectResponse)
-    return redirectResponse
-  }
-
   if (!claims && isProtectedRoute) {
     if (isApiRoute(pathname)) {
       return NextResponse.json(
@@ -104,7 +91,7 @@ export async function updateSession(request: NextRequest) {
     }
 
     const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = DOMAIN_WARNING_ROUTE
+    loginUrl.pathname = '/login'
 
     const requestedPath =
       pathname === '/'
