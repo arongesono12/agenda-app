@@ -142,12 +142,29 @@ export async function GET(request: Request) {
 
         if (error) throw error
         const rows = (data ?? []) as ResponsableCatalogRow[]
-        result.responsables = onlyAssignable
-          ? await filterAssignableResponsables(admin, rows, {
-              roleCodes: roleFilter ? [roleFilter] : undefined,
-              departamento: departamentoFilter,
-            })
-          : rows
+
+        if (onlyAssignable) {
+          result.responsables = await filterAssignableResponsables(admin, rows, {
+            roleCodes: roleFilter ? [roleFilter] : undefined,
+            departamento: departamentoFilter,
+          })
+        } else {
+          const userIds = rows.map((r) => r.usuario_id).filter((id): id is string => !!id)
+          let avatarMap = new Map<string, string | null>()
+
+          if (userIds.length > 0) {
+            const { data: profiles } = await admin
+              .from('perfiles_usuario')
+              .select('id, avatar_url')
+              .in('id', userIds)
+            avatarMap = new Map((profiles ?? []).map((p) => [p.id as string, (p.avatar_url as string | null) ?? null]))
+          }
+
+          result.responsables = rows.map((r) => ({
+            ...r,
+            avatar_url: r.usuario_id ? (avatarMap.get(r.usuario_id) ?? null) : null,
+          }))
+        }
       }
     }
 
@@ -219,6 +236,40 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : 'No se pudo guardar el catalogo.' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const { user, profile } = await getServerSessionProfile()
+
+    if (!user || !hasAnyRole(profile, ADMIN_ROLE_CODES)) {
+      return NextResponse.json(
+        { ok: false, error: 'Solo administradores pueden cambiar el departamento de un responsable.' },
+        { status: 403 }
+      )
+    }
+
+    const payload = (await request.json()) as { id?: number; departamento?: string | null }
+    const id = Number(payload.id)
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return NextResponse.json({ ok: false, error: 'ID de responsable no valido.' }, { status: 400 })
+    }
+
+    const admin = createAdminSupabaseClient()
+    const { error } = await admin
+      .from('responsables')
+      .update({ departamento: payload.departamento?.trim() || null })
+      .eq('id', id)
+
+    if (error) throw error
+    return NextResponse.json({ ok: true })
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : 'No se pudo actualizar el departamento.' },
       { status: 500 }
     )
   }

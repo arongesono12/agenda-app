@@ -121,6 +121,7 @@ export interface Responsable {
   tipo_usuario_codigo?: string | null
   activo: boolean
   created_at?: string
+  avatar_url?: string | null
 }
 
 export const DEPARTAMENTOS = [

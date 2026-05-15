@@ -11,10 +11,14 @@ import {
   User,
   Tag,
   ShieldAlert,
+  Check,
+  Pencil,
+  X,
 } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import { ESTADOS, TIPOS_TAREA, PRIORIDADES } from '@/lib/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import UserAvatar from '@/components/ui/UserAvatar'
 import { useUserSession } from '@/components/UserSessionProvider'
 import type { Responsable } from '@/lib/types'
 
@@ -42,6 +46,10 @@ export default function CatalogosPage() {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
   const [deleteError, setDeleteError] = useState('')
   const [deleting, setDeleting] = useState(false)
+  const [editingRespId, setEditingRespId] = useState<number | null>(null)
+  const [editingDepto, setEditingDepto] = useState('')
+  const [updatingDepto, setUpdatingDepto] = useState(false)
+  const [updateDeptoError, setUpdateDeptoError] = useState('')
   const usuariosPorDepartamento = useMemo(() => {
     return resps.reduce<Record<string, number>>((acc, responsable) => {
       const departamento = responsable.departamento?.trim()
@@ -129,6 +137,29 @@ export default function CatalogosPage() {
 
     setNewResp({ nombre: '', email: '', departamento: '', cargo: '' })
     setSaving(false)
+    void fetch()
+  }
+
+  const updateDepartamento = async (id: number, depto: string) => {
+    setUpdatingDepto(true)
+    setUpdateDeptoError('')
+
+    const response = await window.fetch('/api/catalogos', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, departamento: depto || null }),
+    })
+    const result = (await response.json()) as { ok?: boolean; error?: string }
+
+    if (!response.ok || !result.ok) {
+      setUpdateDeptoError(result.error ?? 'No se pudo actualizar el departamento.')
+      setUpdatingDepto(false)
+      return
+    }
+
+    setEditingRespId(null)
+    setUpdateDeptoError('')
+    setUpdatingDepto(false)
     void fetch()
   }
 
@@ -279,26 +310,83 @@ export default function CatalogosPage() {
                 {resps.map((r) => (
                   <li key={r.id} className="flex items-center justify-between gap-3 px-5 py-4">
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900/5 text-sm font-semibold text-slate-700">
-                        {r.nombre.charAt(0).toUpperCase()}
-                      </div>
+                      <UserAvatar
+                        name={r.nombre}
+                        avatarUrl={r.avatar_url}
+                        size="sm"
+                        className="h-11 w-11 flex-shrink-0 rounded-full"
+                      />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-slate-800">{r.nombre}</p>
-                        <p className="truncate text-xs text-slate-500">
-                          {[r.cargo, r.departamento].filter(Boolean).join(' · ') || 'Sin detalle adicional'}
-                        </p>
-                        {r.email && <p className="truncate text-xs text-slate-500">{r.email}</p>}
+                        {r.cargo && <p className="truncate text-xs text-slate-500">{r.cargo}</p>}
+
+                        {editingRespId === r.id ? (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <select
+                              value={editingDepto}
+                              onChange={(e) => setEditingDepto(e.target.value)}
+                              autoFocus
+                              className="h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-teal-400 focus:outline-none"
+                            >
+                              <option value="">Sin departamento</option>
+                              {deptos.map((d) => (
+                                <option key={d.id} value={d.nombre}>{d.nombre}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => void updateDepartamento(r.id, editingDepto)}
+                              disabled={updatingDepto}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-700 transition-colors hover:bg-teal-100 disabled:opacity-60"
+                              title="Confirmar cambio"
+                            >
+                              {updatingDepto ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setEditingRespId(null); setUpdateDeptoError('') }}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100"
+                              title="Cancelar"
+                            >
+                              <X size={11} />
+                            </button>
+                            {updateDeptoError && (
+                              <p className="w-full text-[11px] text-rose-600">{updateDeptoError}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span className="text-xs text-slate-500">
+                              {r.departamento ?? 'Sin departamento'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingRespId(r.id)
+                                setEditingDepto(r.departamento ?? '')
+                                setUpdateDeptoError('')
+                              }}
+                              className="flex h-5 w-5 items-center justify-center rounded text-slate-300 transition-colors hover:bg-slate-100 hover:text-teal-700"
+                              title="Cambiar departamento"
+                            >
+                              <Pencil size={10} />
+                            </button>
+                          </div>
+                        )}
+
+                        {r.email && <p className="truncate text-xs text-slate-400">{r.email}</p>}
                         <p className={r.usuario_id ? 'mt-1 text-xs font-semibold text-teal-600' : 'mt-1 text-xs font-semibold text-amber-600'}>
                           {r.usuario_id ? 'Usuario asociado' : 'Sin usuario asociado'}
                         </p>
                       </div>
                     </div>
                     <button
+                      type="button"
                       onClick={() => {
                         setDeleteError('')
                         setDeleteTarget({ type: 'resp', id: r.id, label: r.nombre })
                       }}
-                      className="action-btn h-10 w-10 rounded-2xl p-0 text-rose-600"
+                      className="action-btn h-10 w-10 flex-shrink-0 rounded-2xl p-0 text-rose-600"
                     >
                       <Trash2 size={14} />
                     </button>
