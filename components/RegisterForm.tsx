@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
@@ -43,12 +43,16 @@ export default function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [roleCode, setRoleCode] = useState('responsable')
+  const roleCodeRef = useRef(roleCode)
+  roleCodeRef.current = roleCode
   const [departamento, setDepartamento] = useState('')
   const [accepted, setAccepted] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingRoles, setLoadingRoles] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  const selectedRole = useMemo(() => roles.find(role => role.codigo === roleCode), [roles, roleCode])
 
   useEffect(() => {
     const loadRoles = async () => {
@@ -64,7 +68,7 @@ export default function RegisterForm() {
 
         setRoles(nextRoles)
         setDepartamentos(nextDepartamentos)
-        if (!nextRoles.some((role) => role.codigo === roleCode)) {
+        if (!nextRoles.some((role) => role.codigo === roleCodeRef.current)) {
           setRoleCode(nextRoles[0].codigo)
         }
         setDepartamento((current) => current || nextDepartamentos[0]?.nombre || '')
@@ -79,11 +83,6 @@ export default function RegisterForm() {
 
     void loadRoles()
   }, [])
-
-  const selectedRole = useMemo(
-    () => roles.find((role) => role.codigo === roleCode) ?? roles[0],
-    [roleCode, roles]
-  )
 
   const passwordRules = [
     { label: 'Minimo 8 caracteres', valid: password.length >= 8 },
@@ -154,8 +153,8 @@ export default function RegisterForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-6">
-      <div className="grid w-full max-w-5xl grid-cols-1 gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-        <section className="surface-panel-dark relative overflow-hidden p-6 text-white sm:p-8 lg:p-10">
+      <div className="grid w-full max-w-md grid-cols-1 gap-6 lg:max-w-5xl lg:grid-cols-[0.95fr_1.05fr]">
+        <section className="surface-panel-dark relative hidden overflow-hidden p-6 text-white sm:p-8 lg:block lg:p-10">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.22),transparent_34%)]" />
           <div className="relative flex h-full flex-col justify-between gap-8">
             <div>
@@ -253,10 +252,11 @@ export default function RegisterForm() {
               </div>
 
               <div>
-                <label className="label-field">Rol solicitado</label>
+                <label htmlFor="role-select" className="label-field">Rol solicitado</label>
                 <div className="relative">
                   <UsersRound size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <select
+                    id="role-select"
                     value={roleCode}
                     onChange={(event) => setRoleCode(event.target.value)}
                     disabled={loadingRoles}
@@ -276,10 +276,11 @@ export default function RegisterForm() {
               </div>
 
               <div>
-                <label className="label-field">Departamento</label>
+                <label className="label-field" htmlFor="departamento-select">Departamento</label>
                 <div className="relative">
                   <Building2 size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <select
+                    id="departamento-select"
                     value={departamento}
                     onChange={(event) => setDepartamento(event.target.value)}
                     required

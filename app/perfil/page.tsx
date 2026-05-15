@@ -4,15 +4,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   BadgeCheck,
+  CalendarDays,
   KeyRound,
   Loader2,
   Mail,
+  Pencil,
   RefreshCw,
   Save,
   ShieldCheck,
   Trash2,
   Upload,
   UserRound,
+  X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import type { PerfilUsuario, TipoUsuario } from '@/lib/types'
@@ -60,6 +63,7 @@ export default function PerfilPage() {
   const { refreshProfile } = useUserSession()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [schemaWarning, setSchemaWarning] = useState('')
@@ -136,6 +140,27 @@ export default function PerfilPage() {
     () => normalizarTipoUsuario(profile?.tipo_usuario),
     [profile?.tipo_usuario]
   )
+
+  const openEditModal = () => {
+    setForm({
+      nombre: profile?.nombre_completo ?? '',
+      password: '',
+      confirmPassword: '',
+    })
+    setAvatarFile(null)
+    setAvatarPreview(profile?.avatar_url ?? null)
+    setRemoveAvatar(false)
+    setError('')
+    setSuccess('')
+    setEditOpen(true)
+  }
+
+  useEffect(() => {
+    if (!editOpen) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setEditOpen(false) }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [editOpen])
 
   const handleChange = (key: keyof typeof EMPTY_FORM, value: string) => {
     setForm((current) => ({ ...current, [key]: value }))
@@ -289,6 +314,7 @@ export default function PerfilPage() {
       await refreshProfile()
       await loadProfile()
       router.refresh()
+      setTimeout(() => setEditOpen(false), 1200)
     } catch (submitError: unknown) {
       setError(submitError instanceof Error ? submitError.message : 'No se pudo actualizar el perfil.')
     } finally {
@@ -324,191 +350,239 @@ export default function PerfilPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[0.95fr_1.25fr]">
-        <section className="surface-panel-dark overflow-hidden p-6 text-white">
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-100/85">
-            <ShieldCheck size={14} />
-            Identidad activa
-          </span>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,480px)]">
+        <section className="surface-panel-dark relative overflow-hidden text-white">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(45,212,191,0.2),transparent_55%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(99,102,241,0.12),transparent_55%)]" />
 
-          <div className="mt-6 space-y-4">
-            <div className="flex flex-col items-center rounded-[30px] border border-white/10 bg-white/[0.05] p-6 text-center">
-              <UserAvatar
-                name={profile?.nombre_completo}
-                avatarUrl={avatarPreview}
-                size="xl"
-                className="h-28 w-28 rounded-full"
-              />
-              <p className="mt-4 text-xl font-semibold text-slate-100">
-                {profile?.nombre_completo || 'Sin nombre configurado'}
-              </p>
-              <span className="mt-3 inline-flex items-center rounded-full border border-teal-200/20 bg-teal-400/10 px-3 py-1 text-xs font-semibold text-teal-100">
+          <div className="relative h-24 bg-gradient-to-br from-teal-800/25 via-slate-800/10 to-transparent" />
+
+          <div className="relative px-6 pb-7">
+            <div className="-mt-14 flex items-start justify-between gap-3">
+              <div className="rounded-full bg-gradient-to-br from-teal-400/20 to-slate-900/40 p-1 ring-2 ring-teal-500/20">
+                <UserAvatar
+                  name={profile?.nombre_completo}
+                  avatarUrl={avatarPreview}
+                  size="xl"
+                  className="h-24 w-24 rounded-full ring-4 ring-slate-900"
+                />
+              </div>
+              <span className="mt-16 inline-flex items-center gap-1.5 rounded-full border border-teal-200/20 bg-teal-400/10 px-3 py-1.5 text-[11px] font-semibold text-teal-100">
+                <BadgeCheck size={13} />
                 {tipoUsuario?.nombre ?? 'Responsable'}
               </span>
             </div>
 
-            <div className="rounded-[26px] border border-white/10 bg-white/[0.05] p-4">
-              <div className="flex items-center gap-3">
-                <Mail size={16} className="text-teal-100" />
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Correo</p>
-                  <p className="mt-1 text-sm font-semibold text-slate-100">{profile?.email}</p>
-                </div>
-              </div>
+            <div className="mt-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Identidad activa</p>
+              <h2 className="mt-1.5 text-2xl font-semibold tracking-[-0.04em] text-slate-50">
+                {profile?.nombre_completo || 'Sin nombre configurado'}
+              </h2>
+              <p className="mt-1 flex items-center gap-2 text-sm text-slate-400">
+                <Mail size={13} className="flex-shrink-0 text-teal-400/70" />
+                {profile?.email}
+              </p>
             </div>
 
-            <div className="rounded-[26px] border border-white/10 bg-white/[0.05] p-4">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Tipo de usuario</p>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <span className="badge border-teal-200/20 bg-teal-400/10 text-teal-100">
-                  <BadgeCheck size={14} />
-                  {tipoUsuario?.nombre ?? 'Responsable'}
-                </span>
-                <span className="text-xs text-slate-300">{tipoUsuario?.descripcion ?? 'Perfil operativo con acceso autenticado.'}</span>
-              </div>
-            </div>
-
-            <div className="rounded-[26px] border border-white/10 bg-white/[0.05] p-4">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Ultima actualizacion</p>
-              <p className="mt-2 text-sm font-semibold text-slate-100">{formatDateTime(profile?.updated_at)}</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="surface-panel-strong p-5 sm:p-6">
-          <div className="mb-6">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Configuracion personal</p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">Editar datos de acceso</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">
-              Los cambios se guardan en tu perfil, en la autenticacion de Supabase y en el avatar visible del sidebar.
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {error && (
-              <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {error}
-              </div>
-            )}
-
-            {success && (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                {success}
-              </div>
-            )}
-
-            <div className="rounded-[28px] border border-white/80 bg-slate-50/80 p-5">
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-                <UserAvatar
-                  name={form.nombre || profile?.nombre_completo}
-                  avatarUrl={avatarPreview}
-                  size="lg"
-                  className="h-24 w-24 rounded-full"
-                />
-
-                <div className="flex-1">
-                  <label className="label-field">Foto del perfil</label>
-                  <div className="flex flex-col gap-3 sm:flex-row">
-                    <label className="action-btn cursor-pointer justify-center">
-                      <Upload size={16} />
-                      Subir foto
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        className="hidden"
-                        onChange={handleAvatarSelection}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      onClick={clearAvatar}
-                      className="action-btn-ghost justify-center"
-                    >
-                      <Trash2 size={16} />
-                      Quitar foto
-                    </button>
+            <div className="mt-5 space-y-3">
+              <div className="rounded-[22px] border border-white/10 bg-white/[0.04] px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck size={15} className="mt-0.5 flex-shrink-0 text-teal-300" />
+                  <div className="min-w-0">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Rol</p>
+                    <p className="mt-0.5 text-sm font-semibold text-slate-100">{tipoUsuario?.nombre ?? 'Responsable'}</p>
+                    <p className="mt-0.5 text-xs leading-5 text-slate-400">{tipoUsuario?.descripcion ?? 'Perfil operativo con acceso autenticado.'}</p>
                   </div>
-                  <p className="mt-3 text-xs text-slate-500">
-                    Sube una imagen JPG, PNG o WEBP de hasta 5 MB.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="label-field">Nombre del usuario</label>
-              <div className="relative">
-                <UserRound size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={form.nombre}
-                  onChange={(event) => handleChange('nombre', event.target.value)}
-                  className="input-shell pl-11"
-                  placeholder="Nombre completo"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="label-field">Correo asociado</label>
-              <div className="relative">
-                <Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="email"
-                  value={profile?.email ?? ''}
-                  readOnly
-                  className="input-shell cursor-not-allowed pl-11 opacity-80"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="label-field">Nueva contrasena</label>
-                <div className="relative">
-                  <KeyRound size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="password"
-                    value={form.password}
-                    onChange={(event) => handleChange('password', event.target.value)}
-                    minLength={8}
-                    className="input-shell pl-11"
-                    placeholder="Minimo 8 caracteres"
-                  />
                 </div>
               </div>
 
-              <div>
-                <label className="label-field">Confirmar contrasena</label>
-                <div className="relative">
-                  <KeyRound size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="password"
-                    value={form.confirmPassword}
-                    onChange={(event) => handleChange('confirmPassword', event.target.value)}
-                    minLength={8}
-                    className="input-shell pl-11"
-                    placeholder="Repite la contrasena"
-                  />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-[22px] border border-white/10 bg-white/[0.04] px-4 py-3">
+                  <div className="flex items-center gap-2 text-teal-300">
+                    <CalendarDays size={13} />
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Alta</p>
+                  </div>
+                  <p className="mt-1.5 text-xs font-semibold leading-5 text-slate-100">{formatDateTime(profile?.created_at)}</p>
+                </div>
+                <div className="rounded-[22px] border border-white/10 bg-white/[0.04] px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw size={13} className="text-teal-300" />
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">Cambio</p>
+                  </div>
+                  <p className="mt-1.5 text-xs font-semibold leading-5 text-slate-100">{formatDateTime(profile?.updated_at)}</p>
                 </div>
               </div>
-            </div>
-
-            <div className="rounded-[24px] border border-white/80 bg-slate-50/80 p-4 text-sm leading-6 text-slate-600">
-              Si dejas la contrasena vacia, solo se actualizara el nombre y la foto del usuario.
             </div>
 
             <button
-              type="submit"
-              disabled={saving}
-              className="action-btn-primary w-full justify-center disabled:translate-y-0 disabled:opacity-60"
+              type="button"
+              onClick={openEditModal}
+              className="action-btn-primary mt-6 w-full justify-center"
             >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              {saving ? 'Guardando cambios...' : 'Guardar cambios'}
+              <Pencil size={15} />
+              Editar perfil
             </button>
-          </form>
+          </div>
         </section>
+
       </div>
+
+      {editOpen && (
+        <div
+          className="agenda-modal-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setEditOpen(false) }}
+        >
+          <div className="agenda-modal-shell w-full max-w-xl">
+            <div className="flex items-center justify-between border-b border-white/70 px-6 py-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Configuracion personal</p>
+                <p className="mt-0.5 text-lg font-semibold text-slate-900">Editar datos de acceso</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditOpen(false)}
+                className="agenda-modal-close"
+                aria-label="Cerrar"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto px-6 py-5">
+              <p className="mb-5 text-sm leading-6 text-slate-500">
+                Los cambios se guardan en tu perfil, en la autenticacion de Supabase y en el avatar visible del sidebar.
+              </p>
+
+              <form onSubmit={handleSubmit} className="space-y-5">
+                {error && (
+                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                    {error}
+                  </div>
+                )}
+
+                {success && (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {success}
+                  </div>
+                )}
+
+                <div className="rounded-[28px] border border-white/80 bg-slate-50/80 p-5">
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+                    <UserAvatar
+                      name={form.nombre || profile?.nombre_completo}
+                      avatarUrl={avatarPreview}
+                      size="lg"
+                      className="h-20 w-20 rounded-full"
+                    />
+                    <div className="flex-1">
+                      <label className="label-field">Foto del perfil</label>
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <label className="action-btn cursor-pointer justify-center">
+                          <Upload size={16} />
+                          Subir foto
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={handleAvatarSelection}
+                          />
+                        </label>
+                        <button type="button" onClick={clearAvatar} className="action-btn-ghost justify-center">
+                          <Trash2 size={16} />
+                          Quitar foto
+                        </button>
+                      </div>
+                      <p className="mt-3 text-xs text-slate-500">JPG, PNG o WEBP · Max 5 MB</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label-field">Nombre del usuario</label>
+                  <div className="relative">
+                    <UserRound size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={form.nombre}
+                      onChange={(event) => handleChange('nombre', event.target.value)}
+                      className="input-shell pl-11"
+                      placeholder="Nombre completo"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label-field">Correo asociado</label>
+                  <div className="relative">
+                    <Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="email"
+                      value={profile?.email ?? ''}
+                      readOnly
+                      title="Correo asociado a la cuenta"
+                      placeholder="correo@segesa.gq"
+                      className="input-shell cursor-not-allowed pl-11 opacity-60"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="label-field">Nueva contrasena</label>
+                    <div className="relative">
+                      <KeyRound size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="password"
+                        value={form.password}
+                        onChange={(event) => handleChange('password', event.target.value)}
+                        minLength={8}
+                        className="input-shell pl-11"
+                        placeholder="Minimo 8 caracteres"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="label-field">Confirmar contrasena</label>
+                    <div className="relative">
+                      <KeyRound size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="password"
+                        value={form.confirmPassword}
+                        onChange={(event) => handleChange('confirmPassword', event.target.value)}
+                        minLength={8}
+                        className="input-shell pl-11"
+                        placeholder="Repite la contrasena"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[22px] border border-white/80 bg-slate-50/80 px-4 py-3 text-xs leading-5 text-slate-500">
+                  Si dejas la contrasena vacia, solo se actualizara el nombre y la foto.
+                </div>
+
+                <div className="flex gap-3 pb-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditOpen(false)}
+                    className="action-btn-ghost flex-1 justify-center"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="action-btn-primary flex-1 justify-center disabled:translate-y-0 disabled:opacity-60"
+                  >
+                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    {saving ? 'Guardando...' : 'Guardar cambios'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

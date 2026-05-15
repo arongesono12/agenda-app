@@ -64,7 +64,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
       !!profile?.id &&
       (task.responsable_usuario_id === profile.id ||
         !!task.asignaciones?.some((assignment) => assignment.responsable_usuario_id === profile.id)),
-    [capabilities.roleCode, profile?.id, reassignmentDone, task.asignaciones, task.estado, task.responsable_usuario_id]
+    [capabilities.roleCode, profile, reassignmentDone, task.asignaciones, task.estado, task.responsable_usuario_id]
   )
 
   const fetchHistorial = useCallback(async () => {
@@ -319,6 +319,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                       onChange={(event) => setForm((current) => ({ ...current, tipo_cambio: event.target.value as TipoOrden }))}
                       className="input-shell"
                       disabled={!canAdd || submitting}
+                      title="Tipo de cambio"
                     >
                       {TIPOS_ORDEN.map((tipo) => (
                         <option key={tipo} value={tipo}>
@@ -405,6 +406,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                       <select
                         value={nextResponsableId}
                         onChange={(event) => setNextResponsableId(event.target.value)}
+                        aria-label="Seleccionar responsable"
                         className="input-shell"
                         disabled={assigning || assignableResponsables.length === 0}
                       >
@@ -455,31 +457,35 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                   ) : (
                     <div className="space-y-3">
                       {rows.map((row) => (
-                        <article key={row.id} className="rounded-[26px] border border-white/80 bg-white/80 p-4 shadow-[0_12px_30px_rgba(15,23,42,0.05)]">
+                        <article key={row.id} className="rounded-[26px] border border-slate-100 bg-white p-4 shadow-[0_4px_16px_rgba(15,23,42,0.06)]">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className={`badge ${CHANGE_COLOR[row.tipo_cambio] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>
                               {row.tipo_cambio}
                             </span>
-                            <span className="text-xs font-medium text-slate-500">{formatDateTime(row.fecha)}</span>
+                            <span className="text-xs font-medium text-slate-400">{formatDateTime(row.fecha)}</span>
                           </div>
 
                           {(row.valor_anterior || row.valor_nuevo) && (
-                            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-                              <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-500">
+                            <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
+                              <span className="max-w-[40%] break-all rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
                                 {row.valor_anterior ?? 'Sin valor anterior'}
                               </span>
-                              <ArrowRight size={14} className="text-slate-400" />
-                              <span className="rounded-full bg-teal-50 px-3 py-1 font-semibold text-teal-700">
+                              <ArrowRight size={12} className="flex-shrink-0 text-slate-400" />
+                              <span className="max-w-[40%] break-all rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">
                                 {row.valor_nuevo ?? 'Sin valor nuevo'}
                               </span>
                             </div>
                           )}
 
-                          <p className="mt-3 text-sm leading-6 text-slate-600">{row.observaciones ?? 'Sin observaciones registradas.'}</p>
+                          {row.observaciones ? (
+                            <p className="mt-3 break-words text-sm leading-6 text-slate-800">{row.observaciones}</p>
+                          ) : (
+                            <p className="mt-3 text-xs italic text-slate-400">Sin observaciones registradas.</p>
+                          )}
 
-                          <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
-                            <span className="text-xs text-slate-500">Módulo: {row.modulo}</span>
-                            <span className="text-xs font-semibold text-slate-600">{row.usuario ?? 'Sistema'}</span>
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                            <span className="text-[11px] text-slate-400">Módulo: {row.modulo}</span>
+                            <span className="text-[11px] font-semibold text-slate-500">{row.usuario ?? 'Sistema'}</span>
                           </div>
                         </article>
                       ))}
