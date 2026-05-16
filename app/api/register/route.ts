@@ -244,21 +244,15 @@ export async function POST(request: Request) {
 
     const existingUser = await findAuthUserByEmail(admin, email)
     let userId = ''
-    let action: 'created' | 'updated' = 'created'
 
     if (existingUser) {
-      const { data: updatedUser, error: updateError } = await admin.auth.admin.updateUserById(existingUser.id, {
-        password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: fullName,
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Ya existe una cuenta con este correo. Usa la opcion de recuperar contrasena desde el login.',
         },
-      })
-
-      if (updateError) throw updateError
-
-      userId = updatedUser.user.id
-      action = 'updated'
+        { status: 409 }
+      )
     } else {
       const { data: createdUser, error: createError } = await admin.auth.admin.createUser({
         email,
@@ -300,7 +294,7 @@ export async function POST(request: Request) {
         id: userId,
         email,
         role: roleRow.nombre,
-        action,
+        action: 'created',
       },
     })
   } catch (error: unknown) {

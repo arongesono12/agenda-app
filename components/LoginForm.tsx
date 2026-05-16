@@ -163,7 +163,12 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
             </div>
 
             <div>
-              <label className="label-field">Contraseña</label>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <label className="label-field mb-0">Contraseña</label>
+                <Link href="/recuperar-password" className="text-xs font-semibold text-teal-700 transition-colors hover:text-teal-900">
+                  Olvidaste tu contraseña?
+                </Link>
+              </div>
               <div className="relative">
                 <LockKeyhole size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input

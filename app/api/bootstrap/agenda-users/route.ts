@@ -37,6 +37,10 @@ function readBootstrapToken(request: Request) {
   return request.headers.get('x-bootstrap-token')?.trim() ?? ''
 }
 
+function canUpdateExistingPasswords() {
+  return process.env.AGENDA_BOOTSTRAP_UPDATE_EXISTING_PASSWORDS?.trim().toLowerCase() === 'true'
+}
+
 export async function POST(request: Request) {
   const expectedToken = process.env.AGENDA_BOOTSTRAP_TOKEN?.trim()
   const bootstrapUsers = readBootstrapUsers()
@@ -87,13 +91,19 @@ export async function POST(request: Request) {
     const existingByEmail = new Map(
       (listedUsers.users ?? []).map((user) => [user.email?.toLowerCase(), user])
     )
+    const updateExistingPasswords = canUpdateExistingPasswords()
 
-    const results: Array<{ email: string; action: 'created' | 'updated' }> = []
+    const results: Array<{ email: string; action: 'created' | 'updated' | 'skipped' }> = []
 
     for (const targetUser of bootstrapUsers) {
       const existing = existingByEmail.get(targetUser.email.toLowerCase())
 
       if (existing) {
+        if (!updateExistingPasswords) {
+          results.push({ email: targetUser.email, action: 'skipped' })
+          continue
+        }
+
         const { error: updateError } = await admin.auth.admin.updateUserById(existing.id, {
           password: targetUser.password,
           email_confirm: true,

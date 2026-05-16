@@ -57,9 +57,10 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isLoginRoute = pathname === '/login'
   const isRegisterRoute = pathname === '/registro'
+  const isPasswordRecoveryRoute = pathname === '/recuperar-password' || pathname === '/actualizar-password'
   const isRegisterApi = pathname === '/api/register'
   const isBootstrapApi = pathname === '/api/bootstrap/agenda-users'
-  const isProtectedRoute = !isLoginRoute && !isRegisterRoute && !isRegisterApi && !isBootstrapApi
+  const isProtectedRoute = !isLoginRoute && !isRegisterRoute && !isPasswordRecoveryRoute && !isRegisterApi && !isBootstrapApi
   let resolvedRoleCode: string | null = null
 
   const loadRoleCode = async () => {

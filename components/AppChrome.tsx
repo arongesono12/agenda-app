@@ -9,7 +9,7 @@ import { ToastProvider } from '@/components/ToastProvider'
 
 export default function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
-  const AUTH_ROUTES = ['/login', '/registro']
+  const AUTH_ROUTES = ['/login', '/registro', '/recuperar-password', '/actualizar-password']
   const isAuthRoute = AUTH_ROUTES.includes(pathname)
 
   return (

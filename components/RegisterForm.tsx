@@ -44,7 +44,6 @@ export default function RegisterForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [roleCode, setRoleCode] = useState('responsable')
   const roleCodeRef = useRef(roleCode)
-  roleCodeRef.current = roleCode
   const [departamento, setDepartamento] = useState('')
   const [accepted, setAccepted] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -53,6 +52,10 @@ export default function RegisterForm() {
   const [success, setSuccess] = useState('')
 
   const selectedRole = useMemo(() => roles.find(role => role.codigo === roleCode), [roles, roleCode])
+
+  useEffect(() => {
+    roleCodeRef.current = roleCode
+  }, [roleCode])
 
   useEffect(() => {
     const loadRoles = async () => {

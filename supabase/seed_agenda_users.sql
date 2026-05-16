@@ -3,6 +3,7 @@
 -- Ejecutar solo con permisos de administrador del proyecto
 -- Nota: Supabase recomienda el Admin API para altas de Auth.
 -- Este script sirve como seed SQL controlado para el esquema auth.
+-- Seguridad: no actualiza contrasenas de usuarios existentes.
 -- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -17,10 +18,15 @@ BEGIN
     SELECT *
     FROM (
       VALUES
-        ('dnguema@segesa.gq', 'Malabo1234gt'),
-        ('mcarmenondo@segesa.gq', 'Eligui2011')
+        ('dnguema@segesa.gq', NULLIF(current_setting('app.seed_dnguema_password', true), '')),
+        ('mcarmenondo@segesa.gq', NULLIF(current_setting('app.seed_mcarmenondo_password', true), ''))
     ) AS seed_list(email, password)
   LOOP
+    IF seed_password IS NULL OR LENGTH(seed_password) < 8 THEN
+      RAISE NOTICE 'Usuario % omitido: configure una contrasena temporal con SET app.seed_*_password.', seed_email;
+      CONTINUE;
+    END IF;
+
     SELECT id INTO seed_user_id
     FROM auth.users
     WHERE email = seed_email;
@@ -54,14 +60,6 @@ BEGIN
         NOW(),
         NOW()
       );
-    ELSE
-      UPDATE auth.users
-      SET
-        encrypted_password = crypt(seed_password, gen_salt('bf')),
-        email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
-        raw_app_meta_data = '{"provider":"email","providers":["email"]}',
-        updated_at = NOW()
-      WHERE id = seed_user_id;
     END IF;
 
     INSERT INTO auth.identities (
