@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { READER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
 import { getServerSessionProfile } from '@/lib/server-access'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { applyTaskScope, buildTaskScope, isTaskScopeColumnError } from '@/lib/task-scope'
 import type { Tarea } from '@/lib/types'
@@ -66,6 +67,11 @@ type DashboardRpcData = {
   recientes: unknown[]
 }
 
+type TaskDepartmentRow = {
+  tarea_id: number
+  departamento: string
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -101,6 +107,39 @@ function calcularSemaforo(fechaFin?: string | null) {
   return SEMAFORO_A_TIEMPO
 }
 
+async function attachDepartments(tasks: DashboardTask[]) {
+  if (tasks.length === 0) return tasks
+
+  const admin = createAdminSupabaseClient()
+  const { data, error } = await admin
+    .from('tarea_departamentos')
+    .select('tarea_id, departamento')
+    .in('tarea_id', tasks.map((task) => task.id))
+
+  if (error) return tasks
+
+  const byTask = new Map<number, TaskDepartmentRow[]>()
+  for (const row of (data ?? []) as TaskDepartmentRow[]) {
+    const rows = byTask.get(row.tarea_id) ?? []
+    rows.push(row)
+    byTask.set(row.tarea_id, rows)
+  }
+
+  return tasks.map((task) => ({
+    ...task,
+    departamentos: byTask.get(task.id) ?? (task.departamento ? [{ tarea_id: task.id, departamento: task.departamento }] : []),
+  }))
+}
+
+function getTaskDepartments(task: DashboardTask & { departamentos?: TaskDepartmentRow[] }) {
+  const departments = task.departamentos?.map((item) => item.departamento?.trim()).filter(Boolean)
+  return departments?.length ? Array.from(new Set(departments)) : [task.departamento ?? 'Sin asignar']
+}
+
+function shouldUseDashboardRpc() {
+  return false
+}
+
 export async function GET() {
   try {
     const { user, profile } = await getServerSessionProfile()
@@ -111,9 +150,10 @@ export async function GET() {
 
     const supabase = await createServerSupabaseClient()
     const scope = buildTaskScope(user, profile)
-    const { data: rpcData, error: rpcError } = scope.unrestricted
-      ? await supabase.rpc('api_dashboard_data')
-      : { data: null, error: new Error('Scoped dashboard skips global RPC') }
+    const { data: rpcData, error: rpcError }: { data: unknown; error: Error | null } =
+      scope.unrestricted && shouldUseDashboardRpc()
+        ? await supabase.rpc('api_dashboard_data')
+        : { data: null, error: new Error('Dashboard uses relation-aware fallback') }
 
     if (!rpcError && isDashboardRpcData(rpcData)) {
       return NextResponse.json({
@@ -142,7 +182,7 @@ export async function GET() {
 
     if (error) throw error
 
-    const tasks = (data ?? []) as unknown as DashboardTask[]
+    const tasks = await attachDepartments((data ?? []) as unknown as DashboardTask[])
     const withSemaforo = tasks.map((task) => ({
       ...task,
       semaforo: calcularSemaforo(task.fecha_fin),
@@ -164,23 +204,30 @@ export async function GET() {
     const respMap: Record<string, { total: number; completadas: number; enProceso: number; pendientes: number }> = {}
 
     withSemaforo.forEach((task) => {
-      const departamento = task.departamento ?? 'Sin asignar'
       const responsable = task.responsable ?? 'Sin asignar'
+      const departamentos = getTaskDepartments(task)
 
-      if (!deptMap[departamento]) deptMap[departamento] = { total: 0, completadas: 0, enProceso: 0, pendientes: 0 }
       if (!respMap[responsable]) respMap[responsable] = { total: 0, completadas: 0, enProceso: 0, pendientes: 0 }
 
-      deptMap[departamento].total += 1
+      for (const departamento of departamentos) {
+        if (!deptMap[departamento]) deptMap[departamento] = { total: 0, completadas: 0, enProceso: 0, pendientes: 0 }
+        deptMap[departamento].total += 1
+
+        if (task.estado === 'Completado') {
+          deptMap[departamento].completadas += 1
+        } else if (task.estado === 'En Proceso') {
+          deptMap[departamento].enProceso += 1
+        } else {
+          deptMap[departamento].pendientes += 1
+        }
+      }
       respMap[responsable].total += 1
 
       if (task.estado === 'Completado') {
-        deptMap[departamento].completadas += 1
         respMap[responsable].completadas += 1
       } else if (task.estado === 'En Proceso') {
-        deptMap[departamento].enProceso += 1
         respMap[responsable].enProceso += 1
       } else {
-        deptMap[departamento].pendientes += 1
         respMap[responsable].pendientes += 1
       }
     })

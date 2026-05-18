@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import { ESTADOS, TIPOS_TAREA, PRIORIDADES } from '@/lib/types'
+import { PUBLIC_REGISTRATION_ROLES } from '@/lib/registration-options'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import UserAvatar from '@/components/ui/UserAvatar'
 import { useUserSession } from '@/components/UserSessionProvider'
@@ -48,6 +49,7 @@ export default function CatalogosPage() {
   const [deleting, setDeleting] = useState(false)
   const [editingRespId, setEditingRespId] = useState<number | null>(null)
   const [editingDepto, setEditingDepto] = useState('')
+  const [editingRoleCode, setEditingRoleCode] = useState('')
   const [updatingDepto, setUpdatingDepto] = useState(false)
   const [updateDeptoError, setUpdateDeptoError] = useState('')
   const usuariosPorDepartamento = useMemo(() => {
@@ -140,14 +142,23 @@ export default function CatalogosPage() {
     void fetch()
   }
 
-  const updateDepartamento = async (id: number, depto: string) => {
+  const roleNameByCode = useMemo(() => {
+    return new Map(PUBLIC_REGISTRATION_ROLES.map((role) => [role.codigo, role.nombre]))
+  }, [])
+
+  const formatRole = useCallback(
+    (roleCode?: string | null) => roleNameByCode.get(roleCode?.trim().toLowerCase() ?? '') ?? 'Sin rol',
+    [roleNameByCode]
+  )
+
+  const updateResponsableAccess = async (id: number, depto: string, roleCode: string) => {
     setUpdatingDepto(true)
     setUpdateDeptoError('')
 
     const response = await window.fetch('/api/catalogos', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, departamento: depto || null }),
+      body: JSON.stringify({ id, departamento: depto || null, roleCode: roleCode || null }),
     })
     const result = (await response.json()) as { ok?: boolean; error?: string }
 
@@ -158,6 +169,7 @@ export default function CatalogosPage() {
     }
 
     setEditingRespId(null)
+    setEditingRoleCode('')
     setUpdateDeptoError('')
     setUpdatingDepto(false)
     void fetch()
@@ -319,6 +331,9 @@ export default function CatalogosPage() {
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-slate-800">{r.nombre}</p>
                         {r.cargo && <p className="truncate text-xs text-slate-500">{r.cargo}</p>}
+                        <p className="mt-1 inline-flex rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-700">
+                          {formatRole(r.tipo_usuario_codigo)}
+                        </p>
 
                         {editingRespId === r.id ? (
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -333,18 +348,27 @@ export default function CatalogosPage() {
                                 <option key={d.id} value={d.nombre}>{d.nombre}</option>
                               ))}
                             </select>
+                            <select
+                              value={editingRoleCode}
+                              onChange={(e) => setEditingRoleCode(e.target.value)}
+                              className="h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-teal-400 focus:outline-none"
+                            >
+                              {PUBLIC_REGISTRATION_ROLES.map((role) => (
+                                <option key={role.codigo} value={role.codigo}>{role.nombre}</option>
+                              ))}
+                            </select>
                             <button
                               type="button"
-                              onClick={() => void updateDepartamento(r.id, editingDepto)}
+                              onClick={() => void updateResponsableAccess(r.id, editingDepto, editingRoleCode)}
                               disabled={updatingDepto}
                               className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-700 transition-colors hover:bg-teal-100 disabled:opacity-60"
-                              title="Confirmar cambio"
+                              title="Confirmar cambios"
                             >
                               {updatingDepto ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
                             </button>
                             <button
                               type="button"
-                              onClick={() => { setEditingRespId(null); setUpdateDeptoError('') }}
+                              onClick={() => { setEditingRespId(null); setEditingRoleCode(''); setUpdateDeptoError('') }}
                               className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100"
                               title="Cancelar"
                             >
@@ -364,10 +388,11 @@ export default function CatalogosPage() {
                               onClick={() => {
                                 setEditingRespId(r.id)
                                 setEditingDepto(r.departamento ?? '')
+                                setEditingRoleCode(r.tipo_usuario_codigo?.trim().toLowerCase() || 'responsable')
                                 setUpdateDeptoError('')
                               }}
                               className="flex h-5 w-5 items-center justify-center rounded text-slate-300 transition-colors hover:bg-slate-100 hover:text-teal-700"
-                              title="Cambiar departamento"
+                              title="Cambiar departamento y rol"
                             >
                               <Pencil size={10} />
                             </button>

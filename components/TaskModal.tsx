@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { X, Save, Loader2, CalendarDays, FileText, Flag, UserRound, UsersRound, ChevronDown, Check } from 'lucide-react'
+import { X, Save, Loader2, CalendarDays, FileText, Flag, UserRound, UsersRound, ChevronDown, Check, Building2 } from 'lucide-react'
 import { DEPARTAMENTOS, PRIORIDADES, ESTADOS, TIPOS_TAREA } from '@/lib/types'
 import type { Responsable, Tarea } from '@/lib/types'
 import { useToast } from '@/components/ToastProvider'
@@ -43,9 +43,12 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   const [form, setForm] = useState<Partial<Tarea>>(task ?? empty)
   const [responsables, setResponsables] = useState<Responsable[]>([])
   const [selectedResponsableIds, setSelectedResponsableIds] = useState<number[]>([])
+  const [selectedDepartamentos, setSelectedDepartamentos] = useState<string[]>([])
   const [responsablesOpen, setResponsablesOpen] = useState(false)
+  const [departamentosOpen, setDepartamentosOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const responsablesDropdownRef = useRef<HTMLDivElement>(null)
+  const departamentosDropdownRef = useRef<HTMLDivElement>(null)
   const isEdit = !!task
   const selectedResponsables = useMemo(
     () => selectedResponsableIds
@@ -56,6 +59,9 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   const responsablesSummary = selectedResponsables.length
     ? selectedResponsables.map((item) => item.nombre).join(', ')
     : 'Seleccionar responsables'
+  const departamentosSummary = selectedDepartamentos.length
+    ? selectedDepartamentos.join(', ')
+    : 'Seleccionar departamentos'
 
   useEffect(() => {
     setForm(task ?? empty)
@@ -75,6 +81,19 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   }, [responsablesOpen])
 
   useEffect(() => {
+    if (!departamentosOpen) return
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!departamentosDropdownRef.current?.contains(event.target as Node)) {
+        setDepartamentosOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', closeOnOutsideClick)
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick)
+  }, [departamentosOpen])
+
+  useEffect(() => {
     const assignedIds = task?.asignaciones
       ?.map((assignment) => assignment.responsable_id)
       .filter((id): id is number => typeof id === 'number')
@@ -85,6 +104,19 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
     }
 
     setSelectedResponsableIds(task?.responsable_id ? [task.responsable_id] : [])
+  }, [task])
+
+  useEffect(() => {
+    const assignedDepartamentos = task?.departamentos
+      ?.map((item) => item.departamento?.trim())
+      .filter((value): value is string => !!value)
+
+    if (assignedDepartamentos?.length) {
+      setSelectedDepartamentos(Array.from(new Set(assignedDepartamentos)))
+      return
+    }
+
+    setSelectedDepartamentos(task?.departamento ? [task.departamento] : [])
   }, [task])
 
   useEffect(() => {
@@ -99,6 +131,15 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   }, [])
 
   const set = (k: keyof Tarea, v: unknown) => setForm((f) => ({ ...f, [k]: v }))
+
+  const toggleDepartamento = (departamento: string) => {
+    setSelectedDepartamentos((current) => {
+      const exists = current.includes(departamento)
+      const next = exists ? current.filter((item) => item !== departamento) : [...current, departamento]
+      setForm((f) => ({ ...f, departamento: next[0] ?? '' }))
+      return next
+    })
+  }
 
   const setResponsable = (id: string) => {
     if (!id) {
@@ -160,6 +201,7 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
         prioridad: form.prioridad,
         estado: form.estado,
         departamento: form.departamento || null,
+        departamentos: selectedDepartamentos,
         seccion: form.seccion || null,
         responsable: form.responsable || null,
         responsable_id: form.responsable_id || null,
@@ -293,13 +335,71 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="label-field">Departamento</label>
-                  <select value={form.departamento ?? ''} onChange={(e) => set('departamento', e.target.value)} className="input-shell">
-                    <option value="">Seleccionar</option>
-                    {DEPARTAMENTOS.map((d) => (
-                      <option key={d}>{d}</option>
-                    ))}
-                  </select>
+                  <label className="label-field">Departamentos</label>
+                  <div ref={departamentosDropdownRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setDepartamentosOpen((open) => !open)}
+                      className="input-shell flex min-h-[46px] items-center justify-between gap-3 text-left"
+                      aria-expanded={departamentosOpen}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Building2 size={15} className="shrink-0 text-teal-600" />
+                        <span className={selectedDepartamentos.length ? 'truncate font-semibold' : 'truncate text-slate-400'}>
+                          {departamentosSummary}
+                        </span>
+                      </span>
+                      <ChevronDown
+                        size={16}
+                        className={`shrink-0 text-slate-500 transition-transform ${departamentosOpen ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+
+                    {departamentosOpen && (
+                      <div className="absolute z-30 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 text-white shadow-[0_24px_60px_rgba(15,23,42,0.28)]">
+                        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-2">
+                          <span className="text-xs font-semibold text-slate-200">
+                            {selectedDepartamentos.length} seleccionados
+                          </span>
+                          {selectedDepartamentos.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedDepartamentos([])
+                                setForm((f) => ({ ...f, departamento: '' }))
+                              }}
+                              className="text-xs font-semibold text-teal-200 transition-colors hover:text-white"
+                            >
+                              Limpiar
+                            </button>
+                          )}
+                        </div>
+                        <div className="max-h-56 overflow-y-auto p-1.5">
+                          {DEPARTAMENTOS.map((departamento) => {
+                            const checked = selectedDepartamentos.includes(departamento)
+
+                            return (
+                              <button
+                                key={departamento}
+                                type="button"
+                                onClick={() => toggleDepartamento(departamento)}
+                                className={`flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+                                  checked ? 'bg-teal-500/18 text-white' : 'text-slate-100 hover:bg-white/10'
+                                }`}
+                              >
+                                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
+                                  checked ? 'border-teal-300 bg-teal-400 text-slate-950' : 'border-slate-500 bg-slate-900'
+                                }`}>
+                                  {checked && <Check size={13} strokeWidth={3} />}
+                                </span>
+                                <span className="min-w-0 truncate font-semibold">{departamento}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="label-field">Seccion</label>

@@ -21,6 +21,15 @@ type SearchResponse = {
   totalPages?: number
 }
 
+function getDepartamentosLabel(task: Tarea) {
+  const departments = task.departamentos
+    ?.map((item) => item.departamento?.trim())
+    .filter((value): value is string => !!value)
+
+  if (departments?.length) return Array.from(new Set(departments)).join(', ')
+  return task.departamento ?? '-'
+}
+
 export default function BusquedaPage() {
   const [filters, setFilters] = useState(INIT)
   const [results, setResults] = useState<Tarea[]>([])
@@ -203,6 +212,10 @@ export default function BusquedaPage() {
 
                   <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500">
                     <div>
+                      <p className="font-semibold text-slate-700">Departamentos</p>
+                      <p className="mt-1">{getDepartamentosLabel(t)}</p>
+                    </div>
+                    <div>
                       <p className="font-semibold text-slate-700">Responsable</p>
                       <p className="mt-1">{t.responsable ?? '-'}</p>
                     </div>
@@ -240,7 +253,9 @@ export default function BusquedaPage() {
                         <p className="line-clamp-2 text-sm font-semibold text-slate-800">{t.tarea}</p>
                       </td>
                       <td className="px-4 py-3"><PrioridadBadge value={t.prioridad} /></td>
-                      <td className="px-4 py-3 text-xs text-slate-600">{t.departamento ?? '-'}</td>
+                      <td className="max-w-[170px] px-4 py-3 text-xs text-slate-600">
+                        <span className="block truncate">{getDepartamentosLabel(t)}</span>
+                      </td>
                       <td className="px-4 py-3 text-xs text-slate-600">{t.responsable ?? '-'}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{formatDateShort(t.fecha_fin)}</td>
                       <td className="px-4 py-3 min-w-[120px]"><ProgressBar value={t.porcentaje_avance} showLabel /></td>

@@ -220,6 +220,22 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['tarea_asignaciones']['Insert']>
         Relationships: []
       }
+      tarea_departamentos: {
+        Row: {
+          id: number
+          tarea_id: number
+          departamento: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: number
+          tarea_id: number
+          departamento: string
+          created_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['tarea_departamentos']['Insert']>
+        Relationships: []
+      }
       tipos_usuario: {
         Row: {
           id: number

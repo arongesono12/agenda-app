@@ -15,6 +15,7 @@ export interface Tarea {
   tarea: string
   prioridad: Prioridad
   departamento?: string
+  departamentos?: TareaDepartamento[]
   seccion?: string
   responsable_id?: number | null
   responsable_usuario_id?: string | null
@@ -46,6 +47,13 @@ export interface TareaAsignacion {
   asignado_por_usuario_id?: string | null
   asignado_por_nombre?: string | null
   activo?: boolean | null
+  created_at?: string | null
+}
+
+export interface TareaDepartamento {
+  id?: number
+  tarea_id?: number
+  departamento: string
   created_at?: string | null
 }
 

@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server'
 import { READER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
 import { getServerSessionProfile } from '@/lib/server-access'
+import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { applyTaskScope, buildTaskScope, isTaskScopeColumnError } from '@/lib/task-scope'
 import { PRIORIDADES, TIPOS_TAREA, type Tarea } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-const STATS_COLUMNS = 'prioridad,tipo_tarea,departamento,estado,porcentaje_avance,responsable,responsable_usuario_id'
-const LEGACY_STATS_COLUMNS = 'prioridad,tipo_tarea,departamento,estado,porcentaje_avance,responsable'
+const STATS_COLUMNS = 'id,prioridad,tipo_tarea,departamento,estado,porcentaje_avance,responsable,responsable_usuario_id'
+const LEGACY_STATS_COLUMNS = 'id,prioridad,tipo_tarea,departamento,estado,porcentaje_avance,responsable'
 
 type StatsTask = Pick<Tarea, 'prioridad' | 'tipo_tarea' | 'departamento' | 'estado' | 'porcentaje_avance'>
+type StatsTaskWithDepartments = StatsTask & { id?: number; departamentos?: Array<{ tarea_id: number; departamento: string }> }
 
 type EstadisticasRpcData = {
   prioridadStats: unknown[]
@@ -33,6 +35,40 @@ function isEstadisticasRpcData(value: unknown): value is EstadisticasRpcData {
   )
 }
 
+async function attachDepartments(tasks: StatsTaskWithDepartments[]) {
+  const taskIds = tasks.map((task) => Number(task.id)).filter((id) => Number.isInteger(id) && id > 0)
+  if (taskIds.length === 0) return tasks
+
+  const admin = createAdminSupabaseClient()
+  const { data, error } = await admin
+    .from('tarea_departamentos')
+    .select('tarea_id, departamento')
+    .in('tarea_id', taskIds)
+
+  if (error) return tasks
+
+  const byTask = new Map<number, Array<{ tarea_id: number; departamento: string }>>()
+  for (const row of (data ?? []) as Array<{ tarea_id: number; departamento: string }>) {
+    const rows = byTask.get(row.tarea_id) ?? []
+    rows.push(row)
+    byTask.set(row.tarea_id, rows)
+  }
+
+  return tasks.map((task) => ({
+    ...task,
+    departamentos: task.id ? byTask.get(Number(task.id)) ?? (task.departamento ? [{ tarea_id: Number(task.id), departamento: task.departamento }] : []) : [],
+  }))
+}
+
+function getTaskDepartments(task: StatsTaskWithDepartments) {
+  const departments = task.departamentos?.map((item) => item.departamento?.trim()).filter(Boolean)
+  return departments?.length ? Array.from(new Set(departments)) : [task.departamento ?? 'Sin asignar']
+}
+
+function shouldUseEstadisticasRpc() {
+  return false
+}
+
 export async function GET() {
   try {
     const { user, profile } = await getServerSessionProfile()
@@ -43,9 +79,10 @@ export async function GET() {
 
     const supabase = await createServerSupabaseClient()
     const scope = buildTaskScope(user, profile)
-    const { data: rpcData, error: rpcError } = scope.unrestricted
-      ? await supabase.rpc('api_estadisticas_data')
-      : { data: null, error: new Error('Scoped statistics skips global RPC') }
+    const { data: rpcData, error: rpcError }: { data: unknown; error: Error | null } =
+      scope.unrestricted && shouldUseEstadisticasRpc()
+        ? await supabase.rpc('api_estadisticas_data')
+        : { data: null, error: new Error('Statistics uses relation-aware fallback') }
 
     if (!rpcError && isEstadisticasRpcData(rpcData)) {
       return NextResponse.json({
@@ -72,7 +109,7 @@ export async function GET() {
 
     if (error) throw error
 
-    const tasks = (data ?? []) as unknown as StatsTask[]
+    const tasks = await attachDepartments((data ?? []) as unknown as StatsTaskWithDepartments[])
 
     const prioridadStats = PRIORIDADES.map((prioridad) => ({
       prioridad,
@@ -99,14 +136,17 @@ export async function GET() {
     const deptMap: Record<string, { completadas: number; en_proceso: number; pendientes: number; avance: number[] }> = {}
 
     tasks.forEach((task) => {
-      const departamento = task.departamento ?? 'Sin asignar'
-      if (!deptMap[departamento]) deptMap[departamento] = { completadas: 0, en_proceso: 0, pendientes: 0, avance: [] }
+      const departamentos = getTaskDepartments(task)
 
-      if (task.estado === 'Completado') deptMap[departamento].completadas += 1
-      else if (task.estado === 'En Proceso') deptMap[departamento].en_proceso += 1
-      else deptMap[departamento].pendientes += 1
+      for (const departamento of departamentos) {
+        if (!deptMap[departamento]) deptMap[departamento] = { completadas: 0, en_proceso: 0, pendientes: 0, avance: [] }
 
-      deptMap[departamento].avance.push(Number(task.porcentaje_avance ?? 0))
+        if (task.estado === 'Completado') deptMap[departamento].completadas += 1
+        else if (task.estado === 'En Proceso') deptMap[departamento].en_proceso += 1
+        else deptMap[departamento].pendientes += 1
+
+        deptMap[departamento].avance.push(Number(task.porcentaje_avance ?? 0))
+      }
     })
 
     const departamentoStats = Object.entries(deptMap)

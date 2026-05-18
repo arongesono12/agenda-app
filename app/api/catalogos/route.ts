@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, READER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
+import { PUBLIC_REGISTRATION_ROLE_CODES } from '@/lib/registration-options'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getServerSessionProfile } from '@/lib/server-access'
 
@@ -14,6 +15,7 @@ type CatalogPayload = {
   email?: string
   departamento?: string | null
   cargo?: string | null
+  roleCode?: string | null
 }
 
 function readResource(url: URL): CatalogResource | 'all' {
@@ -155,15 +157,28 @@ export async function GET(request: Request) {
           if (userIds.length > 0) {
             const { data: profiles } = await admin
               .from('perfiles_usuario')
-              .select('id, avatar_url')
+              .select('id, avatar_url, tipo_usuario:tipos_usuario(codigo)')
               .in('id', userIds)
             avatarMap = new Map((profiles ?? []).map((p) => [p.id as string, (p.avatar_url as string | null) ?? null]))
-          }
+            const roleMap = new Map(
+              ((profiles ?? []) as Array<{
+                id: string
+                tipo_usuario?: { codigo?: string | null } | Array<{ codigo?: string | null }> | null
+              }>).map((p) => [p.id, readRoleCode(p)])
+            )
 
-          result.responsables = rows.map((r) => ({
-            ...r,
-            avatar_url: r.usuario_id ? (avatarMap.get(r.usuario_id) ?? null) : null,
-          }))
+            result.responsables = rows.map((r) => ({
+              ...r,
+              avatar_url: r.usuario_id ? (avatarMap.get(r.usuario_id) ?? null) : null,
+              tipo_usuario_codigo: r.usuario_id ? (roleMap.get(r.usuario_id) ?? null) : null,
+            }))
+          } else {
+            result.responsables = rows.map((r) => ({
+              ...r,
+              avatar_url: null,
+              tipo_usuario_codigo: null,
+            }))
+          }
         }
       }
     }
@@ -247,12 +262,12 @@ export async function PATCH(request: Request) {
 
     if (!user || !hasAnyRole(profile, ADMIN_ROLE_CODES)) {
       return NextResponse.json(
-        { ok: false, error: 'Solo administradores pueden cambiar el departamento de un responsable.' },
+        { ok: false, error: 'Solo administradores pueden cambiar el departamento o rol de un responsable.' },
         { status: 403 }
       )
     }
 
-    const payload = (await request.json()) as { id?: number; departamento?: string | null }
+    const payload = (await request.json()) as { id?: number; departamento?: string | null; roleCode?: string | null }
     const id = Number(payload.id)
 
     if (!Number.isInteger(id) || id <= 0) {
@@ -260,12 +275,87 @@ export async function PATCH(request: Request) {
     }
 
     const admin = createAdminSupabaseClient()
-    const { error } = await admin
-      .from('responsables')
-      .update({ departamento: payload.departamento?.trim() || null })
-      .eq('id', id)
+    const updatePayload: { departamento?: string | null } = {}
 
-    if (error) throw error
+    if ('departamento' in payload) {
+      updatePayload.departamento = payload.departamento?.trim() || null
+    }
+
+    if (Object.keys(updatePayload).length > 0) {
+      const { error } = await admin
+        .from('responsables')
+        .update(updatePayload)
+        .eq('id', id)
+
+      if (error) throw error
+    }
+
+    if (payload.roleCode !== undefined) {
+      const roleCode = payload.roleCode?.trim().toLowerCase()
+
+      if (!roleCode || !PUBLIC_REGISTRATION_ROLE_CODES.includes(roleCode)) {
+        return NextResponse.json({ ok: false, error: 'Selecciona un rol valido.' }, { status: 400 })
+      }
+
+      const { data: role, error: roleError } = await admin
+        .from('tipos_usuario')
+        .select('id')
+        .eq('codigo', roleCode)
+        .maybeSingle()
+
+      if (roleError) throw roleError
+      if (!role) {
+        return NextResponse.json({ ok: false, error: 'El rol seleccionado no existe en la base de datos.' }, { status: 400 })
+      }
+
+      const { data: responsable, error: responsableError } = await admin
+        .from('responsables')
+        .select('id, email, usuario_id')
+        .eq('id', id)
+        .maybeSingle()
+
+      if (responsableError) throw responsableError
+      if (!responsable) {
+        return NextResponse.json({ ok: false, error: 'Responsable no encontrado.' }, { status: 404 })
+      }
+
+      let userId = responsable.usuario_id
+
+      if (!userId && responsable.email) {
+        const { data: profile, error: profileLookupError } = await admin
+          .from('perfiles_usuario')
+          .select('id')
+          .eq('email', responsable.email.trim().toLowerCase())
+          .maybeSingle()
+
+        if (profileLookupError) throw profileLookupError
+        userId = profile?.id ?? null
+
+        if (userId) {
+          const { error: linkError } = await admin
+            .from('responsables')
+            .update({ usuario_id: userId })
+            .eq('id', id)
+
+          if (linkError) throw linkError
+        }
+      }
+
+      if (!userId) {
+        return NextResponse.json(
+          { ok: false, error: 'El responsable debe tener un usuario asociado antes de cambiar su rol.' },
+          { status: 400 }
+        )
+      }
+
+      const { error: profileUpdateError } = await admin
+        .from('perfiles_usuario')
+        .update({ tipo_usuario_id: role.id })
+        .eq('id', userId)
+
+      if (profileUpdateError) throw profileUpdateError
+    }
+
     return NextResponse.json({ ok: true })
   } catch (error: unknown) {
     return NextResponse.json(

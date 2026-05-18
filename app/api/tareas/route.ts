@@ -66,6 +66,7 @@ type TaskPayload = {
   prioridad?: string
   estado?: string
   departamento?: string | null
+  departamentos?: string[]
   seccion?: string | null
   responsable?: string | null
   responsable_id?: number | null
@@ -99,6 +100,13 @@ type TaskAssignmentRow = {
   asignado_por_usuario_id?: string | null
   asignado_por_nombre?: string | null
   activo?: boolean | null
+  created_at?: string | null
+}
+
+type TaskDepartmentRow = {
+  id?: number
+  tarea_id: number
+  departamento: string
   created_at?: string | null
 }
 
@@ -181,12 +189,19 @@ function readFilters(searchParams: URLSearchParams): TaskFilters {
 
 function applyTaskFilters(
   query: SupabaseFilterQuery,
-  filters: TaskFilters
+  filters: TaskFilters,
+  options: { departmentTaskIds?: number[] | null } = {}
 ) {
   let next: SupabaseFilterQuery = query
 
   if (filters.prioridad) next = next.eq('prioridad', filters.prioridad)
-  if (filters.departamento) next = next.eq('departamento', filters.departamento)
+  if (filters.departamento) {
+    if (options.departmentTaskIds) {
+      next = options.departmentTaskIds.length > 0 ? next.in('id', options.departmentTaskIds) : next.eq('id', -1)
+    } else {
+      next = next.eq('departamento', filters.departamento)
+    }
+  }
   if (filters.estado) next = next.eq('estado', filters.estado)
   if (filters.tipo) next = next.eq('tipo_tarea', filters.tipo)
   if (filters.responsableExact) next = next.eq('responsable', filters.responsableExact)
@@ -228,15 +243,16 @@ async function countTasks(
   scope: TaskScope
 ) {
   const supabase = await createServerSupabaseClient()
+  const admin = createAdminSupabaseClient()
+  const departmentTaskIds = await loadTaskIdsForDepartment(admin, filters.departamento)
 
   if (!scope.unrestricted) {
-    const admin = createAdminSupabaseClient()
     const scopedTaskIds = await loadScopedTaskIds(admin, scope)
 
     if (!scopedTaskIds || scopedTaskIds.length === 0) return 0
 
     const baseQuery = admin.from('tareas').select('id', { count: 'exact', head: true }).in('id', scopedTaskIds)
-    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters) as unknown as typeof baseQuery
+    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds }) as unknown as typeof baseQuery
 
     if (filters.fechaFinLt) query = query.lt('fecha_fin', filters.fechaFinLt)
     if (filters.fechaFinGte) query = query.gte('fecha_fin', filters.fechaFinGte)
@@ -249,7 +265,7 @@ async function countTasks(
 
   const runCount = async (includeUserColumn: boolean) => {
     const baseQuery = supabase.from('tareas').select('id', { count: 'exact', head: true })
-    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters) as unknown as typeof baseQuery
+    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds }) as unknown as typeof baseQuery
     query = applyTaskScope(query as unknown as SupabaseFilterQuery, scope, { includeUserColumn }) as unknown as typeof baseQuery
 
     if (filters.fechaFinLt) query = query.lt('fecha_fin', filters.fechaFinLt)
@@ -316,9 +332,10 @@ async function loadTaskPage({
   scope: TaskScope
 }) {
   const supabase = await createServerSupabaseClient()
+  const admin = createAdminSupabaseClient()
+  const departmentTaskIds = await loadTaskIdsForDepartment(admin, filters.departamento)
 
   if (!scope.unrestricted) {
-    const admin = createAdminSupabaseClient()
     const scopedTaskIds = await loadScopedTaskIds(admin, scope)
 
     if (!scopedTaskIds || scopedTaskIds.length === 0) {
@@ -331,7 +348,7 @@ async function loadTaskPage({
       .in('id', scopedTaskIds)
       .order(orderBy, { ascending })
       .range(from, to)
-    const query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters) as unknown as typeof baseQuery
+    const query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds }) as unknown as typeof baseQuery
     const result = await query
 
     if (result.error) return result
@@ -348,7 +365,7 @@ async function loadTaskPage({
       .select(columns, { count: 'exact' })
       .order(orderBy, { ascending })
       .range(from, to)
-    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters) as unknown as typeof baseQuery
+    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds }) as unknown as typeof baseQuery
     query = applyTaskScope(query as unknown as SupabaseFilterQuery, scope, { includeUserColumn }) as unknown as typeof baseQuery
     return query
   }
@@ -407,12 +424,56 @@ async function loadTaskAssignments(
   return (data ?? []) as TaskAssignmentRow[]
 }
 
+async function loadTaskDepartments(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  taskIds: number[]
+) {
+  const ids = Array.from(new Set(taskIds.filter((id) => Number.isInteger(id) && id > 0)))
+  if (ids.length === 0) return []
+
+  const { data, error } = await admin
+    .from('tarea_departamentos')
+    .select('*')
+    .in('tarea_id', ids)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    if (isMissingTaskDepartmentsTable(error)) return []
+    throw error
+  }
+
+  return (data ?? []) as TaskDepartmentRow[]
+}
+
+async function loadTaskIdsForDepartment(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  departamento?: string
+) {
+  const target = departamento?.trim()
+  if (!target) return null
+
+  const { data, error } = await admin
+    .from('tarea_departamentos')
+    .select('tarea_id')
+    .eq('departamento', target)
+
+  if (error) {
+    if (isMissingTaskDepartmentsTable(error)) return null
+    throw error
+  }
+
+  return Array.from(new Set((data ?? []).map((row) => Number(row.tarea_id)).filter((id) => Number.isInteger(id) && id > 0)))
+}
+
 async function attachTaskAssignments(
   tasks: Array<Record<string, unknown>>
 ) {
   const admin = createAdminSupabaseClient()
-  const assignments = await loadTaskAssignments(admin, tasks.map((task) => Number(task.id)))
-  if (assignments.length === 0) return tasks
+  const taskIds = tasks.map((task) => Number(task.id))
+  const [assignments, departments] = await Promise.all([
+    loadTaskAssignments(admin, taskIds),
+    loadTaskDepartments(admin, taskIds),
+  ])
 
   const byTask = new Map<number, TaskAssignmentRow[]>()
   for (const assignment of assignments) {
@@ -421,9 +482,21 @@ async function attachTaskAssignments(
     byTask.set(assignment.tarea_id, rows)
   }
 
+  const departmentsByTask = new Map<number, TaskDepartmentRow[]>()
+  for (const department of departments) {
+    const rows = departmentsByTask.get(department.tarea_id) ?? []
+    rows.push(department)
+    departmentsByTask.set(department.tarea_id, rows)
+  }
+
   return tasks.map((task) => ({
     ...task,
     asignaciones: byTask.get(Number(task.id)) ?? [],
+    departamentos: departmentsByTask.get(Number(task.id)) ?? (
+      typeof task.departamento === 'string' && task.departamento.trim()
+        ? [{ tarea_id: Number(task.id), departamento: task.departamento.trim() }]
+        : []
+    ),
   }))
 }
 
@@ -468,14 +541,22 @@ function normalizeEmail(value?: string | null) {
   return email || null
 }
 
-function isMissingTaskAssignmentsTable(error: { code?: string; message?: string } | null | undefined) {
+function isMissingRelationTable(error: { code?: string; message?: string } | null | undefined, tableName: string) {
   const message = error?.message ?? ''
   return (
     error?.code === '42P01' ||
     error?.code === 'PGRST205' ||
     error?.code === 'PGRST204' ||
-    /tarea_asignaciones|schema cache|relation .* does not exist/i.test(message)
+    new RegExp(`${tableName}|schema cache|relation .* does not exist`, 'i').test(message)
   )
+}
+
+function isMissingTaskAssignmentsTable(error: { code?: string; message?: string } | null | undefined) {
+  return isMissingRelationTable(error, 'tarea_asignaciones')
+}
+
+function isMissingTaskDepartmentsTable(error: { code?: string; message?: string } | null | undefined) {
+  return isMissingRelationTable(error, 'tarea_departamentos')
 }
 
 function uniquePositiveIds(values?: number[] | null) {
@@ -483,8 +564,24 @@ function uniquePositiveIds(values?: number[] | null) {
     new Set(
       (values ?? [])
         .map((value) => Number(value))
-        .filter((value) => Number.isInteger(value) && value > 0)
+      .filter((value) => Number.isInteger(value) && value > 0)
     )
+  )
+}
+
+function uniqueDepartmentNames(values?: Array<string | null | undefined> | null) {
+  return Array.from(
+    new Set(
+      (values ?? [])
+        .map((value) => value?.trim())
+        .filter((value): value is string => !!value)
+    )
+  )
+}
+
+function payloadDepartmentNames(payload: TaskPayload) {
+  return uniqueDepartmentNames(
+    payload.departamentos?.length ? payload.departamentos : [payload.departamento]
   )
 }
 
@@ -632,6 +729,8 @@ function buildTaskPayload(
   responsable: ResponsableRow | null,
   assignmentOwner: { userId: string | null; userName: string | null }
 ) {
+  const [primaryDepartment] = payloadDepartmentNames(payload)
+
   return {
     codigo_id:
       payload.codigo_id !== undefined && payload.codigo_id !== null && `${payload.codigo_id}` !== ''
@@ -640,7 +739,7 @@ function buildTaskPayload(
     tarea: payload.tarea?.trim() ?? '',
     prioridad: payload.prioridad ?? 'Media',
     estado: payload.estado ?? 'Pendiente',
-    departamento: payload.departamento || null,
+    departamento: primaryDepartment ?? null,
     seccion: payload.seccion || null,
     responsable: responsable?.nombre ?? null,
     responsable_id: responsable?.id ?? null,
@@ -657,6 +756,8 @@ function buildTaskPayload(
 }
 
 function buildLegacyTaskPayload(payload: TaskPayload, responsable: ResponsableRow | null) {
+  const [primaryDepartment] = payloadDepartmentNames(payload)
+
   return {
     codigo_id:
       payload.codigo_id !== undefined && payload.codigo_id !== null && `${payload.codigo_id}` !== ''
@@ -665,7 +766,7 @@ function buildLegacyTaskPayload(payload: TaskPayload, responsable: ResponsableRo
     tarea: payload.tarea?.trim() ?? '',
     prioridad: payload.prioridad ?? 'Media',
     estado: payload.estado ?? 'Pendiente',
-    departamento: payload.departamento || null,
+    departamento: primaryDepartment ?? null,
     seccion: payload.seccion || null,
     responsable: responsable?.nombre ?? null,
     responsable_id: responsable?.id ?? null,
@@ -920,6 +1021,31 @@ async function syncTaskAssignments({
   return true
 }
 
+async function syncTaskDepartments(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  taskId: number,
+  departments: string[]
+) {
+  const deleteResult = await admin.from('tarea_departamentos').delete().eq('tarea_id', taskId)
+  if (deleteResult.error) {
+    if (isMissingTaskDepartmentsTable(deleteResult.error)) return false
+    throw deleteResult.error
+  }
+
+  if (departments.length > 0) {
+    const insertResult = await admin.from('tarea_departamentos').insert(
+      departments.map((departamento) => ({
+        tarea_id: taskId,
+        departamento,
+      }))
+    )
+
+    if (insertResult.error) throw insertResult.error
+  }
+
+  return true
+}
+
 async function markAssignmentAlertsRead(
   admin: ReturnType<typeof createAdminSupabaseClient>,
   taskId: number,
@@ -1108,6 +1234,8 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
     if (!syncedAssignments && mode === 'update' && previousResponsibleUserId && previousResponsibleUserId !== responsable?.usuario_id) {
       await markAssignmentAlertsRead(admin, task.id, previousResponsibleUserId)
     }
+
+    await syncTaskDepartments(admin, task.id, payloadDepartmentNames(payload))
 
     const [taskWithAssignments] = await attachTaskAssignments([task as unknown as Record<string, unknown>])
 

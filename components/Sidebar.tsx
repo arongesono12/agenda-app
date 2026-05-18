@@ -293,13 +293,13 @@ function SidebarContent({
         {menuOpen && (
           <div
             className={cn(
-              'absolute z-20 overflow-hidden rounded-[22px] border border-white/80 bg-white/80 p-2 shadow-[0_22px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl',
+              'avatar-menu-popover absolute z-20 overflow-hidden rounded-[22px] border border-white/80 bg-white/80 p-2 shadow-[0_22px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl',
               collapsed ? 'bottom-0 left-[calc(100%+0.75rem)] w-64' : 'inset-x-3 bottom-[calc(100%+0.5rem)]'
             )}
           >
-            <div className="rounded-[18px] border border-slate-100 bg-slate-50/80 px-4 py-3">
-              <p className="truncate text-sm font-semibold text-slate-900">{userName}</p>
-              <span className="mt-2 inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold text-teal-700">
+            <div className="avatar-menu-card rounded-[18px] border border-slate-100 bg-slate-50/80 px-4 py-3">
+              <p className="avatar-menu-name truncate text-sm font-semibold text-slate-900">{userName}</p>
+              <span className="avatar-menu-role mt-2 inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-[11px] font-semibold text-teal-700">
                 {userRole}
               </span>
             </div>
@@ -307,7 +307,7 @@ function SidebarContent({
               <Link
                 href="/perfil"
                 onClick={() => { setMenuOpen(false); onNavigate?.() }}
-                className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                className="avatar-menu-item flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
               >
                 <CircleUserRound size={15} />
                 Perfil
@@ -315,17 +315,17 @@ function SidebarContent({
               <Link
                 href="/configuracion"
                 onClick={() => { setMenuOpen(false); onNavigate?.() }}
-                className="flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
+                className="avatar-menu-item flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
               >
                 <Settings size={15} />
                 Configuracion
               </Link>
-              <div className="mx-2 my-1 border-t border-slate-100" />
+              <div className="avatar-menu-separator mx-2 my-1 border-t border-slate-100" />
               <button
                 type="button"
                 onClick={() => void handleSignOut()}
                 disabled={signingOut}
-                className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-60"
+                className="avatar-menu-danger flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50 disabled:opacity-60"
               >
                 <LogOut size={15} />
                 {signingOut ? 'Cerrando sesion...' : 'Cerrar sesion'}

@@ -46,6 +46,15 @@ function getResponsablesLabel(task: Tarea) {
   return task.responsable || 'Sin responsable'
 }
 
+function getDepartamentosLabel(task: Tarea) {
+  const departments = task.departamentos
+    ?.map((item) => item.departamento?.trim())
+    .filter((value): value is string => !!value)
+
+  if (departments?.length) return Array.from(new Set(departments)).join(', ')
+  return task.departamento || 'Sin departamento'
+}
+
 function DetailItem({ icon, label, value }: DetailItemProps) {
   return (
     <div className="rounded-[22px] border border-white/80 bg-white/70 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)]">
@@ -173,7 +182,7 @@ export default function TaskDetailPanel({
                     {task.tarea}
                   </h2>
                   <p className="mt-3 text-sm leading-6 text-slate-300">
-                    {[task.seccion || 'Sin seccion', task.departamento || 'Sin departamento', getResponsablesLabel(task)].join(' · ')}
+                    {[task.seccion || 'Sin seccion', getDepartamentosLabel(task), getResponsablesLabel(task)].join(' · ')}
                   </p>
                 </div>
                 <PrioridadBadge value={task.prioridad} />
@@ -210,6 +219,7 @@ export default function TaskDetailPanel({
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <DetailItem icon={<UserRound size={14} />} label="Responsable" value={getResponsablesLabel(task)} />
+            <DetailItem icon={<FolderKanban size={14} />} label="Departamentos" value={getDepartamentosLabel(task)} />
             <DetailItem icon={<FolderKanban size={14} />} label="Tipo" value={task.tipo_tarea || 'Sin tipo'} />
             <DetailItem icon={<Hash size={14} />} label="Seccion" value={task.seccion || 'Sin seccion'} />
             <DetailItem icon={<CalendarDays size={14} />} label="Fecha inicio" value={formatDate(task.fecha_inicio)} />

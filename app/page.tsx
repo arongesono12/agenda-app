@@ -68,6 +68,15 @@ function getResponsablesLabel(task: Tarea) {
   return task.responsable ?? '-'
 }
 
+function getDepartamentosLabel(task: Tarea) {
+  const departments = task.departamentos
+    ?.map((item) => item.departamento?.trim())
+    .filter((value): value is string => !!value)
+
+  if (departments?.length) return Array.from(new Set(departments)).join(', ')
+  return task.departamento ?? '-'
+}
+
 export default function AgendaDiariaPage() {
   const { profile, capabilities } = useUserSession()
   const canCreateTask = capabilities.canCreateTasks
@@ -388,6 +397,10 @@ export default function AgendaDiariaPage() {
 
                   <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-500">
                     <div>
+                      <p className="font-semibold text-slate-700">Departamentos</p>
+                      <p className="mt-1">{getDepartamentosLabel(task)}</p>
+                    </div>
+                    <div>
                       <p className="font-semibold text-slate-700">Responsable</p>
                       <p className="mt-1">{getResponsablesLabel(task)}</p>
                     </div>
@@ -466,7 +479,9 @@ export default function AgendaDiariaPage() {
                           {task.seccion && <p className="mt-1 text-xs text-slate-500">{task.seccion}</p>}
                         </td>
                         <td className="px-4 py-3"><PrioridadBadge value={task.prioridad} /></td>
-                        <td className="px-4 py-3 text-xs font-medium text-slate-600">{task.departamento ?? '-'}</td>
+                        <td className="max-w-[170px] px-4 py-3 text-xs font-medium text-slate-600">
+                          <span className="block truncate">{getDepartamentosLabel(task)}</span>
+                        </td>
                         <td className="max-w-[150px] px-4 py-3 text-xs font-medium text-slate-700">
                           <span className="block truncate">{getResponsablesLabel(task)}</span>
                         </td>
