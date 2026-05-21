@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
 import { PUBLIC_REGISTRATION_ROLES, REGISTRATION_DEPARTAMENTOS } from '@/lib/registration-options'
+import { supabase } from '@/lib/supabase'
 
 type PublicRole = {
   codigo: string
@@ -32,10 +33,17 @@ type PublicDepartamento = {
   nombre: string
 }
 
-export default function RegisterForm() {
+type PublicOrganismo = {
+  id: string
+  nombre: string
+  slug?: string | null
+}
+
+export default function RegisterForm({ nextPath = '/organismos/nuevo' }: { nextPath?: string }) {
   const router = useRouter()
   const [roles, setRoles] = useState<PublicRole[]>(PUBLIC_REGISTRATION_ROLES)
   const [departamentos, setDepartamentos] = useState<PublicDepartamento[]>(REGISTRATION_DEPARTAMENTOS)
+  const [organismos, setOrganismos] = useState<PublicOrganismo[]>([])
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -44,6 +52,7 @@ export default function RegisterForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [roleCode, setRoleCode] = useState('responsable')
   const roleCodeRef = useRef(roleCode)
+  const [organismoId, setOrganismoId] = useState('')
   const [departamento, setDepartamento] = useState('')
   const [accepted, setAccepted] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -52,6 +61,17 @@ export default function RegisterForm() {
   const [success, setSuccess] = useState('')
 
   const selectedRole = useMemo(() => roles.find(role => role.codigo === roleCode), [roles, roleCode])
+  const normalizedEmail = email.trim().toLowerCase()
+  const isSegesaEmail = normalizedEmail.endsWith('@segesa.gq')
+  const segesaOrganismo = useMemo(
+    () =>
+      organismos.find(
+        (organismo) =>
+          organismo.id === '00000000-0000-0000-0000-000000000001' ||
+          organismo.nombre.trim().toLowerCase() === 'segesa'
+      ),
+    [organismos]
+  )
 
   useEffect(() => {
     roleCodeRef.current = roleCode
@@ -63,7 +83,12 @@ export default function RegisterForm() {
 
       try {
         const response = await fetch('/api/register')
-        const data = (await response.json()) as { ok?: boolean; roles?: PublicRole[]; departamentos?: PublicDepartamento[] }
+        const data = (await response.json()) as {
+          ok?: boolean
+          roles?: PublicRole[]
+          departamentos?: PublicDepartamento[]
+          organismos?: PublicOrganismo[]
+        }
 
         const nextRoles = response.ok && data.ok && data.roles?.length ? data.roles : PUBLIC_REGISTRATION_ROLES
         const nextDepartamentos =
@@ -71,6 +96,7 @@ export default function RegisterForm() {
 
         setRoles(nextRoles)
         setDepartamentos(nextDepartamentos)
+        setOrganismos(response.ok && data.ok && data.organismos?.length ? data.organismos : [])
         if (!nextRoles.some((role) => role.codigo === roleCodeRef.current)) {
           setRoleCode(nextRoles[0].codigo)
         }
@@ -78,6 +104,7 @@ export default function RegisterForm() {
       } catch {
         setRoles(PUBLIC_REGISTRATION_ROLES)
         setDepartamentos(REGISTRATION_DEPARTAMENTOS)
+        setOrganismos([])
         setDepartamento((current) => current || REGISTRATION_DEPARTAMENTOS[0]?.nombre || '')
       } finally {
         setLoadingRoles(false)
@@ -86,6 +113,12 @@ export default function RegisterForm() {
 
     void loadRoles()
   }, [])
+
+  useEffect(() => {
+    if (isSegesaEmail && segesaOrganismo) {
+      setOrganismoId(segesaOrganismo.id)
+    }
+  }, [isSegesaEmail, segesaOrganismo])
 
   const passwordRules = [
     { label: 'Minimo 8 caracteres', valid: password.length >= 8 },
@@ -119,6 +152,7 @@ export default function RegisterForm() {
     }
 
     try {
+      const passwordForSignIn = password
       const response = await fetch('/api/register', {
         method: 'POST',
         headers: {
@@ -130,6 +164,7 @@ export default function RegisterForm() {
           password,
           roleCode,
           departamento,
+          organismoId: isSegesaEmail ? segesaOrganismo?.id : organismoId || undefined,
         }),
       })
 
@@ -139,14 +174,40 @@ export default function RegisterForm() {
         throw new Error(data.error || 'No se pudo registrar el usuario.')
       }
 
-      setSuccess(`Usuario ${data.user.email} creado correctamente con rol ${data.user.role}. Ya puedes iniciar sesion.`)
+      const destination =
+        typeof data.redirect === 'string'
+          ? data.redirect
+          : nextPath.startsWith('/organismos/nuevo')
+            ? nextPath
+            : '/organismos/nuevo'
+
+      setSuccess(
+        destination === '/organismos/nuevo'
+          ? `Usuario ${data.user.email} creado correctamente. Continuando con la creacion de tu organo...`
+          : `Usuario ${data.user.email} creado correctamente. Entrando al organo seleccionado...`
+      )
       setFullName('')
       setEmail('')
       setPassword('')
       setConfirmPassword('')
+      setOrganismoId('')
       setDepartamento(departamentos[0]?.nombre ?? '')
       setAccepted(false)
-      setTimeout(() => router.push('/login'), 1400)
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: data.user.email,
+        password: passwordForSignIn,
+      })
+
+      if (signInError) {
+        setTimeout(() => router.push(`/login?next=${encodeURIComponent(destination)}`), 1000)
+        return
+      }
+
+      setTimeout(() => {
+        router.push(destination)
+        router.refresh()
+      }, 700)
     } catch (submitError: unknown) {
       setError(submitError instanceof Error ? submitError.message : 'No se pudo registrar el usuario.')
     } finally {
@@ -252,6 +313,34 @@ export default function RegisterForm() {
                     placeholder="usuario@segesa.gq"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="organismo-select" className="label-field">Organo</label>
+                <div className="relative">
+                  <Building2 size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <select
+                    id="organismo-select"
+                    value={isSegesaEmail ? segesaOrganismo?.id ?? organismoId : organismoId}
+                    onChange={(event) => setOrganismoId(event.target.value)}
+                    disabled={loadingRoles || isSegesaEmail}
+                    className="input-shell appearance-none pl-11 pr-10"
+                  >
+                    {!isSegesaEmail && <option value="">Crear un organo nuevo despues del registro</option>}
+                    {isSegesaEmail && !segesaOrganismo && <option value="">Organo Segesa pendiente de configurar</option>}
+                    {organismos.map((organismo) => (
+                      <option key={organismo.id} value={organismo.id}>
+                        {organismo.nombre}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">
+                  {isSegesaEmail
+                    ? 'Los correos de Segesa se vinculan directamente al organo Segesa.'
+                    : 'Puedes unirte a un organo existente o crear uno nuevo despues de registrar la cuenta.'}
+                </p>
               </div>
 
               <div>

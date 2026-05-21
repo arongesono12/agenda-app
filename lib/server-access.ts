@@ -1,6 +1,15 @@
 import { createServerSupabaseClient } from '@/lib/supabase-server'
+import { normalizarRoleCode } from '@/lib/access-control'
 import { normalizarPreferenciasUsuario } from '@/lib/user-preferences'
 import type { PerfilUsuario, TipoUsuario } from '@/lib/types'
+
+export function getOrganismoIdFromRequest(request: Request): string {
+  return request.headers.get('x-organismo-id') ?? ''
+}
+
+export function getRoleCodeFromRequest(request: Request, profile?: PerfilUsuario | null): string {
+  return request.headers.get('x-organismo-rol')?.trim().toLowerCase() || normalizarRoleCode(profile)
+}
 
 type ServerProfileRow = Omit<PerfilUsuario, 'tipo_usuario'> & {
   tipo_usuario?: TipoUsuario | TipoUsuario[] | null

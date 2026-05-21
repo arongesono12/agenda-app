@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { getServerSessionProfile } from '@/lib/server-access'
+import { getOrganismoIdFromRequest, getServerSessionProfile } from '@/lib/server-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,24 +19,29 @@ export async function PATCH(request: Request) {
 
     const payload = (await request.json()) as Payload
     const admin = createAdminSupabaseClient()
+    const organismoId = getOrganismoIdFromRequest(request)
 
     if (payload.all === true) {
-      const { error } = await admin
+      let query = admin
         .from('alertas')
         .update({ leida: true })
         .eq('destinatario_usuario_id', user.id)
         .eq('leida', false)
+      if (organismoId) query = query.eq('organismo_id', organismoId)
+      const { error } = await query
 
       if (error) throw error
       return NextResponse.json({ ok: true })
     }
 
     if (payload.id) {
-      const { error } = await admin
+      let query = admin
         .from('alertas')
         .update({ leida: true })
         .eq('id', payload.id)
         .eq('destinatario_usuario_id', user.id)
+      if (organismoId) query = query.eq('organismo_id', organismoId)
+      const { error } = await query
 
       if (error) throw error
       return NextResponse.json({ ok: true })

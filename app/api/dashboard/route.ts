@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { READER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
-import { getServerSessionProfile } from '@/lib/server-access'
+import { READER_ROLE_CODES } from '@/lib/access-control'
+import { getServerSessionProfile, getOrganismoIdFromRequest, getRoleCodeFromRequest } from '@/lib/server-access'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { applyTaskScope, buildTaskScope, isTaskScopeColumnError } from '@/lib/task-scope'
@@ -140,16 +140,18 @@ function shouldUseDashboardRpc() {
   return false
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || !hasAnyRole(profile, READER_ROLE_CODES)) {
+    if (!user || !READER_ROLE_CODES.includes(activeRoleCode as (typeof READER_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para consultar indicadores.' }, { status: 403 })
     }
 
+    const organismoId = getOrganismoIdFromRequest(request)
     const supabase = await createServerSupabaseClient()
-    const scope = buildTaskScope(user, profile)
+    const scope = buildTaskScope(user, profile, organismoId, activeRoleCode)
     const { data: rpcData, error: rpcError }: { data: unknown; error: Error | null } =
       scope.unrestricted && shouldUseDashboardRpc()
         ? await supabase.rpc('api_dashboard_data')

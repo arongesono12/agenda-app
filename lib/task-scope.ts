@@ -6,6 +6,7 @@ export type TaskScope = {
   unrestricted: boolean
   userId: string | null
   assignedNames: string[]
+  organismoId?: string | null
 }
 
 type ScopedQuery = {
@@ -23,14 +24,20 @@ function uniqueValues(values: Array<string | null | undefined>) {
   )
 }
 
-export function buildTaskScope(user: User, profile: PerfilUsuario | null | undefined): TaskScope {
-  const roleCode = normalizarRoleCode(profile)
+export function buildTaskScope(
+  user: User,
+  profile: PerfilUsuario | null | undefined,
+  organismoId?: string,
+  activeRoleCode?: string
+): TaskScope {
+  const roleCode = activeRoleCode?.trim().toLowerCase() || normalizarRoleCode(profile)
 
   if (ADMIN_ROLE_CODES.includes(roleCode as (typeof ADMIN_ROLE_CODES)[number])) {
     return {
       unrestricted: true,
       userId: user.id,
       assignedNames: [],
+      organismoId: organismoId || null,
     }
   }
 
@@ -41,6 +48,7 @@ export function buildTaskScope(user: User, profile: PerfilUsuario | null | undef
     unrestricted: false,
     userId: user.id,
     assignedNames: uniqueValues([profile?.nombre_completo, emailName]),
+    organismoId: organismoId || null,
   }
 }
 
@@ -49,17 +57,24 @@ export function applyTaskScope<TQuery extends ScopedQuery>(
   scope: TaskScope,
   options: { includeUserColumn?: boolean } = {}
 ) {
-  if (scope.unrestricted) return query
+  let q = query
+
+  // Filtrar por organismo si está disponible
+  if (scope.organismoId) {
+    q = q.eq('organismo_id', scope.organismoId) as TQuery
+  }
+
+  if (scope.unrestricted) return q
 
   if (options.includeUserColumn !== false && scope.userId) {
-    return query.eq('responsable_usuario_id', scope.userId) as TQuery
+    return q.eq('responsable_usuario_id', scope.userId) as TQuery
   }
 
   if (scope.assignedNames.length > 0) {
-    return query.in('responsable', scope.assignedNames) as TQuery
+    return q.in('responsable', scope.assignedNames) as TQuery
   }
 
-  return query.eq('id', -1) as TQuery
+  return q.eq('id', -1) as TQuery
 }
 
 export function isTaskScopeColumnError(error: { code?: string; message?: string } | null | undefined) {

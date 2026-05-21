@@ -26,6 +26,9 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const registerHref = nextPath && nextPath !== '/'
+    ? `/registro?next=${encodeURIComponent(nextPath)}`
+    : '/registro'
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -204,7 +207,7 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
           <div className="mt-5 rounded-[22px] border border-white/80 bg-slate-50/80 px-4 py-3 text-center">
             <p className="text-sm text-slate-600">
               No tienes cuenta?{' '}
-              <Link href="/registro" className="font-semibold text-teal-700 transition-colors hover:text-teal-900">
+              <Link href={registerHref} className="font-semibold text-teal-700 transition-colors hover:text-teal-900">
                 Registrarse
               </Link>
             </p>

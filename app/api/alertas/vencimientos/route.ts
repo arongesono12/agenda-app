@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { getServerSessionProfile } from '@/lib/server-access'
+import { getOrganismoIdFromRequest, getServerSessionProfile } from '@/lib/server-access'
 import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
 import { escapeHtml, sendAgendaEmail } from '@/lib/email/resend'
 
@@ -16,6 +16,7 @@ type TaskDueRow = {
   fecha_fin: string | null
   estado: string
   responsable_usuario_id: string | null
+  organismo_id: string | null
 }
 
 type Recipient = {
@@ -73,23 +74,38 @@ function vencimientoEmailHtml(task: TaskDueRow, recipient: Recipient) {
   `
 }
 
-async function loadAdminRecipients(admin: ReturnType<typeof createAdminSupabaseClient>) {
+async function loadAdminRecipients(admin: ReturnType<typeof createAdminSupabaseClient>, organismoId: string | null) {
+  if (!organismoId) return []
+
+  const { data: miembros, error: miembrosError } = await admin
+    .from('organismo_miembros')
+    .select('usuario_id, rol_codigo')
+    .eq('organismo_id', organismoId)
+    .eq('activo', true)
+
+  if (miembrosError) throw miembrosError
+
+  const adminIds = (miembros ?? [])
+    .filter((miembro) =>
+      ADMIN_ROLE_CODES.includes((miembro.rol_codigo ?? '').toLowerCase() as (typeof ADMIN_ROLE_CODES)[number])
+    )
+    .map((miembro) => miembro.usuario_id)
+    .filter((id): id is string => !!id)
+
+  if (adminIds.length === 0) return []
+
   const { data, error } = await admin
     .from('perfiles_usuario')
-    .select('id, email, nombre_completo, tipo_usuario:tipos_usuario(codigo)')
+    .select('id, email, nombre_completo')
+    .in('id', adminIds)
 
   if (error) throw error
 
-  return ((data ?? []) as Array<Recipient & { tipo_usuario?: { codigo?: string } | Array<{ codigo?: string }> | null }>)
-    .filter((profile) => {
-      const role = Array.isArray(profile.tipo_usuario) ? profile.tipo_usuario[0]?.codigo : profile.tipo_usuario?.codigo
-      return ADMIN_ROLE_CODES.includes((role ?? '').toLowerCase() as (typeof ADMIN_ROLE_CODES)[number])
-    })
-    .map((profile) => ({
-      id: profile.id,
-      email: profile.email,
-      nombre_completo: profile.nombre_completo,
-    }))
+  return ((data ?? []) as Recipient[]).map((profile) => ({
+    id: profile.id,
+    email: profile.email,
+    nombre_completo: profile.nombre_completo,
+  }))
 }
 
 async function loadResponsibleRecipient(
@@ -128,6 +144,7 @@ async function createAlertsForTask(
     titulo: 'Periodo de tarea finalizado',
     mensaje: `Finalizo el tiempo fijado para la tarea "${task.tarea}".`,
     alerta_key: `vencimiento:${task.id}:${recipient.id}`,
+    organismo_id: task.organismo_id,
   }))
 
   if (rows.length === 0) return []
@@ -148,21 +165,30 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminSupabaseClient()
+    const organismoId = getOrganismoIdFromRequest(request)
     const today = startOfTodayIso()
-    const { data: tasks, error } = await admin
+    let taskQuery = admin
       .from('tareas')
-      .select('id, codigo_id, tarea, prioridad, departamento, responsable, fecha_fin, estado, responsable_usuario_id')
+      .select('id, codigo_id, tarea, prioridad, departamento, responsable, fecha_fin, estado, responsable_usuario_id, organismo_id')
       .lte('fecha_fin', today)
       .not('estado', 'in', '("Completado","Cancelado")')
+    if (organismoId) taskQuery = taskQuery.eq('organismo_id', organismoId)
+    const { data: tasks, error } = await taskQuery
 
     if (error) throw error
 
-    const adminRecipients = await loadAdminRecipients(admin)
+    const adminRecipientsByOrg = new Map<string, Recipient[]>()
     let createdAlerts = 0
     let sentEmails = 0
     let emailErrors = 0
 
     for (const task of (tasks ?? []) as TaskDueRow[]) {
+      const taskOrgId = task.organismo_id ?? ''
+      let adminRecipients = adminRecipientsByOrg.get(taskOrgId)
+      if (!adminRecipients) {
+        adminRecipients = await loadAdminRecipients(admin, task.organismo_id)
+        adminRecipientsByOrg.set(taskOrgId, adminRecipients)
+      }
       const alerts = await createAlertsForTask(admin, task, adminRecipients)
       createdAlerts += alerts.length
 
@@ -189,6 +215,7 @@ export async function POST(request: Request) {
             email_error: result.ok ? null : result.error,
           })
           .eq('id', alert.id)
+          .eq('organismo_id', task.organismo_id ?? '')
 
         if (result.ok) sentEmails += 1
         else emailErrors += 1

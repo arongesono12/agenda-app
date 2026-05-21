@@ -27,9 +27,7 @@ function navItemsForRole(roleCode: string) {
   return getAllowedRoutesForRole(roleCode).filter((route) => NAV_ONLY.has(route))
 }
 
-export function getRoleCapabilities(profile?: PerfilUsuario | null): RoleCapabilitySet {
-  const roleCode = normalizarRoleCode(profile)
-
+export function getRoleCapabilitiesForCode(roleCode: string): RoleCapabilitySet {
   if (roleCode === 'administrador' || roleCode === 'administradora') {
     return {
       roleCode,
@@ -115,4 +113,8 @@ export function getRoleCapabilities(profile?: PerfilUsuario | null): RoleCapabil
     canViewHistory: false,
     navItems: navItemsForRole(roleCode),
   }
+}
+
+export function getRoleCapabilities(profile?: PerfilUsuario | null): RoleCapabilitySet {
+  return getRoleCapabilitiesForCode(normalizarRoleCode(profile))
 }

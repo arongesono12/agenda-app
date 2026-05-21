@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
 import { escapeHtml, sendAgendaEmail } from '@/lib/email/resend'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { getServerSessionProfile } from '@/lib/server-access'
+import { getServerSessionProfile, getOrganismoIdFromRequest } from '@/lib/server-access'
 import { buildTaskScope, isTaskScopeColumnError } from '@/lib/task-scope'
 import type { Estado, TipoOrden } from '@/lib/types'
 
@@ -27,6 +27,7 @@ type TaskRow = {
   asignado_por_usuario_id?: string | null
   asignado_por_nombre?: string | null
   fecha_fin: string | null
+  organismo_id?: string | null
 }
 
 type AdminRecipient = {
@@ -144,23 +145,38 @@ function completionEmailHtml(task: TaskRow, userLabel: string) {
   `
 }
 
-async function loadAdminRecipients(admin: ReturnType<typeof createAdminSupabaseClient>) {
+async function loadAdminRecipients(admin: ReturnType<typeof createAdminSupabaseClient>, organismoId: string | null) {
+  if (!organismoId) return []
+
+  const { data: miembros, error: miembrosError } = await admin
+    .from('organismo_miembros')
+    .select('usuario_id, rol_codigo')
+    .eq('organismo_id', organismoId)
+    .eq('activo', true)
+
+  if (miembrosError) throw miembrosError
+
+  const adminIds = (miembros ?? [])
+    .filter((miembro) =>
+      ADMIN_ROLE_CODES.includes((miembro.rol_codigo ?? '').toLowerCase() as (typeof ADMIN_ROLE_CODES)[number])
+    )
+    .map((miembro) => miembro.usuario_id)
+    .filter((id): id is string => !!id)
+
+  if (adminIds.length === 0) return []
+
   const { data, error } = await admin
     .from('perfiles_usuario')
-    .select('id, email, nombre_completo, tipo_usuario:tipos_usuario(codigo)')
+    .select('id, email, nombre_completo')
+    .in('id', adminIds)
 
   if (error) throw error
 
-  return ((data ?? []) as Array<AdminRecipient & { tipo_usuario?: { codigo?: string } | Array<{ codigo?: string }> | null }>)
-    .filter((profile) => {
-      const role = Array.isArray(profile.tipo_usuario) ? profile.tipo_usuario[0]?.codigo : profile.tipo_usuario?.codigo
-      return ADMIN_ROLE_CODES.includes((role ?? '').toLowerCase() as (typeof ADMIN_ROLE_CODES)[number])
-    })
-    .map((profile) => ({
-      id: profile.id,
-      email: profile.email,
-      nombre_completo: profile.nombre_completo,
-    }))
+  return ((data ?? []) as AdminRecipient[]).map((profile) => ({
+    id: profile.id,
+    email: profile.email,
+    nombre_completo: profile.nombre_completo,
+  }))
 }
 
 async function notifyAdminsTaskCompleted(
@@ -168,7 +184,7 @@ async function notifyAdminsTaskCompleted(
   task: TaskRow,
   userLabel: string
 ) {
-  const recipients = await loadAdminRecipients(admin)
+  const recipients = await loadAdminRecipients(admin, task.organismo_id ?? null)
 
   for (const recipient of recipients) {
     const email = normalizeEmail(recipient.email)
@@ -185,6 +201,7 @@ async function notifyAdminsTaskCompleted(
           titulo: title,
           mensaje: message,
           alerta_key: `completada:${task.id}:${recipient.id}`,
+          organismo_id: task.organismo_id ?? null,
         },
         { onConflict: 'alerta_key' }
       )
@@ -209,21 +226,27 @@ async function notifyAdminsTaskCompleted(
         email_error: result.ok ? null : result.error,
       })
       .eq('id', alert.id)
+      .eq('organismo_id', task.organismo_id ?? '')
   }
 }
 
 async function markCurrentUserAssignmentHandled(
   admin: ReturnType<typeof createAdminSupabaseClient>,
   taskId: number,
-  userId: string
+  userId: string,
+  organismoId?: string | null
 ) {
-  const { error } = await admin
+  let query = admin
     .from('alertas')
     .update({ leida: true })
     .eq('tarea_id', taskId)
     .eq('destinatario_usuario_id', userId)
     .eq('tipo_alerta', 'Asignada')
     .eq('leida', false)
+  if (organismoId) {
+    query = query.eq('organismo_id', organismoId)
+  }
+  const { error } = await query
 
   if (error) throw error
 }
@@ -237,6 +260,10 @@ export async function GET(request: Request) {
     }
 
     const url = new URL(request.url)
+    const organismoId = getOrganismoIdFromRequest(request)
+    if (!organismoId) {
+      return NextResponse.json({ ok: false, error: 'No hay organismo activo.' }, { status: 400 })
+    }
     const taskId = Number(url.searchParams.get('tarea_id'))
     const page = toPositiveInt(url.searchParams.get('page'), 0)
     const pageSize = toPositiveInt(url.searchParams.get('pageSize'), 25, 100)
@@ -249,19 +276,20 @@ export async function GET(request: Request) {
       if (!isManager) {
         const taskResult = await admin
           .from('tareas')
-          .select('id, responsable, responsable_usuario_id')
+          .select('id, responsable, responsable_usuario_id, organismo_id')
           .eq('id', taskId)
+          .eq('organismo_id', organismoId)
           .maybeSingle()
         const fallbackTask =
           taskResult.error && isTaskScopeColumnError(taskResult.error)
-            ? await admin.from('tareas').select('id, responsable').eq('id', taskId).maybeSingle()
+            ? await admin.from('tareas').select('id, responsable, organismo_id').eq('id', taskId).eq('organismo_id', organismoId).maybeSingle()
             : taskResult
         const { data: task, error: taskError } = fallbackTask
 
         if (taskError) throw taskError
         if (!task) return NextResponse.json({ ok: false, error: 'La tarea no existe.' }, { status: 404 })
 
-        const scope = buildTaskScope(user, profile)
+        const scope = buildTaskScope(user, profile, organismoId)
         const scopedTask = task as { responsable?: string | null; responsable_usuario_id?: string | null }
         const isAssignedByAssignment = await isUserAssignedToTask(admin, taskId, user.id)
         const isAssigned =
@@ -274,12 +302,14 @@ export async function GET(request: Request) {
         }
       }
 
-      const { data, count, error } = await admin
+      let historyQuery = admin
         .from('historial')
         .select('*', { count: 'exact' })
         .eq('tarea_id', taskId)
         .order('fecha', { ascending: false })
         .range(from, to)
+      if (organismoId) historyQuery = historyQuery.eq('organismo_id', organismoId)
+      const { data, count, error } = await historyQuery
 
       if (error) throw error
 
@@ -294,12 +324,16 @@ export async function GET(request: Request) {
     }
 
     if (!isManager) {
-      const scope = buildTaskScope(user, profile)
+      const scope = buildTaskScope(user, profile, organismoId)
       const assignedIds = new Set(await loadAssignedTaskIds(admin, user.id))
-      const primaryTasks = await admin.from('tareas').select('id').eq('responsable_usuario_id', user.id)
+      let primaryTaskQuery = admin.from('tareas').select('id').eq('responsable_usuario_id', user.id)
+      if (organismoId) primaryTaskQuery = primaryTaskQuery.eq('organismo_id', organismoId)
+      const primaryTasks = await primaryTaskQuery
       const fallbackTasks =
         primaryTasks.error && isTaskScopeColumnError(primaryTasks.error) && scope.assignedNames.length
-          ? await admin.from('tareas').select('id').in('responsable', scope.assignedNames)
+          ? await (organismoId
+              ? admin.from('tareas').select('id').in('responsable', scope.assignedNames).eq('organismo_id', organismoId)
+              : admin.from('tareas').select('id').in('responsable', scope.assignedNames))
           : primaryTasks
 
       if (fallbackTasks.error) throw fallbackTasks.error
@@ -311,12 +345,14 @@ export async function GET(request: Request) {
         return NextResponse.json({ ok: true, rows: [], total: 0, page, pageSize, totalPages: 0 })
       }
 
-      const { data, count, error } = await admin
+      let historyQuery = admin
         .from('historial')
         .select('*', { count: 'exact' })
         .in('tarea_id', taskIds)
         .order('fecha', { ascending: false })
         .range(from, to)
+      if (organismoId) historyQuery = historyQuery.eq('organismo_id', organismoId)
+      const { data, count, error } = await historyQuery
 
       if (error) throw error
 
@@ -330,11 +366,13 @@ export async function GET(request: Request) {
       })
     }
 
-    const { data, count, error } = await admin
+    let mainQuery = admin
       .from('historial')
       .select('*', { count: 'exact' })
       .order('fecha', { ascending: false })
       .range(from, to)
+    if (organismoId) mainQuery = mainQuery.eq('organismo_id', organismoId)
+    const { data, count, error } = await mainQuery
 
     if (error) throw error
 
@@ -362,6 +400,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para registrar historial.' }, { status: 403 })
     }
 
+    const organismoId = getOrganismoIdFromRequest(request)
+    if (!organismoId) {
+      return NextResponse.json({ ok: false, error: 'No hay organismo activo.' }, { status: 400 })
+    }
     const payload = (await request.json()) as HistorialPayload
     const observaciones = payload.observaciones?.trim() ?? ''
     const valorNuevo = payload.valor_nuevo?.trim() ?? ''
@@ -375,18 +417,26 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminSupabaseClient()
-    const primaryTask = await admin
+    let primaryTaskQuery = admin
       .from('tareas')
-      .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, responsable_usuario_id, asignado_por_usuario_id, asignado_por_nombre, fecha_fin')
+      .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, responsable_usuario_id, asignado_por_usuario_id, asignado_por_nombre, fecha_fin, organismo_id')
       .eq('id', payload.tarea_id)
-      .maybeSingle()
+    if (organismoId) primaryTaskQuery = primaryTaskQuery.eq('organismo_id', organismoId)
+    const primaryTask = await primaryTaskQuery.maybeSingle()
     const fallbackTask =
       primaryTask.error && (isTaskScopeColumnError(primaryTask.error) || isMissingAssignmentOwnerColumn(primaryTask.error))
-        ? await admin
-            .from('tareas')
-            .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, fecha_fin')
-            .eq('id', payload.tarea_id)
-            .maybeSingle()
+        ? await (organismoId
+            ? admin
+                .from('tareas')
+                .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, fecha_fin, organismo_id')
+                .eq('id', payload.tarea_id)
+                .eq('organismo_id', organismoId)
+                .maybeSingle()
+            : admin
+                .from('tareas')
+                .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, fecha_fin, organismo_id')
+                .eq('id', payload.tarea_id)
+                .maybeSingle())
         : primaryTask
     const { data: taskData, error: taskError } = fallbackTask
 
@@ -396,7 +446,7 @@ export async function POST(request: Request) {
     }
 
     const task = taskData as TaskRow
-    const scope = buildTaskScope(user, profile)
+    const scope = buildTaskScope(user, profile, organismoId)
     const isManager = hasAnyRole(profile, MANAGER_ROLE_CODES)
     const isAssignedByUserId = !!task.responsable_usuario_id && task.responsable_usuario_id === user.id
     const isAssignedByName = !!task.responsable && scope.assignedNames.includes(task.responsable)
@@ -425,6 +475,7 @@ export async function POST(request: Request) {
       valor_anterior: shouldComplete ? task.estado : `${task.porcentaje_avance ?? 0}%`,
       valor_nuevo: shouldComplete ? 'Completado' : valorNuevo || `${nextProgress}%`,
       observaciones: observaciones || null,
+      ...(organismoId ? { organismo_id: organismoId } : {}),
     })
 
     if (insertError) throw insertError
@@ -439,7 +490,8 @@ export async function POST(request: Request) {
       .from('tareas')
       .update(updatePayload)
       .eq('id', task.id)
-      .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, responsable_usuario_id, asignado_por_usuario_id, asignado_por_nombre, fecha_fin')
+      .eq('organismo_id', organismoId)
+      .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, responsable_usuario_id, asignado_por_usuario_id, asignado_por_nombre, fecha_fin, organismo_id')
       .single()
     const fallbackUpdate =
       updateResult.error && isMissingAssignmentOwnerColumn(updateResult.error)
@@ -447,7 +499,8 @@ export async function POST(request: Request) {
             .from('tareas')
             .update(updatePayload)
             .eq('id', task.id)
-            .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, fecha_fin')
+            .eq('organismo_id', organismoId)
+            .select('id, codigo_id, tarea, estado, porcentaje_avance, responsable, fecha_fin, organismo_id')
             .single()
         : updateResult
     const { data: updatedTask, error: updateError } = fallbackUpdate
@@ -455,7 +508,7 @@ export async function POST(request: Request) {
     if (updateError) throw updateError
 
     if (isAssignedByUserId || isAssignedByName || isAssignedByAssignment) {
-      await markCurrentUserAssignmentHandled(admin, task.id, user.id)
+      await markCurrentUserAssignmentHandled(admin, task.id, user.id, organismoId)
     }
 
     if (shouldComplete) {

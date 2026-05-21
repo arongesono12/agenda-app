@@ -10,7 +10,9 @@ import { ToastProvider } from '@/components/ToastProvider'
 export default function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const AUTH_ROUTES = ['/login', '/registro', '/recuperar-password', '/actualizar-password']
+  const PUBLIC_FULL_PAGE_ROUTES = ['/planes']
   const isAuthRoute = AUTH_ROUTES.includes(pathname)
+  const isPublicFullPageRoute = PUBLIC_FULL_PAGE_ROUTES.includes(pathname)
 
   return (
     <UserSessionProvider>
@@ -23,7 +25,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
               <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-orange-200/20 blur-3xl" />
             </div>
 
-            {isAuthRoute ? (
+            {isAuthRoute || isPublicFullPageRoute ? (
               <main className="relative min-h-screen">
                 {children}
               </main>

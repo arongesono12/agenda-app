@@ -1,5 +1,10 @@
 import RegisterForm from '@/components/RegisterForm'
 
-export default function RegistroPage() {
-  return <RegisterForm />
+export default async function RegistroPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ next?: string }>
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined
+  return <RegisterForm nextPath={resolvedSearchParams?.next || '/organismos/nuevo'} />
 }

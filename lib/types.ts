@@ -143,6 +143,89 @@ export const ESTADOS: Estado[] = ['Pendiente', 'En Proceso', 'Completado', 'Canc
 export const TIPOS_TAREA: TipoTarea[] = ['Estrat\u00E9gica', 'T\u00E9cnica', 'Administrativa', 'Comercial', 'Operativa']
 export const TIPOS_ORDEN: TipoOrden[] = ['Orden', 'Nota', 'Avance', 'Cambio de Estado', 'Incidencia', 'Recordatorio']
 
+// ─── Multi-organismo ────────────────────────────────────────────────────────
+
+export type RolCodigo = 'administrador' | 'administradora' | 'supervisor' | 'responsable' | 'consulta'
+export type PlanCodigo = 'individual' | 'basico' | 'pro' | 'empresa'
+export type EstadoSuscripcion = 'activa' | 'pausada' | 'cancelada' | 'prueba'
+
+export interface Organismo {
+  id: string
+  nombre: string
+  slug: string
+  tipo: 'individual' | 'corporativo'
+  logo_url?: string | null
+  website?: string | null
+  sector?: string | null
+  pais?: string | null
+  activo: boolean
+  creado_por?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface OrganismoMiembro {
+  id?: number
+  organismo_id: string
+  usuario_id: string
+  rol_codigo: RolCodigo
+  activo: boolean
+  invitado_por?: string | null
+  created_at?: string
+  organismo?: Organismo | null
+}
+
+export interface OrganismoSuscripcion {
+  id?: number
+  organismo_id: string
+  plan_codigo: PlanCodigo
+  estado: EstadoSuscripcion
+  stripe_customer_id?: string | null
+  stripe_subscription_id?: string | null
+  periodo_inicio?: string | null
+  periodo_fin?: string | null
+  trial_fin?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface OrganismoFactura {
+  id?: number
+  organismo_id: string
+  stripe_invoice_id?: string | null
+  importe_centimos: number
+  moneda: string
+  estado: 'pagada' | 'pendiente' | 'fallida' | 'anulada'
+  pdf_url?: string | null
+  fecha_emision?: string | null
+  fecha_vencimiento?: string | null
+  created_at?: string
+}
+
+export interface OrganismoInvitacion {
+  id?: number
+  organismo_id: string
+  email: string
+  rol_codigo: RolCodigo
+  token: string
+  usado: boolean
+  expira_at?: string | null
+  invitado_por?: string | null
+  created_at?: string
+}
+
+export interface MiembroConPerfil extends OrganismoMiembro {
+  perfil?: {
+    nombre_completo?: string | null
+    email?: string
+    avatar_url?: string | null
+  } | null
+}
+
+export const SEGESA_ORGANISMO_ID = '00000000-0000-0000-0000-000000000001'
+
+// ─── Colores / constantes ────────────────────────────────────────────────────
+
 export const PRIORIDAD_COLORS: Record<Prioridad, string> = {
   Alta: 'bg-red-50 text-red-700 border-red-200',
   Media: 'bg-amber-50 text-amber-700 border-amber-200',

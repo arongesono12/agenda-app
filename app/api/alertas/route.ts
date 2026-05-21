@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { getServerSessionProfile } from '@/lib/server-access'
+import { getOrganismoIdFromRequest, getServerSessionProfile } from '@/lib/server-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,12 +22,17 @@ export async function GET(request: Request) {
     const limit = toPositiveInt(url.searchParams.get('limit'), 8, 50)
     const onlyUnread = url.searchParams.get('unread') === 'true'
     const admin = createAdminSupabaseClient()
+    const organismoId = getOrganismoIdFromRequest(request)
     let query = admin
       .from('alertas')
       .select('id, tarea_id, tipo_alerta, titulo, mensaje, leida, created_at')
       .eq('destinatario_usuario_id', user.id)
       .order('created_at', { ascending: false })
       .limit(limit)
+
+    if (organismoId) {
+      query = query.eq('organismo_id', organismoId)
+    }
 
     if (onlyUnread) {
       query = query.eq('leida', false)

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, READER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
+import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, READER_ROLE_CODES } from '@/lib/access-control'
 import { PUBLIC_REGISTRATION_ROLE_CODES } from '@/lib/registration-options'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { getServerSessionProfile } from '@/lib/server-access'
+import { getServerSessionProfile, getOrganismoIdFromRequest, getRoleCodeFromRequest } from '@/lib/server-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -110,8 +110,9 @@ async function filterAssignableResponsables(
 export async function GET(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || !hasAnyRole(profile, READER_ROLE_CODES)) {
+    if (!user || !READER_ROLE_CODES.includes(activeRoleCode as (typeof READER_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para consultar catalogos.' }, { status: 403 })
     }
 
@@ -121,26 +122,31 @@ export async function GET(request: Request) {
     const roleFilter = url.searchParams.get('role')?.trim().toLowerCase()
     const departamentoFilter = url.searchParams.get('departamento')
     const admin = createAdminSupabaseClient()
+    const organismoId = getOrganismoIdFromRequest(request)
     const result: Record<string, unknown> = {}
 
     if (resource === 'all' || resource === 'departamentos') {
-      const { data, error } = await admin
+      let deptQuery = admin
         .from('departamentos')
         .select('id, nombre, activo, created_at')
         .order('nombre')
+      if (organismoId) deptQuery = deptQuery.eq('organismo_id', organismoId)
+      const { data, error } = await deptQuery
 
       if (error) throw error
       result.departamentos = data ?? []
     }
 
     if (resource === 'all' || resource === 'responsables') {
-      if (!hasAnyRole(profile, MANAGER_ROLE_CODES)) {
+      if (!MANAGER_ROLE_CODES.includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number])) {
         result.responsables = []
       } else {
-        const { data, error } = await admin
+        let respQuery = admin
           .from('responsables')
           .select('id, nombre, email, usuario_id, departamento, cargo, activo, created_at')
           .order('nombre')
+        if (organismoId) respQuery = respQuery.eq('organismo_id', organismoId)
+        const { data, error } = await respQuery
 
         if (error) throw error
         const rows = (data ?? []) as ResponsableCatalogRow[]
@@ -195,13 +201,15 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || !hasAnyRole(profile, ADMIN_ROLE_CODES)) {
+    if (!user || !ADMIN_ROLE_CODES.includes(activeRoleCode as (typeof ADMIN_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'Solo administradores pueden modificar catalogos.' }, { status: 403 })
     }
 
     const payload = (await request.json()) as CatalogPayload
     const admin = createAdminSupabaseClient()
+    const organismoId = getOrganismoIdFromRequest(request)
 
     if (payload.resource === 'departamentos') {
       const nombre = payload.nombre?.trim()
@@ -211,7 +219,7 @@ export async function POST(request: Request) {
 
       const { data, error } = await admin
         .from('departamentos')
-        .insert({ nombre })
+        .insert({ nombre, ...(organismoId ? { organismo_id: organismoId } : {}) })
         .select('id, nombre, activo, created_at')
         .single()
 
@@ -239,6 +247,7 @@ export async function POST(request: Request) {
           departamento: payload.departamento || null,
           cargo: payload.cargo || null,
           activo: true,
+          ...(organismoId ? { organismo_id: organismoId } : {}),
         })
         .select('id, nombre, email, usuario_id, departamento, cargo, activo, created_at')
         .single()
@@ -259,8 +268,9 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || !hasAnyRole(profile, ADMIN_ROLE_CODES)) {
+    if (!user || !ADMIN_ROLE_CODES.includes(activeRoleCode as (typeof ADMIN_ROLE_CODES)[number])) {
       return NextResponse.json(
         { ok: false, error: 'Solo administradores pueden cambiar el departamento o rol de un responsable.' },
         { status: 403 }
@@ -275,6 +285,7 @@ export async function PATCH(request: Request) {
     }
 
     const admin = createAdminSupabaseClient()
+    const organismoId = getOrganismoIdFromRequest(request)
     const updatePayload: { departamento?: string | null } = {}
 
     if ('departamento' in payload) {
@@ -282,10 +293,13 @@ export async function PATCH(request: Request) {
     }
 
     if (Object.keys(updatePayload).length > 0) {
-      const { error } = await admin
+      let updateQuery = admin
         .from('responsables')
         .update(updatePayload)
         .eq('id', id)
+      if (organismoId) updateQuery = updateQuery.eq('organismo_id', organismoId)
+
+      const { error } = await updateQuery
 
       if (error) throw error
     }
@@ -308,11 +322,12 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ ok: false, error: 'El rol seleccionado no existe en la base de datos.' }, { status: 400 })
       }
 
-      const { data: responsable, error: responsableError } = await admin
+      let responsableQuery = admin
         .from('responsables')
         .select('id, email, usuario_id')
         .eq('id', id)
-        .maybeSingle()
+      if (organismoId) responsableQuery = responsableQuery.eq('organismo_id', organismoId)
+      const { data: responsable, error: responsableError } = await responsableQuery.maybeSingle()
 
       if (responsableError) throw responsableError
       if (!responsable) {
@@ -332,10 +347,12 @@ export async function PATCH(request: Request) {
         userId = profile?.id ?? null
 
         if (userId) {
-          const { error: linkError } = await admin
+          let linkQuery = admin
             .from('responsables')
             .update({ usuario_id: userId })
             .eq('id', id)
+          if (organismoId) linkQuery = linkQuery.eq('organismo_id', organismoId)
+          const { error: linkError } = await linkQuery
 
           if (linkError) throw linkError
         }
@@ -368,8 +385,9 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || !hasAnyRole(profile, ADMIN_ROLE_CODES)) {
+    if (!user || !ADMIN_ROLE_CODES.includes(activeRoleCode as (typeof ADMIN_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'Solo administradores pueden eliminar catalogos.' }, { status: 403 })
     }
 
@@ -382,7 +400,10 @@ export async function DELETE(request: Request) {
     }
 
     const admin = createAdminSupabaseClient()
-    const { error } = await admin.from(resource).delete().eq('id', id)
+    const organismoId = getOrganismoIdFromRequest(request)
+    let deleteQuery = admin.from(resource).delete().eq('id', id)
+    if (organismoId) deleteQuery = deleteQuery.eq('organismo_id', organismoId)
+    const { error } = await deleteQuery
 
     if (error) throw error
     return NextResponse.json({ ok: true })

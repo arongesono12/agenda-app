@@ -24,6 +24,7 @@ export type Database = {
           enviada_email_at: string | null
           email_error: string | null
           alerta_key: string | null
+          organismo_id: string | null
         }
         Insert: {
           id?: number
@@ -39,6 +40,7 @@ export type Database = {
           enviada_email_at?: string | null
           email_error?: string | null
           alerta_key?: string | null
+          organismo_id?: string | null
         }
         Update: Partial<Database['public']['Tables']['alertas']['Insert']>
         Relationships: []
@@ -48,12 +50,14 @@ export type Database = {
           id: number
           nombre: string
           activo: boolean | null
+          organismo_id: string | null
           created_at: string | null
         }
         Insert: {
           id?: number
           nombre: string
           activo?: boolean | null
+          organismo_id?: string | null
           created_at?: string | null
         }
         Update: Partial<Database['public']['Tables']['departamentos']['Insert']>
@@ -71,6 +75,7 @@ export type Database = {
           valor_anterior: string | null
           valor_nuevo: string | null
           observaciones: string | null
+          organismo_id: string | null
         }
         Insert: {
           id?: number
@@ -83,6 +88,7 @@ export type Database = {
           valor_anterior?: string | null
           valor_nuevo?: string | null
           observaciones?: string | null
+          organismo_id?: string | null
         }
         Update: Partial<Database['public']['Tables']['historial']['Insert']>
         Relationships: []
@@ -120,6 +126,7 @@ export type Database = {
           departamento: string | null
           cargo: string | null
           activo: boolean | null
+          organismo_id: string | null
           created_at: string | null
         }
         Insert: {
@@ -130,6 +137,7 @@ export type Database = {
           departamento?: string | null
           cargo?: string | null
           activo?: boolean | null
+          organismo_id?: string | null
           created_at?: string | null
         }
         Update: Partial<Database['public']['Tables']['responsables']['Insert']>
@@ -158,6 +166,7 @@ export type Database = {
           tipo_tarea: string | null
           ultima_actualizacion: string | null
           notas: string | null
+          organismo_id: string | null
           created_at: string | null
           updated_at: string | null
         }
@@ -182,6 +191,7 @@ export type Database = {
           tipo_tarea?: string | null
           ultima_actualizacion?: string | null
           notas?: string | null
+          organismo_id?: string | null
           created_at?: string | null
           updated_at?: string | null
         }
@@ -252,6 +262,144 @@ export type Database = {
           created_at?: string | null
         }
         Update: Partial<Database['public']['Tables']['tipos_usuario']['Insert']>
+        Relationships: []
+      }
+      organismos: {
+        Row: {
+          id: string
+          nombre: string
+          slug: string
+          tipo: string
+          logo_url: string | null
+          website: string | null
+          sector: string | null
+          pais: string | null
+          activo: boolean
+          creado_por: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          nombre: string
+          slug: string
+          tipo?: string
+          logo_url?: string | null
+          website?: string | null
+          sector?: string | null
+          pais?: string | null
+          activo?: boolean
+          creado_por?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['organismos']['Insert']>
+        Relationships: []
+      }
+      organismo_miembros: {
+        Row: {
+          id: number
+          organismo_id: string
+          usuario_id: string
+          rol_codigo: string
+          activo: boolean
+          invitado_por: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: number
+          organismo_id: string
+          usuario_id: string
+          rol_codigo: string
+          activo?: boolean
+          invitado_por?: string | null
+          created_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['organismo_miembros']['Insert']>
+        Relationships: []
+      }
+      organismo_suscripciones: {
+        Row: {
+          id: number
+          organismo_id: string
+          plan_codigo: string
+          estado: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          periodo_inicio: string | null
+          periodo_fin: string | null
+          trial_fin: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: number
+          organismo_id: string
+          plan_codigo: string
+          estado?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          periodo_inicio?: string | null
+          periodo_fin?: string | null
+          trial_fin?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['organismo_suscripciones']['Insert']>
+        Relationships: []
+      }
+      organismo_facturas: {
+        Row: {
+          id: number
+          organismo_id: string
+          stripe_invoice_id: string | null
+          importe_centimos: number
+          moneda: string
+          estado: string
+          pdf_url: string | null
+          fecha_emision: string | null
+          fecha_vencimiento: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: number
+          organismo_id: string
+          stripe_invoice_id?: string | null
+          importe_centimos: number
+          moneda?: string
+          estado?: string
+          pdf_url?: string | null
+          fecha_emision?: string | null
+          fecha_vencimiento?: string | null
+          created_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['organismo_facturas']['Insert']>
+        Relationships: []
+      }
+      organismo_invitaciones: {
+        Row: {
+          id: number
+          organismo_id: string
+          email: string
+          rol_codigo: string
+          token: string
+          usado: boolean
+          expira_at: string | null
+          invitado_por: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: number
+          organismo_id: string
+          email: string
+          rol_codigo?: string
+          token?: string
+          usado?: boolean
+          expira_at?: string | null
+          invitado_por?: string | null
+          created_at?: string | null
+        }
+        Update: Partial<Database['public']['Tables']['organismo_invitaciones']['Insert']>
         Relationships: []
       }
     }

@@ -14,6 +14,7 @@ import {
   ChevronRight,
   ChevronUp,
   CircleUserRound,
+  CreditCard,
   GanttChartSquare,
   History,
   LayoutDashboard,
@@ -22,11 +23,13 @@ import {
   Search,
   Settings,
   User,
+  Users,
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ThemeToggle from '@/components/ThemeToggle'
 import UserAvatar from '@/components/ui/UserAvatar'
+import OrganismoSelector from '@/components/OrganismoSelector'
 import { useUserSession } from '@/components/UserSessionProvider'
 
 const SIDEBAR_COLLAPSED_KEY = 'agenda-sidebar-collapsed'
@@ -163,7 +166,7 @@ function SidebarContent({
   collapsed?: boolean
   onToggleCollapsed?: () => void
 }) {
-  const { profile, capabilities } = useUserSession()
+  const { profile, capabilities, organismoActivo, rolEnOrganismo } = useUserSession()
   const [alertCount, setAlertCount] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
@@ -263,6 +266,13 @@ function SidebarContent({
         </div>
       </div>
 
+      {/* ── Organism selector ── */}
+      {organismoActivo && (
+        <div className="mt-3">
+          <OrganismoSelector collapsed={collapsed} />
+        </div>
+      )}
+
       {/* ── Nav ── */}
       <div className={cn('mt-4 min-h-0 flex-1 overflow-hidden rounded-[24px] border border-white/70 bg-white/55', collapsed ? 'px-2 py-2.5' : 'px-3 py-3')}>
         <div className="sidebar-scroll h-full pr-1">
@@ -283,6 +293,99 @@ function SidebarContent({
             collapsed={collapsed}
             onNavigate={onNavigate}
           />
+
+          {/* ── Organismo ── */}
+          {organismoActivo && (
+            <div>
+              {collapsed ? (
+                <div className="mx-2 mb-1 mt-2 border-t border-slate-100/80" />
+              ) : (
+                <p className="mb-1.5 mt-4 px-3 text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-400">
+                  Organismo
+                </p>
+              )}
+              <ul className="space-y-0.5">
+                {rolEnOrganismo && ['administrador', 'administradora', 'supervisor'].includes(rolEnOrganismo) && (
+                  <li>
+                    <Link
+                      href={`/organismos/${organismoActivo.slug}/miembros`}
+                      onClick={onNavigate}
+                      title={collapsed ? 'Miembros' : undefined}
+                      className={cn(
+                        'group flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
+                        collapsed ? 'justify-center px-2' : 'gap-3 px-3',
+                        pathname.startsWith(`/organismos/${organismoActivo.slug}/miembros`)
+                          ? 'nav-active border-teal-200/30'
+                          : 'border-transparent text-slate-600 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
+                      )}
+                    >
+                      <span className={cn(
+                        'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150',
+                        pathname.startsWith(`/organismos/${organismoActivo.slug}/miembros`)
+                          ? 'bg-white/80 text-teal-700 shadow-[0_4px_14px_rgba(20,184,166,0.18)]'
+                          : 'text-slate-400 group-hover:text-slate-700'
+                      )}>
+                        <Users size={16} />
+                      </span>
+                      {!collapsed && <span className="min-w-0 flex-1 truncate">Miembros</span>}
+                    </Link>
+                  </li>
+                )}
+                {rolEnOrganismo && ['administrador', 'administradora'].includes(rolEnOrganismo) && (
+                  <>
+                    <li>
+                      <Link
+                        href={`/organismos/${organismoActivo.slug}/facturacion`}
+                        onClick={onNavigate}
+                        title={collapsed ? 'Facturación' : undefined}
+                        className={cn(
+                          'group flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
+                          collapsed ? 'justify-center px-2' : 'gap-3 px-3',
+                          pathname.startsWith(`/organismos/${organismoActivo.slug}/facturacion`)
+                            ? 'nav-active border-teal-200/30'
+                            : 'border-transparent text-slate-600 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
+                        )}
+                      >
+                        <span className={cn(
+                          'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150',
+                          pathname.startsWith(`/organismos/${organismoActivo.slug}/facturacion`)
+                            ? 'bg-white/80 text-teal-700 shadow-[0_4px_14px_rgba(20,184,166,0.18)]'
+                            : 'text-slate-400 group-hover:text-slate-700'
+                        )}>
+                          <CreditCard size={16} />
+                        </span>
+                        {!collapsed && <span className="min-w-0 flex-1 truncate">Facturación</span>}
+                      </Link>
+                    </li>
+                    <li>
+                      <Link
+                        href={`/organismos/${organismoActivo.slug}/ajustes`}
+                        onClick={onNavigate}
+                        title={collapsed ? 'Ajustes org.' : undefined}
+                        className={cn(
+                          'group flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
+                          collapsed ? 'justify-center px-2' : 'gap-3 px-3',
+                          pathname.startsWith(`/organismos/${organismoActivo.slug}/ajustes`)
+                            ? 'nav-active border-teal-200/30'
+                            : 'border-transparent text-slate-600 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
+                        )}
+                      >
+                        <span className={cn(
+                          'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150',
+                          pathname.startsWith(`/organismos/${organismoActivo.slug}/ajustes`)
+                            ? 'bg-white/80 text-teal-700 shadow-[0_4px_14px_rgba(20,184,166,0.18)]'
+                            : 'text-slate-400 group-hover:text-slate-700'
+                        )}>
+                          <Settings size={16} />
+                        </span>
+                        {!collapsed && <span className="min-w-0 flex-1 truncate">Ajustes org.</span>}
+                      </Link>
+                    </li>
+                  </>
+                )}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
-import { getServerSessionProfile } from '@/lib/server-access'
-import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, READER_ROLE_CODES, hasAnyRole, normalizarRoleCode } from '@/lib/access-control'
+import { getServerSessionProfile, getOrganismoIdFromRequest, getRoleCodeFromRequest } from '@/lib/server-access'
+import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, READER_ROLE_CODES } from '@/lib/access-control'
 import { escapeHtml, sendAgendaEmail } from '@/lib/email/resend'
 import { applyTaskScope, buildTaskScope, isTaskScopeColumnError, type TaskScope } from '@/lib/task-scope'
 
@@ -251,7 +251,8 @@ async function countTasks(
 
     if (!scopedTaskIds || scopedTaskIds.length === 0) return 0
 
-    const baseQuery = admin.from('tareas').select('id', { count: 'exact', head: true }).in('id', scopedTaskIds)
+    let baseQuery = admin.from('tareas').select('id', { count: 'exact', head: true }).in('id', scopedTaskIds)
+    if (scope.organismoId) baseQuery = baseQuery.eq('organismo_id', scope.organismoId)
     let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds }) as unknown as typeof baseQuery
 
     if (filters.fechaFinLt) query = query.lt('fecha_fin', filters.fechaFinLt)
@@ -727,11 +728,13 @@ async function resolveResponsables(admin: ReturnType<typeof createAdminSupabaseC
 function buildTaskPayload(
   payload: TaskPayload,
   responsable: ResponsableRow | null,
-  assignmentOwner: { userId: string | null; userName: string | null }
+  assignmentOwner: { userId: string | null; userName: string | null },
+  organismoId?: string
 ) {
   const [primaryDepartment] = payloadDepartmentNames(payload)
 
   return {
+    ...(organismoId ? { organismo_id: organismoId } : {}),
     codigo_id:
       payload.codigo_id !== undefined && payload.codigo_id !== null && `${payload.codigo_id}` !== ''
         ? Number(payload.codigo_id)
@@ -1067,11 +1070,13 @@ async function markAssignmentAlertsRead(
 async function saveTask(request: Request, mode: 'create' | 'update') {
   try {
     const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || !hasAnyRole(profile, MANAGER_ROLE_CODES)) {
+    if (!user || !MANAGER_ROLE_CODES.includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para guardar tareas.' }, { status: 403 })
     }
 
+    const organismoId = getOrganismoIdFromRequest(request)
     const payload = (await request.json()) as TaskPayload
 
     if (!payload.tarea?.trim()) {
@@ -1086,7 +1091,7 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
     const responsables = await resolveResponsables(admin, payload)
     const responsable = responsables[0] ?? null
     const userLabel = profile?.nombre_completo?.trim() || profile?.email || user.email || null
-    const roleCode = normalizarRoleCode(profile)
+    const roleCode = activeRoleCode
     let previousResponsibleUserId: string | null = null
     let previousResponsibleName: string | null = null
     let previousAssignments: TaskAssignmentRow[] = []
@@ -1156,13 +1161,11 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
       const taskPayload = buildTaskPayload(payload, responsable, {
         userId: assignmentChanged ? user.id : previousAssignmentOwner.userId ?? user.id,
         userName: assignmentChanged ? userLabel : previousAssignmentOwner.userName ?? userLabel,
-      })
+      }, organismoId || undefined)
       const legacyTaskPayload = buildLegacyTaskPayload(payload, responsable)
 
-      const updateResult = await admin
-        .from('tareas')
-        .update(taskPayload)
-        .eq('id', taskId)
+      const updateQuery = admin.from('tareas').update(taskPayload).eq('id', taskId)
+      const updateResult = await (organismoId ? updateQuery.eq('organismo_id', organismoId) : updateQuery)
         .select('*')
         .single()
       const fallbackUpdate =
@@ -1203,7 +1206,7 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
       const taskPayload = buildTaskPayload(payload, responsable, {
         userId: user.id,
         userName: userLabel,
-      })
+      }, organismoId || undefined)
       const legacyTaskPayload = buildLegacyTaskPayload(payload, responsable)
       const insertResult = await admin.from('tareas').insert(taskPayload).select('*').single()
       const fallbackInsert =
@@ -1259,14 +1262,17 @@ export async function PATCH(request: Request) {
   return saveTask(request, 'update')
 }
 
+
 export async function GET(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || !hasAnyRole(profile, READER_ROLE_CODES)) {
+    if (!user || !READER_ROLE_CODES.includes(activeRoleCode as (typeof READER_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para consultar tareas.' }, { status: 403 })
     }
 
+    const organismoId = getOrganismoIdFromRequest(request)
     const url = new URL(request.url)
     const filters = readFilters(url.searchParams)
     const page = toPositiveInt(url.searchParams.get('page'), 0)
@@ -1277,7 +1283,7 @@ export async function GET(request: Request) {
     const requestedOrderBy = url.searchParams.get('orderBy') || 'created_at'
     const orderBy = TASK_ORDER_COLUMNS.has(requestedOrderBy) ? requestedOrderBy : 'created_at'
     const ascending = url.searchParams.get('ascending') === 'true'
-    const scope = buildTaskScope(user, profile)
+    const scope = buildTaskScope(user, profile, organismoId, activeRoleCode)
 
     const { data, count, error } = await loadTaskPage({
       filters,
@@ -1332,11 +1338,13 @@ export async function GET(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || !hasAnyRole(profile, ADMIN_ROLE_CODES)) {
+    if (!user || !ADMIN_ROLE_CODES.includes(activeRoleCode as (typeof ADMIN_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para eliminar tareas.' }, { status: 403 })
     }
 
+    const organismoId = getOrganismoIdFromRequest(request)
     const url = new URL(request.url)
     let id = Number(url.searchParams.get('id'))
 
@@ -1350,7 +1358,8 @@ export async function DELETE(request: Request) {
     }
 
     const admin = createAdminSupabaseClient()
-    const { error } = await admin.from('tareas').delete().eq('id', id)
+    const deleteQuery = admin.from('tareas').delete().eq('id', id)
+    const { error } = await (organismoId ? deleteQuery.eq('organismo_id', organismoId) : deleteQuery)
 
     if (error) throw error
 

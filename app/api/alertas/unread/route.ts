@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { getServerSessionProfile } from '@/lib/server-access'
+import { getOrganismoIdFromRequest, getServerSessionProfile } from '@/lib/server-access'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { user } = await getServerSessionProfile()
 
@@ -13,11 +13,14 @@ export async function GET() {
     }
 
     const admin = createAdminSupabaseClient()
-    const { count, error } = await admin
+    const organismoId = getOrganismoIdFromRequest(request)
+    let query = admin
       .from('alertas')
       .select('id', { count: 'exact', head: true })
       .eq('destinatario_usuario_id', user.id)
       .eq('leida', false)
+    if (organismoId) query = query.eq('organismo_id', organismoId)
+    const { count, error } = await query
 
     if (error) throw error
 
