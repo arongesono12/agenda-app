@@ -75,6 +75,13 @@ export type Database = {
           valor_anterior: string | null
           valor_nuevo: string | null
           observaciones: string | null
+          actor_usuario_id: string | null
+          actor_rol_codigo: string | null
+          editado_at: string | null
+          editado_por_usuario_id: string | null
+          eliminado_at: string | null
+          eliminado_por_usuario_id: string | null
+          motivo_eliminacion: string | null
           organismo_id: string | null
         }
         Insert: {
@@ -88,6 +95,13 @@ export type Database = {
           valor_anterior?: string | null
           valor_nuevo?: string | null
           observaciones?: string | null
+          actor_usuario_id?: string | null
+          actor_rol_codigo?: string | null
+          editado_at?: string | null
+          editado_por_usuario_id?: string | null
+          eliminado_at?: string | null
+          eliminado_por_usuario_id?: string | null
+          motivo_eliminacion?: string | null
           organismo_id?: string | null
         }
         Update: Partial<Database['public']['Tables']['historial']['Insert']>
