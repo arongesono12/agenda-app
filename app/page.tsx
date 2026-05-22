@@ -116,6 +116,7 @@ export default function AgendaDiariaPage() {
       page: String(page),
       pageSize: String(PAGE_SIZE),
       orderBy: 'created_at',
+      solo_abiertas: 'true',
     })
 
     Object.entries(filters).forEach(([key, value]) => {
@@ -208,7 +209,7 @@ export default function AgendaDiariaPage() {
     setDeletingId(taskToDelete.id)
     setDeleteError('')
 
-    const response = await fetch('/api/tareas', {
+    const response = await fetch(`/api/tareas?id=${taskToDelete.id}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: taskToDelete.id }),

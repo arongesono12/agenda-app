@@ -95,6 +95,74 @@ async function loadOrganismosRegistro(admin: AdminClient) {
   return result.error ? [] : (result.data ?? [])
 }
 
+async function syncRegisteredResponsable({
+  admin,
+  userId,
+  email,
+  fullName,
+  roleCode,
+  departamento,
+  organismoId,
+}: {
+  admin: AdminClient
+  userId: string
+  email: string
+  fullName: string
+  roleCode: string
+  departamento: string
+  organismoId: string | null
+}) {
+  if (!['supervisor', 'responsable'].includes(roleCode)) return
+
+  const payload = {
+    nombre: fullName,
+    email,
+    usuario_id: userId,
+    departamento,
+    activo: true,
+    ...(organismoId ? { organismo_id: organismoId } : {}),
+  }
+
+  const byUser = await admin
+    .from('responsables')
+    .select('id')
+    .eq('usuario_id', userId)
+    .maybeSingle()
+
+  if (byUser.error && byUser.error.code !== 'PGRST116') throw byUser.error
+
+  if (byUser.data?.id) {
+    const { error } = await admin
+      .from('responsables')
+      .update(payload)
+      .eq('id', byUser.data.id)
+
+    if (error) throw error
+    return
+  }
+
+  const byEmail = await admin
+    .from('responsables')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle()
+
+  if (byEmail.error && byEmail.error.code !== 'PGRST116') throw byEmail.error
+
+  if (byEmail.data?.id) {
+    const { error } = await admin
+      .from('responsables')
+      .update(payload)
+      .eq('id', byEmail.data.id)
+
+    if (error) throw error
+    return
+  }
+
+  const { error } = await admin.from('responsables').insert(payload)
+  if (error) throw error
+}
+
 export async function GET() {
   try {
     const admin = createAdminSupabaseClient()
@@ -298,7 +366,15 @@ export async function POST(request: Request) {
       if (memberError) throw memberError
     }
 
-    void departamentoRow
+    await syncRegisteredResponsable({
+      admin,
+      userId,
+      email,
+      fullName,
+      roleCode: roleRow.codigo,
+      departamento: departamentoRow.nombre,
+      organismoId: targetOrganismoId,
+    })
 
     const redirect = targetOrganismoId ? '/dashboard' : '/organismos/nuevo'
 

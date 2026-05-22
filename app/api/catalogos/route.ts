@@ -54,6 +54,86 @@ function readRoleCode(profile: ProfileRoleRow) {
   return role?.codigo?.trim().toLowerCase() ?? ''
 }
 
+async function ensureAssignableMembersAsResponsables(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  organismoId?: string | null
+) {
+  if (!organismoId) return
+
+  const { data: miembros, error: miembrosError } = await admin
+    .from('organismo_miembros')
+    .select('usuario_id, rol_codigo')
+    .eq('organismo_id', organismoId)
+    .eq('activo', true)
+    .in('rol_codigo', ['supervisor', 'responsable'])
+
+  if (miembrosError) throw miembrosError
+
+  const userIds = Array.from(new Set((miembros ?? []).map((m) => m.usuario_id).filter((id): id is string => !!id)))
+  if (userIds.length === 0) return
+
+  const { data: existentes, error: existentesError } = await admin
+    .from('responsables')
+    .select('usuario_id')
+    .eq('organismo_id', organismoId)
+    .in('usuario_id', userIds)
+
+  if (existentesError) throw existentesError
+
+  const existingUserIds = new Set((existentes ?? []).map((r) => r.usuario_id).filter((id): id is string => !!id))
+  const missingUserIds = userIds.filter((id) => !existingUserIds.has(id))
+  if (missingUserIds.length === 0) return
+
+  const { data: profiles, error: profilesError } = await admin
+    .from('perfiles_usuario')
+    .select('id, email, nombre_completo')
+    .in('id', missingUserIds)
+
+  if (profilesError) throw profilesError
+
+  for (const profile of profiles ?? []) {
+    const email = profile.email?.trim().toLowerCase()
+    if (!email) continue
+
+    const nombre = profile.nombre_completo?.trim() || email.split('@')[0]?.replace(/[._-]+/g, ' ') || email
+
+    const existingByEmail = await admin
+      .from('responsables')
+      .select('id, organismo_id')
+      .eq('email', email)
+      .maybeSingle()
+
+    if (existingByEmail.error && existingByEmail.error.code !== 'PGRST116') throw existingByEmail.error
+
+    if (existingByEmail.data?.id) {
+      const { error } = await admin
+        .from('responsables')
+        .update({
+          usuario_id: profile.id,
+          nombre,
+          activo: true,
+          organismo_id: organismoId,
+        })
+        .eq('id', existingByEmail.data.id)
+
+      if (error) throw error
+      continue
+    }
+
+    const { error } = await admin.from('responsables').insert({
+      nombre,
+      email,
+      usuario_id: profile.id,
+      departamento: null,
+      cargo: null,
+      activo: true,
+      organismo_id: organismoId,
+    })
+
+    if (error) throw error
+  }
+}
+
 async function filterAssignableResponsables(
   admin: ReturnType<typeof createAdminSupabaseClient>,
   rows: ResponsableCatalogRow[],
@@ -161,6 +241,8 @@ export async function GET(request: Request) {
       if (!MANAGER_ROLE_CODES.includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number])) {
         result.responsables = []
       } else {
+        await ensureAssignableMembersAsResponsables(admin, organismoId)
+
         let respQuery = admin
           .from('responsables')
           .select('id, nombre, email, usuario_id, departamento, cargo, activo, created_at')

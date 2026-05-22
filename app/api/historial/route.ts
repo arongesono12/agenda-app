@@ -279,13 +279,38 @@ function isMissingAssignmentProgressColumn(error: { code?: string; message?: str
   )
 }
 
-function isMissingHistoryAuditColumn(error: { code?: string; message?: string } | null | undefined) {
+function isAlertTypeConstraintError(error: { code?: string; message?: string } | null | undefined) {
   const message = error?.message ?? ''
-  return (
-    error?.code === '42703' ||
-    error?.code === 'PGRST204' ||
-    /actor_usuario_id|actor_rol_codigo|editado_at|editado_por_usuario_id|eliminado_at|eliminado_por_usuario_id|motivo_eliminacion|column .* does not exist|schema cache/i.test(message)
-  )
+  return error?.code === '23514' && /alertas_tipo_alerta_check|tipo_alerta/i.test(message)
+}
+
+async function loadHistoryRows({
+  admin,
+  organismoId,
+  taskId,
+  taskIds,
+  from,
+  to,
+}: {
+  admin: ReturnType<typeof createAdminSupabaseClient>
+  organismoId: string
+  taskId?: number
+  taskIds?: number[]
+  from: number
+  to: number
+}) {
+  let query = admin
+    .from('historial')
+    .select('*', { count: 'exact' })
+
+  if (taskId) query = query.eq('tarea_id', taskId)
+  if (taskIds?.length) query = query.in('tarea_id', taskIds)
+
+  return query
+    .is('eliminado_at', null)
+    .eq('organismo_id', organismoId)
+    .order('fecha', { ascending: false })
+    .range(from, to)
 }
 
 async function notifyAdminsTaskCompleted(
@@ -412,15 +437,13 @@ export async function GET(request: Request) {
         }
       }
 
-      let historyQuery = admin
-        .from('historial')
-        .select('*', { count: 'exact' })
-        .eq('tarea_id', taskId)
-        .is('eliminado_at', null)
-        .order('fecha', { ascending: false })
-        .range(from, to)
-      if (organismoId) historyQuery = historyQuery.eq('organismo_id', organismoId)
-      const { data, count, error } = await historyQuery
+      const { data, count, error } = await loadHistoryRows({
+        admin,
+        organismoId,
+        taskId,
+        from,
+        to,
+      })
 
       if (error) throw error
 
@@ -456,15 +479,13 @@ export async function GET(request: Request) {
         return NextResponse.json({ ok: true, rows: [], total: 0, page, pageSize, totalPages: 0 })
       }
 
-      let historyQuery = admin
-        .from('historial')
-        .select('*', { count: 'exact' })
-        .in('tarea_id', taskIds)
-        .is('eliminado_at', null)
-        .order('fecha', { ascending: false })
-        .range(from, to)
-      if (organismoId) historyQuery = historyQuery.eq('organismo_id', organismoId)
-      const { data, count, error } = await historyQuery
+      const { data, count, error } = await loadHistoryRows({
+        admin,
+        organismoId,
+        taskIds,
+        from,
+        to,
+      })
 
       if (error) throw error
 
@@ -478,14 +499,12 @@ export async function GET(request: Request) {
       })
     }
 
-    let mainQuery = admin
-      .from('historial')
-      .select('*', { count: 'exact' })
-      .is('eliminado_at', null)
-      .order('fecha', { ascending: false })
-      .range(from, to)
-    if (organismoId) mainQuery = mainQuery.eq('organismo_id', organismoId)
-    const { data, count, error } = await mainQuery
+    const { data, count, error } = await loadHistoryRows({
+      admin,
+      organismoId,
+      from,
+      to,
+    })
 
     if (error) throw error
 
@@ -634,23 +653,7 @@ export async function POST(request: Request) {
       ...(organismoId ? { organismo_id: organismoId } : {}),
     }
 
-    const insertResult = await admin.from('historial').insert(historyInsert)
-    const legacyInsertResult =
-      insertResult.error && isMissingHistoryAuditColumn(insertResult.error)
-        ? await admin.from('historial').insert({
-            fecha: historyInsert.fecha,
-            usuario: historyInsert.usuario,
-            tarea_id: historyInsert.tarea_id,
-            tarea_nombre: historyInsert.tarea_nombre,
-            modulo: historyInsert.modulo,
-            tipo_cambio: historyInsert.tipo_cambio,
-            valor_anterior: historyInsert.valor_anterior,
-            valor_nuevo: historyInsert.valor_nuevo,
-            observaciones: historyInsert.observaciones,
-            ...(organismoId ? { organismo_id: organismoId } : {}),
-          })
-        : insertResult
-    const { error: insertError } = legacyInsertResult
+    const { error: insertError } = await admin.from('historial').insert(historyInsert)
 
     if (insertError) throw insertError
 
@@ -690,7 +693,11 @@ export async function POST(request: Request) {
     }
 
     if (shouldCloseTask) {
-      await notifyAdminsTaskCompleted(admin, updatedTask as TaskRow, userLabel)
+      try {
+        await notifyAdminsTaskCompleted(admin, updatedTask as TaskRow, userLabel)
+      } catch (notificationError) {
+        console.error('No se pudo notificar la finalizacion de la tarea', notificationError)
+      }
     }
 
     return NextResponse.json({ ok: true, task: updatedTask })

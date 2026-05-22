@@ -115,6 +115,7 @@ type TaskDepartmentRow = {
 
 type TaskRow = TaskPayload & {
   id: number
+  organismo_id?: string | null
   responsable_usuario_id?: string | null
   asignado_por_usuario_id?: string | null
   asignado_por_nombre?: string | null
@@ -140,6 +141,7 @@ type TaskFilters = {
   fechaHasta?: string
   conFechas?: boolean
   alertas?: boolean
+  soloAbiertas?: boolean
   cronogramaDesde?: string
   cronogramaHasta?: string
 }
@@ -165,6 +167,17 @@ function sanitizeSearchTerm(value: string) {
   return value.trim().replace(/[(),]/g, ' ').replace(/\s+/g, ' ')
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object') {
+    const record = error as { message?: unknown; details?: unknown; hint?: unknown }
+    return [record.message, record.details, record.hint]
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .join(' ') || fallback
+  }
+  return fallback
+}
+
 function todayIso(offsetDays = 0) {
   const date = new Date()
   date.setHours(0, 0, 0, 0)
@@ -185,6 +198,7 @@ function readFilters(searchParams: URLSearchParams): TaskFilters {
     fechaHasta: searchParams.get('fecha_hasta') || undefined,
     conFechas: searchParams.get('con_fechas') === 'true',
     alertas: searchParams.get('alertas') === 'true',
+    soloAbiertas: searchParams.get('solo_abiertas') === 'true',
     cronogramaDesde: searchParams.get('cronograma_desde') || undefined,
     cronogramaHasta: searchParams.get('cronograma_hasta') || undefined,
   }
@@ -206,6 +220,7 @@ function applyTaskFilters(
     }
   }
   if (filters.estado) next = next.eq('estado', filters.estado)
+  else if (filters.soloAbiertas) next = next.not('estado', 'in', '("Completado","Cancelado")')
   if (filters.tipo) next = next.eq('tipo_tarea', filters.tipo)
   if (filters.responsableExact) next = next.eq('responsable', filters.responsableExact)
   else if (filters.responsable) next = next.ilike('responsable', `%${sanitizeSearchTerm(filters.responsable)}%`)
@@ -914,15 +929,6 @@ function assignmentUserIds(assignments: Array<{ responsable_usuario_id?: string 
   return new Set(assignments.map((assignment) => assignment.responsable_usuario_id).filter((value): value is string => !!value))
 }
 
-function isMissingHistoryAuditColumn(error: { code?: string; message?: string } | null | undefined) {
-  const message = error?.message ?? ''
-  return (
-    error?.code === '42703' ||
-    error?.code === 'PGRST204' ||
-    /actor_usuario_id|actor_rol_codigo|editado_at|editado_por_usuario_id|eliminado_at|eliminado_por_usuario_id|motivo_eliminacion|column .* does not exist|schema cache/i.test(message)
-  )
-}
-
 async function recordTaskReassignment({
   admin,
   taskId,
@@ -959,23 +965,7 @@ async function recordTaskReassignment({
     ...(organismoId ? { organismo_id: organismoId } : {}),
   }
 
-  const insertResult = await admin.from('historial').insert(historyInsert)
-  const legacyInsertResult =
-    insertResult.error && isMissingHistoryAuditColumn(insertResult.error)
-      ? await admin.from('historial').insert({
-          fecha: historyInsert.fecha,
-          usuario: historyInsert.usuario,
-          tarea_id: historyInsert.tarea_id,
-          tarea_nombre: historyInsert.tarea_nombre,
-          modulo: historyInsert.modulo,
-          tipo_cambio: historyInsert.tipo_cambio,
-          valor_anterior: historyInsert.valor_anterior,
-          valor_nuevo: historyInsert.valor_nuevo,
-          observaciones: historyInsert.observaciones,
-          ...(organismoId ? { organismo_id: organismoId } : {}),
-        })
-      : insertResult
-  const { error } = legacyInsertResult
+  const { error } = await admin.from('historial').insert(historyInsert)
 
   if (error) throw error
 }
@@ -1016,6 +1006,7 @@ async function notifyAssignment(
       titulo: title,
       mensaje: message,
       alerta_key: `asignada:${task.id}:${responsable.usuario_id}:${Date.now()}`,
+      organismo_id: task.organismo_id ?? null,
     })
     .select('id')
     .single()
@@ -1039,6 +1030,7 @@ async function notifyAssignment(
       email_error: emailResult.ok ? null : emailResult.error,
     })
     .eq('id', alert.id)
+    .eq('organismo_id', task.organismo_id ?? '')
 }
 
 async function syncTaskAssignments({
@@ -1354,7 +1346,7 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : 'No se pudo guardar la tarea.',
+        error: getErrorMessage(error, 'No se pudo guardar la tarea.'),
       },
       { status: 500 }
     )
@@ -1453,9 +1445,10 @@ export async function DELETE(request: Request) {
 
     const organismoId = getOrganismoIdFromRequest(request)
     const url = new URL(request.url)
-    let id = Number(url.searchParams.get('id'))
+    const queryId = url.searchParams.get('id')
+    let id = queryId ? Number(queryId) : NaN
 
-    if (!Number.isInteger(id)) {
+    if (!Number.isInteger(id) || id <= 0) {
       const payload = (await request.json().catch(() => ({}))) as { id?: number }
       id = Number(payload.id)
     }
