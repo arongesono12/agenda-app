@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, hasAnyRole } from '@/lib/access-control'
+import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES } from '@/lib/access-control'
 import { escapeHtml, sendAgendaEmail } from '@/lib/email/resend'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
-import { getServerSessionProfile, getOrganismoIdFromRequest } from '@/lib/server-access'
+import { getServerSessionProfile, getOrganismoIdFromRequest, getRoleCodeFromRequest } from '@/lib/server-access'
 import { buildTaskScope, isTaskScopeColumnError } from '@/lib/task-scope'
 import type { Estado, TipoOrden } from '@/lib/types'
 
@@ -330,8 +330,9 @@ async function markCurrentUserAssignmentHandled(
 export async function GET(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || !hasAnyRole(profile, [...MANAGER_ROLE_CODES, 'responsable'])) {
+    if (!user || ![...MANAGER_ROLE_CODES, 'responsable'].includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number] | 'responsable')) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para consultar historial.' }, { status: 403 })
     }
 
@@ -346,7 +347,7 @@ export async function GET(request: Request) {
     const from = page * pageSize
     const to = from + pageSize - 1
     const admin = createAdminSupabaseClient()
-    const isManager = hasAnyRole(profile, MANAGER_ROLE_CODES)
+    const isManager = MANAGER_ROLE_CODES.includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number])
 
     if (Number.isInteger(taskId) && taskId > 0) {
       if (!isManager) {
@@ -365,7 +366,7 @@ export async function GET(request: Request) {
         if (taskError) throw taskError
         if (!task) return NextResponse.json({ ok: false, error: 'La tarea no existe.' }, { status: 404 })
 
-        const scope = buildTaskScope(user, profile, organismoId)
+        const scope = buildTaskScope(user, profile, organismoId, activeRoleCode)
         const scopedTask = task as { responsable?: string | null; responsable_usuario_id?: string | null }
         const isAssignedByAssignment = await isUserAssignedToTask(admin, taskId, user.id)
         const isAssigned =
@@ -400,7 +401,7 @@ export async function GET(request: Request) {
     }
 
     if (!isManager) {
-      const scope = buildTaskScope(user, profile, organismoId)
+      const scope = buildTaskScope(user, profile, organismoId, activeRoleCode)
       const assignedIds = new Set(await loadAssignedTaskIds(admin, user.id))
       let primaryTaskQuery = admin.from('tareas').select('id').eq('responsable_usuario_id', user.id)
       if (organismoId) primaryTaskQuery = primaryTaskQuery.eq('organismo_id', organismoId)
@@ -471,8 +472,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || !hasAnyRole(profile, [...MANAGER_ROLE_CODES, 'responsable'])) {
+    if (!user || ![...MANAGER_ROLE_CODES, 'responsable'].includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number] | 'responsable')) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para registrar historial.' }, { status: 403 })
     }
 
@@ -522,8 +524,8 @@ export async function POST(request: Request) {
     }
 
     const task = taskData as TaskRow
-    const scope = buildTaskScope(user, profile, organismoId)
-    const isManager = hasAnyRole(profile, MANAGER_ROLE_CODES)
+    const scope = buildTaskScope(user, profile, organismoId, activeRoleCode)
+    const isManager = MANAGER_ROLE_CODES.includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number])
     const isAssignedByUserId = !!task.responsable_usuario_id && task.responsable_usuario_id === user.id
     const isAssignedByName = !!task.responsable && scope.assignedNames.includes(task.responsable)
     const assignments = await loadTaskAssignments(admin, task.id)

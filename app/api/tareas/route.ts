@@ -887,6 +887,7 @@ async function recordTaskReassignment({
   userLabel,
   previousResponsible,
   nextResponsible,
+  organismoId,
 }: {
   admin: ReturnType<typeof createAdminSupabaseClient>
   taskId: number
@@ -894,6 +895,7 @@ async function recordTaskReassignment({
   userLabel: string | null
   previousResponsible?: string | null
   nextResponsible?: string | null
+  organismoId?: string | null
 }) {
   const { error } = await admin.from('historial').insert({
     fecha: new Date().toISOString(),
@@ -905,6 +907,7 @@ async function recordTaskReassignment({
     valor_anterior: previousResponsible || 'Sin responsable',
     valor_nuevo: nextResponsible || 'Sin responsable',
     observaciones: `Tarea reasignada por ${userLabel || 'Sistema'}.`,
+    ...(organismoId ? { organismo_id: organismoId } : {}),
   })
 
   if (error) throw error
@@ -1217,6 +1220,7 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
           userLabel,
           previousResponsible: previousResponsibleName,
           nextResponsible: responsable?.nombre,
+          organismoId,
         })
       }
     } else {
