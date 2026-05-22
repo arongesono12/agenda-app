@@ -64,6 +64,8 @@ export interface Historial {
   id: number
   fecha: string
   usuario: string
+  actor_usuario_id?: string | null
+  actor_rol_codigo?: string | null
   tarea_id?: number
   tarea_nombre?: string
   modulo: string
@@ -71,6 +73,11 @@ export interface Historial {
   valor_anterior?: string
   valor_nuevo?: string
   observaciones?: string
+  editado_at?: string | null
+  editado_por_usuario_id?: string | null
+  eliminado_at?: string | null
+  eliminado_por_usuario_id?: string | null
+  motivo_eliminacion?: string | null
 }
 
 export interface StatsDepartamento {

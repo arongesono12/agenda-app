@@ -1,13 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Ban, History, Loader2, NotebookPen, Plus, UserPlus, X } from 'lucide-react'
+import { ArrowRight, Ban, History, Loader2, NotebookPen, Pencil, Plus, Trash2, UserPlus, X } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { TIPOS_ORDEN } from '@/lib/types'
 import type { Historial, Responsable, Tarea, TipoOrden } from '@/lib/types'
 import { useUserSession } from '@/components/UserSessionProvider'
 import { useToast } from '@/components/ToastProvider'
+import { ADMIN_ROLE_CODES } from '@/lib/access-control'
 
 interface TaskHistorialModalProps {
   task: Tarea
@@ -50,6 +51,9 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
   const [assignableResponsables, setAssignableResponsables] = useState<Responsable[]>([])
   const [nextResponsableId, setNextResponsableId] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
+  const [editingHistoryId, setEditingHistoryId] = useState<number | null>(null)
+  const [deletingHistoryId, setDeletingHistoryId] = useState<number | null>(null)
+  const [editForm, setEditForm] = useState(EMPTY_FORM)
   const [finalizar, setFinalizar] = useState(false)
   const currentAssignment = useMemo(
     () => task.asignaciones?.find((assignment) => assignment.responsable_usuario_id === profile?.id) ?? null,
@@ -57,6 +61,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
   )
   const currentAssignmentCompleted =
     currentAssignment?.estado === 'Completado' || Number(currentAssignment?.porcentaje_avance ?? 0) >= 100
+  const canDeleteHistory = ADMIN_ROLE_CODES.includes(capabilities.roleCode as (typeof ADMIN_ROLE_CODES)[number])
 
   const canAdd = useMemo(
     () =>
@@ -126,6 +131,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
     setForm(EMPTY_FORM)
     setFinalizar(false)
     setReassignmentDone(false)
+    setEditingHistoryId(null)
   }, [task.id])
 
   useEffect(() => {
@@ -234,6 +240,67 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
     await fetchHistorial()
     if (onUpdate) onUpdate()
     setAssigning(false)
+  }
+
+  const canEditHistoryRow = (row: Historial) =>
+    capabilities.roleCode === 'supervisor' && row.actor_usuario_id === profile?.id
+
+  const startEditHistory = (row: Historial) => {
+    setEditingHistoryId(row.id)
+    setEditForm({
+      tipo_cambio: TIPOS_ORDEN.includes(row.tipo_cambio as TipoOrden) ? row.tipo_cambio as TipoOrden : 'Nota',
+      observaciones: row.observaciones ?? '',
+      valor_nuevo: row.valor_nuevo ?? '',
+    })
+  }
+
+  const cancelEditHistory = () => {
+    setEditingHistoryId(null)
+    setEditForm(EMPTY_FORM)
+  }
+
+  const submitHistoryEdit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!editingHistoryId) return
+
+    const response = await fetch('/api/historial', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: editingHistoryId,
+        tipo_cambio: editForm.tipo_cambio,
+        observaciones: editForm.observaciones || null,
+        valor_nuevo: editForm.valor_nuevo || null,
+      }),
+    })
+    const result = (await response.json()) as { ok?: boolean; error?: string }
+
+    if (!response.ok || !result.ok) {
+      toast.error(result.error ?? 'No se pudo editar la entrada.')
+      return
+    }
+
+    toast.success('Entrada actualizada correctamente.')
+    cancelEditHistory()
+    await fetchHistorial()
+  }
+
+  const deleteHistory = async (row: Historial) => {
+    if (!canDeleteHistory || !confirm('Eliminar esta entrada del historial?')) return
+
+    setDeletingHistoryId(row.id)
+    const response = await fetch(`/api/historial?id=${row.id}`, { method: 'DELETE' })
+    const result = (await response.json()) as { ok?: boolean; error?: string }
+
+    if (!response.ok || !result.ok) {
+      toast.error(result.error ?? 'No se pudo eliminar la entrada.')
+      setDeletingHistoryId(null)
+      return
+    }
+
+    toast.success('Entrada eliminada del historial visible.')
+    setRows((current) => current.filter((item) => item.id !== row.id))
+    setDeletingHistoryId(null)
   }
 
   return (
@@ -471,39 +538,118 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {rows.map((row) => (
-                        <article key={row.id} className="rounded-[26px] border border-slate-100 bg-white p-4 shadow-[0_4px_16px_rgba(15,23,42,0.06)]">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`badge ${CHANGE_COLOR[row.tipo_cambio] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-                              {row.tipo_cambio}
-                            </span>
-                            <span className="text-xs font-medium text-slate-400">{formatDateTime(row.fecha)}</span>
+                      {rows.map((row) => {
+                        const isEditing = editingHistoryId === row.id
+                        const canEditRow = canEditHistoryRow(row)
+
+                        return (
+                          <article key={row.id} className="rounded-[26px] border border-slate-100 bg-white p-4 shadow-[0_4px_16px_rgba(15,23,42,0.06)]">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`badge ${CHANGE_COLOR[row.tipo_cambio] ?? 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                                {row.tipo_cambio}
+                              </span>
+                              <span className="text-xs font-medium text-slate-400">{formatDateTime(row.fecha)}</span>
+                              {row.editado_at && (
+                                <span className="badge border-amber-200 bg-amber-50 text-amber-700">Editado</span>
+                              )}
+                            </div>
+
+                            {(canEditRow || canDeleteHistory) && (
+                              <div className="flex items-center gap-2">
+                                {canEditRow && (
+                                  <button
+                                    type="button"
+                                    onClick={() => isEditing ? cancelEditHistory() : startEditHistory(row)}
+                                    className="action-btn h-9 w-9 rounded-2xl p-0"
+                                    aria-label={isEditing ? 'Cancelar edicion de historial' : 'Editar historial'}
+                                  >
+                                    {isEditing ? <X size={14} /> : <Pencil size={14} />}
+                                  </button>
+                                )}
+                                {canDeleteHistory && (
+                                  <button
+                                    type="button"
+                                    onClick={() => void deleteHistory(row)}
+                                    disabled={deletingHistoryId === row.id}
+                                    className="action-btn h-9 w-9 rounded-2xl p-0 text-rose-600 disabled:opacity-60"
+                                    aria-label="Eliminar historial"
+                                  >
+                                    {deletingHistoryId === row.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </div>
 
-                          {(row.valor_anterior || row.valor_nuevo) && (
-                            <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
-                              <span className="max-w-[40%] break-all rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                                {row.valor_anterior ?? 'Sin valor anterior'}
-                              </span>
-                              <ArrowRight size={12} className="flex-shrink-0 text-slate-400" />
-                              <span className="max-w-[40%] break-all rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">
-                                {row.valor_nuevo ?? 'Sin valor nuevo'}
-                              </span>
-                            </div>
-                          )}
-
-                          {row.observaciones ? (
-                            <p className="mt-3 break-words text-sm leading-6 text-slate-800">{row.observaciones}</p>
+                          {isEditing ? (
+                            <form onSubmit={(event) => void submitHistoryEdit(event)} className="mt-4 space-y-3">
+                              <select
+                                value={editForm.tipo_cambio}
+                                onChange={(event) => setEditForm((current) => ({ ...current, tipo_cambio: event.target.value as TipoOrden }))}
+                                className="input-shell"
+                                aria-label="Tipo de cambio del historial"
+                              >
+                                {TIPOS_ORDEN.map((tipo) => (
+                                  <option key={tipo} value={tipo}>
+                                    {tipo}
+                                  </option>
+                                ))}
+                              </select>
+                              <textarea
+                                value={editForm.observaciones}
+                                onChange={(event) => setEditForm((current) => ({ ...current, observaciones: event.target.value }))}
+                                rows={4}
+                                className="input-shell resize-none"
+                                placeholder="Observaciones"
+                              />
+                              <input
+                                type="text"
+                                value={editForm.valor_nuevo}
+                                onChange={(event) => setEditForm((current) => ({ ...current, valor_nuevo: event.target.value }))}
+                                className="input-shell"
+                                placeholder="Valor nuevo"
+                              />
+                              <div className="flex flex-wrap gap-2">
+                                <button type="submit" className="action-btn-primary flex-1 justify-center">
+                                  <Plus size={14} />
+                                  Guardar cambios
+                                </button>
+                                <button type="button" onClick={cancelEditHistory} className="action-btn flex-1 justify-center">
+                                  <X size={14} />
+                                  Cancelar
+                                </button>
+                              </div>
+                            </form>
                           ) : (
-                            <p className="mt-3 text-xs italic text-slate-400">Sin observaciones registradas.</p>
+                            <>
+                              {(row.valor_anterior || row.valor_nuevo) && (
+                                <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
+                                  <span className="max-w-[40%] break-all rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                                    {row.valor_anterior ?? 'Sin valor anterior'}
+                                  </span>
+                                  <ArrowRight size={12} className="flex-shrink-0 text-slate-400" />
+                                  <span className="max-w-[40%] break-all rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-700">
+                                    {row.valor_nuevo ?? 'Sin valor nuevo'}
+                                  </span>
+                                </div>
+                              )}
+
+                              {row.observaciones ? (
+                                <p className="mt-3 break-words text-sm leading-6 text-slate-800">{row.observaciones}</p>
+                              ) : (
+                                <p className="mt-3 text-xs italic text-slate-400">Sin observaciones registradas.</p>
+                              )}
+                            </>
                           )}
 
                           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
                             <span className="text-[11px] text-slate-400">Módulo: {row.modulo}</span>
                             <span className="text-[11px] font-semibold text-slate-500">{row.usuario ?? 'Sistema'}</span>
                           </div>
-                        </article>
-                      ))}
+                          </article>
+                        )
+                      })}
                     </div>
                   )}
                 </div>

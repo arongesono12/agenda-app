@@ -9,11 +9,13 @@ import type { Estado, TipoOrden } from '@/lib/types'
 export const dynamic = 'force-dynamic'
 
 type HistorialPayload = {
+  id?: number
   tarea_id?: number
   tipo_cambio?: TipoOrden
   valor_nuevo?: string | null
   observaciones?: string | null
   finalizar?: boolean
+  motivo_eliminacion?: string | null
 }
 
 type TaskRow = {
@@ -44,6 +46,28 @@ type AdminRecipient = {
   id: string
   email: string
   nombre_completo: string | null
+}
+
+type HistoryRow = {
+  id: number
+  tarea_id: number | null
+  actor_usuario_id?: string | null
+  eliminado_at?: string | null
+  organismo_id?: string | null
+}
+
+const EDITABLE_HISTORY_TYPES = new Set<TipoOrden>(['Orden', 'Nota', 'Avance', 'Cambio de Estado', 'Incidencia', 'Recordatorio'])
+
+function canUseHistory(activeRoleCode: string) {
+  return [...MANAGER_ROLE_CODES, 'responsable'].includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number] | 'responsable')
+}
+
+function isManagerRole(activeRoleCode: string) {
+  return MANAGER_ROLE_CODES.includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number])
+}
+
+function isAdminRole(activeRoleCode: string) {
+  return ADMIN_ROLE_CODES.includes(activeRoleCode as (typeof ADMIN_ROLE_CODES)[number])
 }
 
 function toPositiveInt(value: string | null, fallback: number, max = Number.MAX_SAFE_INTEGER) {
@@ -332,7 +356,7 @@ export async function GET(request: Request) {
     const { user, profile } = await getServerSessionProfile()
     const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || ![...MANAGER_ROLE_CODES, 'responsable'].includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number] | 'responsable')) {
+    if (!user || !canUseHistory(activeRoleCode)) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para consultar historial.' }, { status: 403 })
     }
 
@@ -347,7 +371,7 @@ export async function GET(request: Request) {
     const from = page * pageSize
     const to = from + pageSize - 1
     const admin = createAdminSupabaseClient()
-    const isManager = MANAGER_ROLE_CODES.includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number])
+    const isManager = isManagerRole(activeRoleCode)
 
     if (Number.isInteger(taskId) && taskId > 0) {
       if (!isManager) {
@@ -383,6 +407,7 @@ export async function GET(request: Request) {
         .from('historial')
         .select('*', { count: 'exact' })
         .eq('tarea_id', taskId)
+        .is('eliminado_at', null)
         .order('fecha', { ascending: false })
         .range(from, to)
       if (organismoId) historyQuery = historyQuery.eq('organismo_id', organismoId)
@@ -426,6 +451,7 @@ export async function GET(request: Request) {
         .from('historial')
         .select('*', { count: 'exact' })
         .in('tarea_id', taskIds)
+        .is('eliminado_at', null)
         .order('fecha', { ascending: false })
         .range(from, to)
       if (organismoId) historyQuery = historyQuery.eq('organismo_id', organismoId)
@@ -446,6 +472,7 @@ export async function GET(request: Request) {
     let mainQuery = admin
       .from('historial')
       .select('*', { count: 'exact' })
+      .is('eliminado_at', null)
       .order('fecha', { ascending: false })
       .range(from, to)
     if (organismoId) mainQuery = mainQuery.eq('organismo_id', organismoId)
@@ -474,7 +501,7 @@ export async function POST(request: Request) {
     const { user, profile } = await getServerSessionProfile()
     const activeRoleCode = getRoleCodeFromRequest(request, profile)
 
-    if (!user || ![...MANAGER_ROLE_CODES, 'responsable'].includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number] | 'responsable')) {
+    if (!user || !canUseHistory(activeRoleCode)) {
       return NextResponse.json({ ok: false, error: 'No tienes permiso para registrar historial.' }, { status: 403 })
     }
 
@@ -525,7 +552,7 @@ export async function POST(request: Request) {
 
     const task = taskData as TaskRow
     const scope = buildTaskScope(user, profile, organismoId, activeRoleCode)
-    const isManager = MANAGER_ROLE_CODES.includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number])
+    const isManager = isManagerRole(activeRoleCode)
     const isAssignedByUserId = !!task.responsable_usuario_id && task.responsable_usuario_id === user.id
     const isAssignedByName = !!task.responsable && scope.assignedNames.includes(task.responsable)
     const assignments = await loadTaskAssignments(admin, task.id)
@@ -582,6 +609,8 @@ export async function POST(request: Request) {
     const { error: insertError } = await admin.from('historial').insert({
       fecha: new Date().toISOString(),
       usuario: userLabel,
+      actor_usuario_id: user.id,
+      actor_rol_codigo: activeRoleCode,
       tarea_id: task.id,
       tarea_nombre: task.tarea,
       modulo: 'Agenda de Control',
@@ -643,6 +672,175 @@ export async function POST(request: Request) {
       {
         ok: false,
         error: error instanceof Error ? error.message : 'No se pudo registrar el historial.',
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
+
+    if (!user || activeRoleCode !== 'supervisor') {
+      return NextResponse.json({ ok: false, error: 'Solo los supervisores pueden editar sus propias entradas de historial.' }, { status: 403 })
+    }
+
+    const organismoId = getOrganismoIdFromRequest(request)
+    if (!organismoId) {
+      return NextResponse.json({ ok: false, error: 'No hay organismo activo.' }, { status: 400 })
+    }
+
+    const payload = (await request.json()) as HistorialPayload
+    if (!Number.isInteger(payload.id) || Number(payload.id) <= 0) {
+      return NextResponse.json({ ok: false, error: 'ID de historial invalido.' }, { status: 400 })
+    }
+
+    const updates: Partial<Pick<HistorialPayload, 'tipo_cambio' | 'valor_nuevo' | 'observaciones'>> & {
+      editado_at: string
+      editado_por_usuario_id: string
+    } = {
+      editado_at: new Date().toISOString(),
+      editado_por_usuario_id: user.id,
+    }
+
+    if (typeof payload.tipo_cambio === 'string') {
+      if (!EDITABLE_HISTORY_TYPES.has(payload.tipo_cambio)) {
+        return NextResponse.json({ ok: false, error: 'Tipo de cambio invalido.' }, { status: 400 })
+      }
+      updates.tipo_cambio = payload.tipo_cambio
+    }
+    if ('valor_nuevo' in payload) updates.valor_nuevo = payload.valor_nuevo?.trim() || null
+    if ('observaciones' in payload) updates.observaciones = payload.observaciones?.trim() || null
+
+    const hasEditableChange =
+      'tipo_cambio' in updates || 'valor_nuevo' in updates || 'observaciones' in updates
+    if (!hasEditableChange) {
+      return NextResponse.json({ ok: false, error: 'No hay cambios para guardar.' }, { status: 400 })
+    }
+
+    const admin = createAdminSupabaseClient()
+    const { data: row, error: rowError } = await admin
+      .from('historial')
+      .select('id, tarea_id, actor_usuario_id, eliminado_at, organismo_id')
+      .eq('id', Number(payload.id))
+      .maybeSingle()
+
+    if (rowError) throw rowError
+    const history = row as HistoryRow | null
+    if (!history || history.eliminado_at) {
+      return NextResponse.json({ ok: false, error: 'Entrada de historial no encontrada.' }, { status: 404 })
+    }
+
+    if (history.actor_usuario_id !== user.id) {
+      return NextResponse.json({ ok: false, error: 'Solo puedes editar las entradas que agregaste.' }, { status: 403 })
+    }
+
+    if (history.organismo_id && history.organismo_id !== organismoId) {
+      return NextResponse.json({ ok: false, error: 'La entrada no pertenece al organismo activo.' }, { status: 403 })
+    }
+
+    if (!history.organismo_id && history.tarea_id) {
+      const { data: task, error: taskError } = await admin
+        .from('tareas')
+        .select('id')
+        .eq('id', history.tarea_id)
+        .eq('organismo_id', organismoId)
+        .maybeSingle()
+
+      if (taskError) throw taskError
+      if (!task) return NextResponse.json({ ok: false, error: 'La entrada no pertenece al organismo activo.' }, { status: 403 })
+    }
+
+    const { data, error } = await admin
+      .from('historial')
+      .update(updates)
+      .eq('id', Number(payload.id))
+      .select('*')
+      .maybeSingle()
+
+    if (error) throw error
+
+    return NextResponse.json({ ok: true, row: data })
+  } catch (error: unknown) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: error instanceof Error ? error.message : 'No se pudo editar el historial.',
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { user, profile } = await getServerSessionProfile()
+    const activeRoleCode = getRoleCodeFromRequest(request, profile)
+
+    if (!user || !isAdminRole(activeRoleCode)) {
+      return NextResponse.json({ ok: false, error: 'Solo los administradores pueden eliminar entradas de historial.' }, { status: 403 })
+    }
+
+    const organismoId = getOrganismoIdFromRequest(request)
+    if (!organismoId) {
+      return NextResponse.json({ ok: false, error: 'No hay organismo activo.' }, { status: 400 })
+    }
+
+    const url = new URL(request.url)
+    const id = Number(url.searchParams.get('id'))
+    if (!Number.isInteger(id) || id <= 0) {
+      return NextResponse.json({ ok: false, error: 'ID de historial invalido.' }, { status: 400 })
+    }
+
+    const admin = createAdminSupabaseClient()
+    const { data: row, error: rowError } = await admin
+      .from('historial')
+      .select('id, tarea_id, eliminado_at, organismo_id')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (rowError) throw rowError
+    const history = row as HistoryRow | null
+    if (!history || history.eliminado_at) {
+      return NextResponse.json({ ok: false, error: 'Entrada de historial no encontrada.' }, { status: 404 })
+    }
+
+    if (history.organismo_id && history.organismo_id !== organismoId) {
+      return NextResponse.json({ ok: false, error: 'La entrada no pertenece al organismo activo.' }, { status: 403 })
+    }
+
+    if (!history.organismo_id && history.tarea_id) {
+      const { data: task, error: taskError } = await admin
+        .from('tareas')
+        .select('id')
+        .eq('id', history.tarea_id)
+        .eq('organismo_id', organismoId)
+        .maybeSingle()
+
+      if (taskError) throw taskError
+      if (!task) return NextResponse.json({ ok: false, error: 'La entrada no pertenece al organismo activo.' }, { status: 403 })
+    }
+
+    const motivo = url.searchParams.get('motivo')?.trim() || null
+    const { error } = await admin
+      .from('historial')
+      .update({
+        eliminado_at: new Date().toISOString(),
+        eliminado_por_usuario_id: user.id,
+        motivo_eliminacion: motivo,
+      })
+      .eq('id', id)
+
+    if (error) throw error
+
+    return NextResponse.json({ ok: true })
+  } catch (error: unknown) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: error instanceof Error ? error.message : 'No se pudo eliminar el historial.',
       },
       { status: 500 }
     )

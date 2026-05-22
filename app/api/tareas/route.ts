@@ -884,7 +884,9 @@ async function recordTaskReassignment({
   admin,
   taskId,
   taskName,
+  userId,
   userLabel,
+  roleCode,
   previousResponsible,
   nextResponsible,
   organismoId,
@@ -892,7 +894,9 @@ async function recordTaskReassignment({
   admin: ReturnType<typeof createAdminSupabaseClient>
   taskId: number
   taskName: string
+  userId: string | null
   userLabel: string | null
+  roleCode: string | null
   previousResponsible?: string | null
   nextResponsible?: string | null
   organismoId?: string | null
@@ -900,6 +904,8 @@ async function recordTaskReassignment({
   const { error } = await admin.from('historial').insert({
     fecha: new Date().toISOString(),
     usuario: userLabel || 'Sistema',
+    actor_usuario_id: userId,
+    actor_rol_codigo: roleCode,
     tarea_id: taskId,
     tarea_nombre: taskName,
     modulo: 'Agenda de Control',
@@ -1217,7 +1223,9 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
           admin,
           taskId: task.id,
           taskName: task.tarea ?? payload.tarea ?? 'Tarea',
+          userId: user.id,
           userLabel,
+          roleCode,
           previousResponsible: previousResponsibleName,
           nextResponsible: responsable?.nombre,
           organismoId,
