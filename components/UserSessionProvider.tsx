@@ -58,13 +58,15 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
 
   const loadOrganismoData = useCallback(async (userId: string) => {
     try {
-      const { data: miembros } = await supabase
-        .from('organismo_miembros')
-        .select('organismo_id, rol_codigo, organismo:organismos(id, nombre, slug, tipo, logo_url, activo)')
-        .eq('usuario_id', userId)
-        .eq('activo', true)
+      void userId
+      const organismosRes = await fetch('/api/organismos', { cache: 'no-store' })
+      const organismosData = organismosRes.ok
+        ? ((await organismosRes.json()) as {
+            organismos?: Array<{ organismo_id: string; rol_codigo: RolCodigo; organismo: Organismo | null }>
+          })
+        : {}
 
-      if (!miembros?.length) {
+      if (!organismosData.organismos?.length) {
         setMisOrganismos([])
         setOrganismoActivo(null)
         setRolEnOrganismo(null)
@@ -72,11 +74,7 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      const organismosList = miembros.map((m) => ({
-        organismo_id: m.organismo_id as string,
-        rol_codigo: m.rol_codigo as RolCodigo,
-        organismo: (Array.isArray(m.organismo) ? m.organismo[0] : m.organismo) as Organismo | null,
-      }))
+      const organismosList = organismosData.organismos
       setMisOrganismos(organismosList)
 
       // Determinar organismo activo desde cookie

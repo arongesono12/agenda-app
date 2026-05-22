@@ -4,6 +4,7 @@ import { useEffect, useState, use } from 'react'
 import { Building2, Loader2, Save } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import { useUserSession } from '@/components/UserSessionProvider'
+import { ADMIN_ROLE_CODES } from '@/lib/access-control'
 
 const SECTORES = [
   'Tecnología', 'Salud', 'Educación', 'Finanzas', 'Construcción',
@@ -23,7 +24,7 @@ interface OrganismoData {
 export default function AjustesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params)
   const { rolEnOrganismo } = useUserSession()
-  const esAdmin = rolEnOrganismo && ['administrador', 'administradora'].includes(rolEnOrganismo)
+  const esAdmin = rolEnOrganismo && ADMIN_ROLE_CODES.includes(rolEnOrganismo as (typeof ADMIN_ROLE_CODES)[number])
 
   const [organismo, setOrganismo] = useState<OrganismoData | null>(null)
   const [nombre, setNombre] = useState('')

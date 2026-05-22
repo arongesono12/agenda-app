@@ -34,7 +34,7 @@ function isSeleccionarOrganismo(pathname: string) {
 
 function isSubscriptionGateExempt(pathname: string) {
   if (pathname === '/planes' || pathname.startsWith('/planes/')) return true
-  if (pathname === '/api/billing/checkout' || pathname === '/api/billing/portal' || pathname === '/api/billing/webhook') return true
+  if (pathname === '/api/billing/checkout' || pathname === '/api/billing/portal' || pathname === '/api/billing/webhook' || pathname === '/api/billing/bank-transfer') return true
   if (pathname.startsWith('/api/organismos')) return true
   if (pathname.startsWith('/organismos/nuevo')) return true
   if (pathname === '/seleccionar-organismo') return true

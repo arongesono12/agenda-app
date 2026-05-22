@@ -82,16 +82,16 @@ export default function CronogramaPage() {
         icon={<GanttChartSquare size={20} />}
         actions={
           <div className="flex items-center gap-2">
-            <button onClick={prevMonth} className="action-btn h-10 w-10 rounded-2xl p-0">
+            <button type="button" onClick={prevMonth} className="action-btn h-10 w-10 rounded-2xl p-0" aria-label="Mes anterior" title="Mes anterior">
               <ChevronLeft size={14} />
             </button>
             <span className="min-w-[140px] px-2 text-center text-sm font-semibold capitalize text-slate-700">
               {monthLabel}
             </span>
-            <button onClick={nextMonth} className="action-btn h-10 w-10 rounded-2xl p-0">
+            <button type="button" onClick={nextMonth} className="action-btn h-10 w-10 rounded-2xl p-0" aria-label="Mes siguiente" title="Mes siguiente">
               <ChevronRight size={14} />
             </button>
-            <button onClick={fetch} className="action-btn h-10 w-10 rounded-2xl p-0">
+            <button type="button" onClick={fetch} className="action-btn h-10 w-10 rounded-2xl p-0" aria-label="Actualizar cronograma" title="Actualizar cronograma">
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             </button>
           </div>

@@ -46,6 +46,9 @@ export interface TareaAsignacion {
   rol_codigo?: string | null
   asignado_por_usuario_id?: string | null
   asignado_por_nombre?: string | null
+  estado?: Estado | null
+  porcentaje_avance?: number | null
+  completado_at?: string | null
   activo?: boolean | null
   created_at?: string | null
 }
@@ -145,7 +148,7 @@ export const TIPOS_ORDEN: TipoOrden[] = ['Orden', 'Nota', 'Avance', 'Cambio de E
 
 // ─── Multi-organismo ────────────────────────────────────────────────────────
 
-export type RolCodigo = 'administrador' | 'administradora' | 'supervisor' | 'responsable' | 'consulta'
+export type RolCodigo = 'superusuario' | 'administrador' | 'administradora' | 'supervisor' | 'responsable' | 'consulta'
 export type PlanCodigo = 'individual' | 'basico' | 'pro' | 'empresa'
 export type EstadoSuscripcion = 'activa' | 'pausada' | 'cancelada' | 'prueba'
 

@@ -55,6 +55,17 @@ function getDepartamentosLabel(task: Tarea) {
   return task.departamento || 'Sin departamento'
 }
 
+function getAssignmentSummary(task: Tarea) {
+  const assignments = task.asignaciones?.filter((assignment) => assignment.activo ?? true) ?? []
+  if (assignments.length <= 1) return null
+
+  const completed = assignments.filter(
+    (assignment) => assignment.estado === 'Completado' || Number(assignment.porcentaje_avance ?? 0) >= 100
+  ).length
+
+  return { completed, total: assignments.length, assignments }
+}
+
 function DetailItem({ icon, label, value }: DetailItemProps) {
   return (
     <div className="rounded-[22px] border border-white/80 bg-white/70 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)]">
@@ -159,6 +170,7 @@ export default function TaskDetailPanel({
           : 'teal'
 
   const prioridadTone = task.prioridad === 'Alta' ? 'red' : task.prioridad === 'Media' ? 'amber' : 'teal'
+  const assignmentSummary = getAssignmentSummary(task)
   const estadoTone =
     task.estado === 'Completado'
       ? 'teal'
@@ -230,6 +242,29 @@ export default function TaskDetailPanel({
           <InfoBlock icon={<FileText size={14} />} label="Descripcion">
             <p className="whitespace-pre-line text-sm leading-7 text-slate-700">{task.tarea}</p>
           </InfoBlock>
+
+          {assignmentSummary && (
+            <InfoBlock icon={<UserRound size={14} />} label="Avance por responsable">
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-slate-800">
+                  {assignmentSummary.completed} de {assignmentSummary.total} responsables han completado su parte.
+                </p>
+                {assignmentSummary.assignments.map((assignment) => (
+                  <div key={assignment.id ?? `${assignment.responsable_usuario_id}-${assignment.responsable_nombre}`} className="rounded-[20px] border border-slate-100 bg-slate-50/80 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate text-sm font-semibold text-slate-800">
+                        {assignment.responsable_nombre}
+                      </span>
+                      <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                        {assignment.estado ?? 'Pendiente'}
+                      </span>
+                    </div>
+                    <ProgressBar value={Number(assignment.porcentaje_avance ?? 0)} showLabel size="sm" />
+                  </div>
+                ))}
+              </div>
+            </InfoBlock>
+          )}
 
           <InfoBlock icon={<ScrollText size={14} />} label="Notas de seguimiento">
             <p className="whitespace-pre-line text-sm leading-7 text-slate-700">

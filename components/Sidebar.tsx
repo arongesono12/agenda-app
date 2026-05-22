@@ -9,6 +9,7 @@ import {
   Bell,
   BarChart3,
   CalendarDays,
+  CheckSquare,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -31,11 +32,14 @@ import ThemeToggle from '@/components/ThemeToggle'
 import UserAvatar from '@/components/ui/UserAvatar'
 import OrganismoSelector from '@/components/OrganismoSelector'
 import { useUserSession } from '@/components/UserSessionProvider'
+import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES } from '@/lib/access-control'
+import { SEGESA_ORGANISMO_ID } from '@/lib/types'
 
 const SIDEBAR_COLLAPSED_KEY = 'agenda-sidebar-collapsed'
 
 const navItems = [
   { href: '/', label: 'Agenda diaria', icon: CalendarDays, badge: null, group: 'work' },
+  { href: '/mis-tareas', label: 'Mis tareas', icon: CheckSquare, badge: null, group: 'work' },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null, group: 'work' },
   { href: '/alertas', label: 'Alertas', icon: Bell, badge: 'alert', group: 'work' },
   { href: '/cronograma', label: 'Cronograma', icon: GanttChartSquare, badge: null, group: 'work' },
@@ -179,6 +183,9 @@ function SidebarContent({
   )
   const workItems = useMemo(() => visibleNavItems.filter((i) => i.group === 'work'), [visibleNavItems])
   const toolItems = useMemo(() => visibleNavItems.filter((i) => i.group === 'tools'), [visibleNavItems])
+  const isSegesaUser = profile?.email?.trim().toLowerCase().endsWith('@segesa.gq') ?? false
+  const isSegesaOrganismo = organismoActivo?.id === SEGESA_ORGANISMO_ID
+  const showOrganismoModule = !!organismoActivo && !isSegesaUser && !isSegesaOrganismo
 
   const userName = profile?.nombre_completo?.trim() || profile?.email?.split('@')[0] || 'Usuario'
   const userRole = profile?.tipo_usuario?.nombre?.trim() || 'Responsable'
@@ -267,7 +274,7 @@ function SidebarContent({
       </div>
 
       {/* ── Organism selector ── */}
-      {organismoActivo && (
+      {showOrganismoModule && (
         <div className="mt-3">
           <OrganismoSelector collapsed={collapsed} />
         </div>
@@ -295,7 +302,7 @@ function SidebarContent({
           />
 
           {/* ── Organismo ── */}
-          {organismoActivo && (
+          {showOrganismoModule && (
             <div>
               {collapsed ? (
                 <div className="mx-2 mb-1 mt-2 border-t border-slate-100/80" />
@@ -305,7 +312,7 @@ function SidebarContent({
                 </p>
               )}
               <ul className="space-y-0.5">
-                {rolEnOrganismo && ['administrador', 'administradora', 'supervisor'].includes(rolEnOrganismo) && (
+                {rolEnOrganismo && MANAGER_ROLE_CODES.includes(rolEnOrganismo as (typeof MANAGER_ROLE_CODES)[number]) && (
                   <li>
                     <Link
                       href={`/organismos/${organismoActivo.slug}/miembros`}
@@ -331,7 +338,7 @@ function SidebarContent({
                     </Link>
                   </li>
                 )}
-                {rolEnOrganismo && ['administrador', 'administradora'].includes(rolEnOrganismo) && (
+                {rolEnOrganismo && ADMIN_ROLE_CODES.includes(rolEnOrganismo as (typeof ADMIN_ROLE_CODES)[number]) && (
                   <>
                     <li>
                       <Link

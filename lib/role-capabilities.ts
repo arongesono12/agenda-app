@@ -1,4 +1,4 @@
-import { getLandingPathForRole, getAllowedRoutesForRole, normalizarRoleCode } from '@/lib/access-control'
+import { ADMIN_ROLE_CODES, getLandingPathForRole, getAllowedRoutesForRole, normalizarRoleCode } from '@/lib/access-control'
 import type { PerfilUsuario } from '@/lib/types'
 
 export type RoleCapabilitySet = {
@@ -21,14 +21,14 @@ export type RoleCapabilitySet = {
   navItems: string[]
 }
 
-const NAV_ONLY = new Set(['/', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos'])
+const NAV_ONLY = new Set(['/', '/mis-tareas', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos'])
 
 function navItemsForRole(roleCode: string) {
   return getAllowedRoutesForRole(roleCode).filter((route) => NAV_ONLY.has(route))
 }
 
 export function getRoleCapabilitiesForCode(roleCode: string): RoleCapabilitySet {
-  if (roleCode === 'administrador' || roleCode === 'administradora') {
+  if (ADMIN_ROLE_CODES.includes(roleCode as (typeof ADMIN_ROLE_CODES)[number])) {
     return {
       roleCode,
       landingPath: getLandingPathForRole(roleCode),

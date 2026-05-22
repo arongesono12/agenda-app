@@ -6,13 +6,14 @@ import PageHeader from '@/components/ui/PageHeader'
 import BillingCard from '@/components/BillingCard'
 import PlanBadge from '@/components/PlanBadge'
 import { useUserSession } from '@/components/UserSessionProvider'
+import { ADMIN_ROLE_CODES } from '@/lib/access-control'
 import { SEGESA_ORGANISMO_ID } from '@/lib/organismo-access'
 import type { OrganismoFactura } from '@/lib/types'
 
 export default function FacturacionPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params)
   const { organismoActivo, suscripcion, rolEnOrganismo } = useUserSession()
-  const esAdmin = rolEnOrganismo && ['administrador', 'administradora'].includes(rolEnOrganismo)
+  const esAdmin = rolEnOrganismo && ADMIN_ROLE_CODES.includes(rolEnOrganismo as (typeof ADMIN_ROLE_CODES)[number])
   const esSegesa = organismoActivo?.id === SEGESA_ORGANISMO_ID
 
   const [facturas, setFacturas] = useState<OrganismoFactura[]>([])

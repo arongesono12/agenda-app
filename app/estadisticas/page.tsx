@@ -96,7 +96,7 @@ export default function EstadisticasPage() {
         subtitle="Analisis e indicadores avanzados de gestion"
         icon={<BarChart3 size={20} />}
         actions={
-          <button onClick={fetch} className="action-btn h-12 w-12 rounded-2xl p-0">
+          <button onClick={fetch} className="action-btn h-12 w-12 rounded-2xl p-0" title="Recargar estadísticas">
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
           </button>
         }

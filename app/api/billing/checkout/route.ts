@@ -3,6 +3,7 @@ import { getServerSessionProfile } from '@/lib/server-access'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { crearCheckoutSession } from '@/lib/billing/checkout'
 import { esOrganismoSegesa, resolverRolActivo } from '@/lib/organismo-access'
+import { ADMIN_ROLE_CODES } from '@/lib/access-control'
 import type { PlanCodigo } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
 
     // Verificar que el usuario sea admin del organismo
     const rol = await resolverRolActivo(admin, user.id, organismoId)
-    if (!rol || !['administrador', 'administradora'].includes(rol)) {
+    if (!rol || !ADMIN_ROLE_CODES.includes(rol as (typeof ADMIN_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'Solo administradores pueden gestionar la suscripción.' }, { status: 403 })
     }
 

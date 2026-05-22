@@ -51,10 +51,19 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
   const [nextResponsableId, setNextResponsableId] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [finalizar, setFinalizar] = useState(false)
+  const currentAssignment = useMemo(
+    () => task.asignaciones?.find((assignment) => assignment.responsable_usuario_id === profile?.id) ?? null,
+    [profile?.id, task.asignaciones]
+  )
+  const currentAssignmentCompleted =
+    currentAssignment?.estado === 'Completado' || Number(currentAssignment?.porcentaje_avance ?? 0) >= 100
 
   const canAdd = useMemo(
-    () => (capabilities.canUpdateAssignedTasks || capabilities.canEditTasks) && !BLOCKED_STATES.has(task.estado),
-    [capabilities.canEditTasks, capabilities.canUpdateAssignedTasks, task.estado]
+    () =>
+      (capabilities.canUpdateAssignedTasks || capabilities.canEditTasks) &&
+      !BLOCKED_STATES.has(task.estado) &&
+      !(capabilities.canUpdateAssignedTasks && !capabilities.canEditTasks && currentAssignmentCompleted),
+    [capabilities.canEditTasks, capabilities.canUpdateAssignedTasks, currentAssignmentCompleted, task.estado]
   )
   const canReassign = useMemo(
     () =>
@@ -372,9 +381,15 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                       className="mt-1 h-4 w-4 rounded border-slate-300 accent-teal-600"
                     />
                     <span>
-                      <span className="block text-sm font-semibold text-slate-800">Marcar tarea como finalizada</span>
+                      <span className="block text-sm font-semibold text-slate-800">
+                        {task.asignaciones && task.asignaciones.length > 1
+                          ? 'Marcar mi parte como finalizada'
+                          : 'Marcar tarea como finalizada'}
+                      </span>
                       <span className="mt-1 block text-xs leading-5 text-slate-500">
-                        Cambia el estado a Completado, fija el avance en 100% y notifica a los administradores.
+                        {task.asignaciones && task.asignaciones.length > 1
+                          ? 'La tarea se completara solo cuando todos los responsables finalicen su parte.'
+                          : 'Cambia el estado a Completado, fija el avance en 100% y notifica a los administradores.'}
                       </span>
                     </span>
                   </label>

@@ -3,6 +3,7 @@ import { getServerSessionProfile } from '@/lib/server-access'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { crearPortalSession } from '@/lib/billing/portal'
 import { esOrganismoSegesa, resolverRolActivo } from '@/lib/organismo-access'
+import { ADMIN_ROLE_CODES } from '@/lib/access-control'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
     const admin = createAdminSupabaseClient()
 
     const rol = await resolverRolActivo(admin, user.id, organismoId)
-    if (!rol || !['administrador', 'administradora'].includes(rol)) {
+    if (!rol || !ADMIN_ROLE_CODES.includes(rol as (typeof ADMIN_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'Solo administradores pueden acceder a facturación.' }, { status: 403 })
     }
 

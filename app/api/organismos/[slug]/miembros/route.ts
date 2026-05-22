@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getServerSessionProfile } from '@/lib/server-access'
 import { resolverRolActivo } from '@/lib/organismo-access'
+import { ADMIN_ROLE_CODES } from '@/lib/access-control'
 import type { RolCodigo } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -71,7 +72,7 @@ export async function PATCH(
     if (!organismo) return NextResponse.json({ ok: false, error: 'Organismo no encontrado.' }, { status: 404 })
 
     const rol = await resolverRolActivo(admin, user.id, organismo.id)
-    if (!rol || !['administrador', 'administradora'].includes(rol)) {
+    if (!rol || !ADMIN_ROLE_CODES.includes(rol as (typeof ADMIN_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'Solo administradores pueden cambiar roles.' }, { status: 403 })
     }
 
@@ -116,7 +117,7 @@ export async function DELETE(
     if (!organismo) return NextResponse.json({ ok: false, error: 'Organismo no encontrado.' }, { status: 404 })
 
     const rol = await resolverRolActivo(admin, user.id, organismo.id)
-    if (!rol || !['administrador', 'administradora'].includes(rol)) {
+    if (!rol || !ADMIN_ROLE_CODES.includes(rol as (typeof ADMIN_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'Solo administradores pueden eliminar miembros.' }, { status: 403 })
     }
 

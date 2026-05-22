@@ -296,6 +296,32 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['organismos']['Insert']>
         Relationships: []
       }
+      mis_tareas: {
+        Row: {
+          id: number
+          usuario_id: string
+          titulo: string
+          descripcion: string | null
+          fecha: string | null
+          completada: boolean
+          completada_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          usuario_id: string
+          titulo: string
+          descripcion?: string | null
+          fecha?: string | null
+          completada?: boolean
+          completada_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['mis_tareas']['Insert']>
+        Relationships: []
+      }
       organismo_miembros: {
         Row: {
           id: number

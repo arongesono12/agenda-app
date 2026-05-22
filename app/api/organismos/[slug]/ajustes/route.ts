@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getServerSessionProfile } from '@/lib/server-access'
 import { resolverRolActivo } from '@/lib/organismo-access'
+import { ADMIN_ROLE_CODES } from '@/lib/access-control'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +58,7 @@ export async function PATCH(
     if (!organismo) return NextResponse.json({ ok: false, error: 'Organismo no encontrado.' }, { status: 404 })
 
     const rol = await resolverRolActivo(admin, user.id, organismo.id)
-    if (!rol || !['administrador', 'administradora'].includes(rol)) {
+    if (!rol || !ADMIN_ROLE_CODES.includes(rol as (typeof ADMIN_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'Solo administradores pueden modificar los ajustes.' }, { status: 403 })
     }
 

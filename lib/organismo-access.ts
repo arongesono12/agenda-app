@@ -8,6 +8,21 @@ export function esOrganismoSegesa(organismoId?: string | null) {
   return organismoId === SEGESA_ORGANISMO_ID
 }
 
+export async function esSuperusuarioGlobal(
+  supabase: SupabaseClient,
+  usuarioId: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from('perfiles_usuario')
+    .select('tipo_usuario:tipos_usuario(codigo)')
+    .eq('id', usuarioId)
+    .maybeSingle()
+
+  const row = data as { tipo_usuario?: { codigo?: string } | Array<{ codigo?: string }> | null } | null
+  const role = Array.isArray(row?.tipo_usuario) ? row.tipo_usuario[0] : row?.tipo_usuario
+  return role?.codigo?.trim().toLowerCase() === 'superusuario'
+}
+
 export function getSuscripcionSegesaExenta(): OrganismoSuscripcion {
   return {
     organismo_id: SEGESA_ORGANISMO_ID,
@@ -34,13 +49,33 @@ export async function resolverRolActivo(
     .eq('activo', true)
     .maybeSingle()
 
-  return (data?.rol_codigo as RolCodigo) ?? null
+  if (data?.rol_codigo) return data.rol_codigo as RolCodigo
+
+  if (await esSuperusuarioGlobal(supabase, usuarioId)) return 'superusuario'
+
+  return null
 }
 
 export async function listarOrganismosDeUsuario(
   supabase: SupabaseClient,
   usuarioId: string
 ): Promise<Array<{ organismo_id: string; rol_codigo: RolCodigo; organismo: Organismo | null }>> {
+  if (await esSuperusuarioGlobal(supabase, usuarioId)) {
+    const { data, error } = await supabase
+      .from('organismos')
+      .select('id, nombre, slug, tipo, logo_url, activo')
+      .eq('activo', true)
+      .order('nombre', { ascending: true })
+
+    if (error || !data) return []
+
+    return data.map((organismo) => ({
+      organismo_id: organismo.id as string,
+      rol_codigo: 'superusuario',
+      organismo: organismo as Organismo,
+    }))
+  }
+
   const { data, error } = await supabase
     .from('organismo_miembros')
     .select('organismo_id, rol_codigo, organismo:organismos(id, nombre, slug, tipo, logo_url, activo)')

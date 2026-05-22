@@ -1,16 +1,16 @@
 import type { PerfilUsuario } from '@/lib/types'
 
-export const ADMIN_ROLE_CODES = ['administrador', 'administradora'] as const
-export const MANAGER_ROLE_CODES = ['administrador', 'administradora', 'supervisor'] as const
-export const EDITOR_ROLE_CODES = ['administrador', 'administradora', 'supervisor', 'responsable'] as const
-export const READER_ROLE_CODES = ['administrador', 'administradora', 'supervisor', 'responsable', 'consulta'] as const
+export const ADMIN_ROLE_CODES = ['superusuario', 'administrador', 'administradora'] as const
+export const MANAGER_ROLE_CODES = ['superusuario', 'administrador', 'administradora', 'supervisor'] as const
+export const EDITOR_ROLE_CODES = ['superusuario', 'administrador', 'administradora', 'supervisor', 'responsable'] as const
+export const READER_ROLE_CODES = ['superusuario', 'administrador', 'administradora', 'supervisor', 'responsable', 'consulta'] as const
 
 export type RoleCode = (typeof READER_ROLE_CODES)[number]
 
-const ADMIN_ROUTES = ['/', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos']
-const SUPERVISOR_ROUTES = ['/', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial']
-const RESPONSABLE_ROUTES = ['/', '/dashboard', '/alertas', '/cronograma', '/historial']
-const CONSULTA_ROUTES = ['/dashboard', '/alertas', '/busqueda', '/cronograma', '/estadisticas']
+const ADMIN_ROUTES = ['/', '/mis-tareas', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos']
+const SUPERVISOR_ROUTES = ['/', '/mis-tareas', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial']
+const RESPONSABLE_ROUTES = ['/', '/mis-tareas', '/dashboard', '/alertas', '/cronograma', '/historial']
+const CONSULTA_ROUTES = ['/mis-tareas', '/dashboard', '/alertas', '/busqueda', '/cronograma', '/estadisticas']
 const COMMON_AUTH_ROUTES = ['/perfil', '/configuracion', '/forbidden']
 
 // Rutas de organismos accesibles por cualquier usuario autenticado

@@ -30,6 +30,16 @@ type TaskRow = {
   organismo_id?: string | null
 }
 
+type AssignmentRow = {
+  id: number
+  tarea_id: number
+  responsable_usuario_id: string | null
+  responsable_nombre: string
+  estado?: Estado | null
+  porcentaje_avance?: number | null
+  activo?: boolean | null
+}
+
 type AdminRecipient = {
   id: string
   email: string
@@ -110,6 +120,63 @@ async function isUserAssignedToTask(
   return !!data?.id
 }
 
+async function loadTaskAssignments(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  taskId: number
+) {
+  const result = await admin
+    .from('tarea_asignaciones')
+    .select('id, tarea_id, responsable_usuario_id, responsable_nombre, estado, porcentaje_avance, activo')
+    .eq('tarea_id', taskId)
+    .eq('activo', true)
+
+  if (!result.error) return (result.data ?? []) as unknown as AssignmentRow[]
+  if (isMissingTaskAssignmentsTable(result.error)) return []
+  if (!isMissingAssignmentProgressColumn(result.error)) throw result.error
+
+  const fallback = await admin
+    .from('tarea_asignaciones')
+    .select('id, tarea_id, responsable_usuario_id, responsable_nombre, activo')
+    .eq('tarea_id', taskId)
+    .eq('activo', true)
+
+  if (fallback.error) {
+    if (isMissingTaskAssignmentsTable(fallback.error)) return []
+    throw fallback.error
+  }
+
+  return ((fallback.data ?? []) as unknown as AssignmentRow[]).map((assignment) => ({
+    ...assignment,
+    estado: 'Pendiente',
+    porcentaje_avance: 0,
+  }))
+}
+
+async function updateAssignmentProgress(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  assignmentId: number,
+  progress: number,
+  completed: boolean
+) {
+  const payload = {
+    porcentaje_avance: progress,
+    estado: completed ? 'Completado' : progress > 0 ? 'En Proceso' : 'Pendiente',
+    completado_at: completed ? new Date().toISOString() : null,
+  }
+
+  const { error } = await admin
+    .from('tarea_asignaciones')
+    .update(payload)
+    .eq('id', assignmentId)
+
+  if (error) {
+    if (isMissingAssignmentProgressColumn(error)) return false
+    throw error
+  }
+
+  return true
+}
+
 async function loadAssignedTaskIds(
   admin: ReturnType<typeof createAdminSupabaseClient>,
   userId: string
@@ -177,6 +244,15 @@ async function loadAdminRecipients(admin: ReturnType<typeof createAdminSupabaseC
     email: profile.email,
     nombre_completo: profile.nombre_completo,
   }))
+}
+
+function isMissingAssignmentProgressColumn(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? ''
+  return (
+    error?.code === '42703' ||
+    error?.code === 'PGRST204' ||
+    /estado|porcentaje_avance|completado_at|column .* does not exist|schema cache/i.test(message)
+  )
 }
 
 async function notifyAdminsTaskCompleted(
@@ -450,7 +526,9 @@ export async function POST(request: Request) {
     const isManager = hasAnyRole(profile, MANAGER_ROLE_CODES)
     const isAssignedByUserId = !!task.responsable_usuario_id && task.responsable_usuario_id === user.id
     const isAssignedByName = !!task.responsable && scope.assignedNames.includes(task.responsable)
-    const isAssignedByAssignment = await isUserAssignedToTask(admin, task.id, user.id)
+    const assignments = await loadTaskAssignments(admin, task.id)
+    const currentAssignment = assignments.find((assignment) => assignment.responsable_usuario_id === user.id) ?? null
+    const isAssignedByAssignment = !!currentAssignment
 
     if (!isManager && !isAssignedByUserId && !isAssignedByName && !isAssignedByAssignment) {
       return NextResponse.json({ ok: false, error: 'Solo puedes actualizar tareas asignadas a tu usuario.' }, { status: 403 })
@@ -463,7 +541,41 @@ export async function POST(request: Request) {
     const userLabel = profile?.nombre_completo?.trim() || profile?.email || user.email || 'Usuario'
     const progressFromValue = parseProgress(valorNuevo)
     const shouldComplete = isFinalization(payload)
-    const nextProgress = shouldComplete ? 100 : progressFromValue ?? Math.min(Number(task.porcentaje_avance ?? 0) + 10, 95)
+    const hasAssignments = assignments.length > 0
+
+    if (hasAssignments && !currentAssignment && shouldComplete) {
+      return NextResponse.json(
+        { ok: false, error: 'Solo cada responsable asignado puede completar su propia parte de la tarea.' },
+        { status: 403 }
+      )
+    }
+
+    const currentAssignmentProgress = Number(currentAssignment?.porcentaje_avance ?? task.porcentaje_avance ?? 0)
+    const nextOwnProgress = shouldComplete ? 100 : progressFromValue ?? Math.min(currentAssignmentProgress + 10, 95)
+
+    const nextAssignmentStates = assignments.map((assignment) => {
+      if (currentAssignment && assignment.id === currentAssignment.id) {
+        return {
+          ...assignment,
+          porcentaje_avance: nextOwnProgress,
+          estado: shouldComplete ? 'Completado' : nextOwnProgress > 0 ? 'En Proceso' : 'Pendiente',
+        }
+      }
+      return assignment
+    })
+    const nextProgress = hasAssignments
+      ? Math.round(
+          nextAssignmentStates.reduce((acc, assignment) => acc + Number(assignment.porcentaje_avance ?? 0), 0) /
+            nextAssignmentStates.length
+        )
+      : shouldComplete
+        ? 100
+        : progressFromValue ?? Math.min(Number(task.porcentaje_avance ?? 0) + 10, 95)
+    const allAssignmentsCompleted =
+      hasAssignments &&
+      nextAssignmentStates.every((assignment) => assignment.estado === 'Completado' || Number(assignment.porcentaje_avance ?? 0) >= 100)
+    const shouldCloseTask = hasAssignments ? allAssignmentsCompleted : shouldComplete
+    const nextTaskState = shouldCloseTask ? 'Completado' : nextProgress > 0 && task.estado === 'Pendiente' ? 'En Proceso' : task.estado
 
     const { error: insertError } = await admin.from('historial').insert({
       fecha: new Date().toISOString(),
@@ -472,17 +584,25 @@ export async function POST(request: Request) {
       tarea_nombre: task.tarea,
       modulo: 'Agenda de Control',
       tipo_cambio: payload.tipo_cambio,
-      valor_anterior: shouldComplete ? task.estado : `${task.porcentaje_avance ?? 0}%`,
-      valor_nuevo: shouldComplete ? 'Completado' : valorNuevo || `${nextProgress}%`,
+      valor_anterior: shouldComplete ? (hasAssignments ? `${currentAssignmentProgress}%` : task.estado) : `${currentAssignmentProgress}%`,
+      valor_nuevo: shouldComplete
+        ? hasAssignments
+          ? `Parte completada por ${userLabel}`
+          : 'Completado'
+        : valorNuevo || `${nextOwnProgress}%`,
       observaciones: observaciones || null,
       ...(organismoId ? { organismo_id: organismoId } : {}),
     })
 
     if (insertError) throw insertError
 
+    if (currentAssignment) {
+      await updateAssignmentProgress(admin, currentAssignment.id, nextOwnProgress, shouldComplete)
+    }
+
     const updatePayload = {
       porcentaje_avance: nextProgress,
-      estado: shouldComplete ? 'Completado' : task.estado,
+      estado: nextTaskState,
       ultima_actualizacion: new Date().toISOString(),
     }
 
@@ -511,7 +631,7 @@ export async function POST(request: Request) {
       await markCurrentUserAssignmentHandled(admin, task.id, user.id, organismoId)
     }
 
-    if (shouldComplete) {
+    if (shouldCloseTask) {
       await notifyAdminsTaskCompleted(admin, updatedTask as TaskRow, userLabel)
     }
 

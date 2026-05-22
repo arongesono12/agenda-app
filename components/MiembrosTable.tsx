@@ -14,6 +14,7 @@ const ROLES: { value: RolCodigo; label: string }[] = [
 ]
 
 const ROL_COLORS: Record<RolCodigo, string> = {
+  superusuario: 'bg-slate-100 text-slate-600 border-slate-200',
   administrador: 'bg-purple-50 text-purple-700 border-purple-200',
   administradora: 'bg-purple-50 text-purple-700 border-purple-200',
   supervisor: 'bg-teal-50 text-teal-700 border-teal-200',

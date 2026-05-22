@@ -99,6 +99,9 @@ type TaskAssignmentRow = {
   rol_codigo: string | null
   asignado_por_usuario_id?: string | null
   asignado_por_nombre?: string | null
+  estado?: string | null
+  porcentaje_avance?: number | null
+  completado_at?: string | null
   activo?: boolean | null
   created_at?: string | null
 }
@@ -993,20 +996,49 @@ async function syncTaskAssignments({
   }
 
   if (responsables.length > 0) {
-    const rows = responsables.map((responsable) => ({
-      tarea_id: task.id,
-      responsable_id: responsable.id,
-      responsable_usuario_id: responsable.usuario_id,
-      responsable_nombre: responsable.nombre,
-      responsable_email: normalizeEmail(responsable.email),
-      departamento: responsable.departamento,
-      rol_codigo: responsable.rol_codigo ?? null,
-      asignado_por_usuario_id: assignmentOwner.userId,
-      asignado_por_nombre: assignmentOwner.userName,
-      activo: true,
-    }))
-    const insertResult = await admin.from('tarea_asignaciones').insert(rows)
-    if (insertResult.error) throw insertResult.error
+    const previousByUserId = new Map(
+      previousAssignments
+        .filter((assignment) => assignment.responsable_usuario_id)
+        .map((assignment) => [assignment.responsable_usuario_id as string, assignment])
+    )
+    const rows = responsables.map((responsable) => {
+      const previous = responsable.usuario_id ? previousByUserId.get(responsable.usuario_id) : null
+
+      return {
+        tarea_id: task.id,
+        responsable_id: responsable.id,
+        responsable_usuario_id: responsable.usuario_id,
+        responsable_nombre: responsable.nombre,
+        responsable_email: normalizeEmail(responsable.email),
+        departamento: responsable.departamento,
+        rol_codigo: responsable.rol_codigo ?? null,
+        asignado_por_usuario_id: previous?.asignado_por_usuario_id ?? assignmentOwner.userId,
+        asignado_por_nombre: previous?.asignado_por_nombre ?? assignmentOwner.userName,
+        estado: previous?.estado ?? 'Pendiente',
+        porcentaje_avance: previous?.porcentaje_avance ?? 0,
+        completado_at: previous?.completado_at ?? null,
+        activo: true,
+      }
+    })
+    const insertResult = await admin.from('tarea_asignaciones').insert(rows as unknown as never[])
+    if (insertResult.error) {
+      const message = insertResult.error.message ?? ''
+      const missingProgressColumns =
+        insertResult.error.code === 'PGRST204' ||
+        insertResult.error.code === '42703' ||
+        /estado|porcentaje_avance|completado_at|schema cache|column .* does not exist/i.test(message)
+
+      if (!missingProgressColumns) throw insertResult.error
+
+      const legacyRows = rows.map(({ estado, porcentaje_avance, completado_at, ...row }) => {
+        void estado
+        void porcentaje_avance
+        void completado_at
+        return row
+      })
+      const legacyInsert = await admin.from('tarea_asignaciones').insert(legacyRows)
+      if (legacyInsert.error) throw legacyInsert.error
+    }
   }
 
   for (const responsable of responsables) {

@@ -112,10 +112,11 @@ export default function BusquedaPage() {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="sm:col-span-2">
-            <label className="label-field">Buscar por descripcion, ID o codigo</label>
+            <label htmlFor="q" className="label-field">Buscar por descripcion, ID o codigo</label>
             <div className="relative">
               <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
+                id="q"
                 type="text"
                 value={filters.q}
                 onChange={(e) => set('q', e.target.value)}
@@ -126,44 +127,44 @@ export default function BusquedaPage() {
             </div>
           </div>
           <div>
-            <label className="label-field">Responsable</label>
-            <input type="text" value={filters.responsable} onChange={(e) => set('responsable', e.target.value)} placeholder="Nombre del responsable" className="input-shell" />
+            <label htmlFor="responsable" className="label-field">Responsable</label>
+            <input id="responsable" type="text" value={filters.responsable} onChange={(e) => set('responsable', e.target.value)} placeholder="Nombre del responsable" className="input-shell" />
           </div>
           <div>
-            <label className="label-field">Prioridad</label>
-            <select value={filters.prioridad} onChange={(e) => set('prioridad', e.target.value)} className="input-shell">
+            <label htmlFor="prioridad" className="label-field">Prioridad</label>
+            <select id="prioridad" value={filters.prioridad} onChange={(e) => set('prioridad', e.target.value)} className="input-shell">
               <option value="">Todas</option>
               {PRIORIDADES.map((p) => <option key={p}>{p}</option>)}
             </select>
           </div>
           <div>
-            <label className="label-field">Departamento</label>
-            <select value={filters.departamento} onChange={(e) => set('departamento', e.target.value)} className="input-shell">
+            <label htmlFor="departamento" className="label-field">Departamento</label>
+            <select id="departamento" value={filters.departamento} onChange={(e) => set('departamento', e.target.value)} className="input-shell">
               <option value="">Todos</option>
               {DEPARTAMENTOS.map((d) => <option key={d}>{d}</option>)}
             </select>
           </div>
           <div>
-            <label className="label-field">Estado</label>
-            <select value={filters.estado} onChange={(e) => set('estado', e.target.value)} className="input-shell">
+            <label htmlFor="estado" className="label-field">Estado</label>
+            <select id="estado" value={filters.estado} onChange={(e) => set('estado', e.target.value)} className="input-shell">
               <option value="">Todos</option>
               {ESTADOS.map((s) => <option key={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="label-field">Tipo de tarea</label>
-            <select value={filters.tipo} onChange={(e) => set('tipo', e.target.value)} className="input-shell">
+            <label htmlFor="tipo" className="label-field">Tipo de tarea</label>
+            <select id="tipo" value={filters.tipo} onChange={(e) => set('tipo', e.target.value)} className="input-shell">
               <option value="">Todos</option>
               {TIPOS_TAREA.map((t) => <option key={t}>{t}</option>)}
             </select>
           </div>
           <div>
-            <label className="label-field">Fecha fin desde</label>
-            <input type="date" value={filters.fecha_desde} onChange={(e) => set('fecha_desde', e.target.value)} className="input-shell" />
+            <label htmlFor="fecha_desde" className="label-field">Fecha fin desde</label>
+            <input id="fecha_desde" type="date" value={filters.fecha_desde} onChange={(e) => set('fecha_desde', e.target.value)} className="input-shell" />
           </div>
           <div>
-            <label className="label-field">Fecha fin hasta</label>
-            <input type="date" value={filters.fecha_hasta} onChange={(e) => set('fecha_hasta', e.target.value)} className="input-shell" />
+            <label htmlFor="fecha_hasta" className="label-field">Fecha fin hasta</label>
+            <input id="fecha_hasta" type="date" value={filters.fecha_hasta} onChange={(e) => set('fecha_hasta', e.target.value)} className="input-shell" />
           </div>
         </div>
 

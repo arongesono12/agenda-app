@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Building2, ChevronDown, CreditCard, Landmark, Loader2, Wallet } from 'lucide-react'
+import { Building2, CheckCircle2, ChevronDown, CreditCard, Landmark, Loader2, Wallet } from 'lucide-react'
 import { PLANES } from '@/lib/billing/plans'
 import type { PlanCodigo } from '@/lib/types'
 
@@ -14,10 +14,23 @@ const SECTORES = [
 
 const METODOS_PAGO = [
   { codigo: 'tarjeta', nombre: 'Tarjeta / Stripe', descripcion: 'Disponible ahora', disponible: true, icon: CreditCard },
-  { codigo: 'transferencia', nombre: 'Transferencia bancaria', descripcion: 'Proximamente', disponible: false, icon: Landmark },
+  { codigo: 'transferencia', nombre: 'Transferencia bancaria', descripcion: 'Genera una referencia de pago', disponible: true, icon: Landmark },
   { codigo: 'muni_dinero', nombre: 'Muni Dinero', descripcion: 'Proximamente', disponible: false, icon: Wallet },
   { codigo: 'rosa_money', nombre: 'Rosa Money', descripcion: 'Proximamente', disponible: false, icon: Wallet },
 ]
+
+type TransferenciaInfo = {
+  referencia: string
+  importeCentimos: number
+  moneda: string
+  beneficiario: string
+  banco: string
+  cuenta: string
+  iban?: string | null
+  swift?: string | null
+  concepto: string
+  vencimiento: string
+}
 
 function NuevoOrganismoForm() {
   const router = useRouter()
@@ -30,16 +43,21 @@ function NuevoOrganismoForm() {
   const [planCodigo, setPlanCodigo] = useState<PlanCodigo>(planInicial)
   const [intervalo, setIntervalo] = useState<'mensual' | 'anual'>('mensual')
   const [metodoPago, setMetodoPago] = useState('tarjeta')
+  const [transferencia, setTransferencia] = useState<TransferenciaInfo | null>(null)
+  const [dashboardUrl, setDashboardUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const planSeleccionado = PLANES.find((p) => p.codigo === planCodigo)
   const esGratis = planSeleccionado?.precioMensual === 0
+  const formatMoney = (centimos: number, moneda: string) =>
+    new Intl.NumberFormat('es-ES', { style: 'currency', currency: moneda.toUpperCase() }).format(centimos / 100)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setTransferencia(null)
 
     try {
       const res = await fetch('/api/organismos', {
@@ -56,7 +74,28 @@ function NuevoOrganismoForm() {
         return
       }
 
-      // Plan de pago: lanzar checkout
+      if (metodoPago === 'transferencia') {
+        const transferenciaRes = await fetch('/api/billing/bank-transfer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            organismoId: data.organismo.id,
+            planCodigo,
+            intervalo,
+          }),
+        })
+        const transferenciaData = await transferenciaRes.json()
+
+        if (!transferenciaRes.ok || !transferenciaData.ok) {
+          throw new Error(transferenciaData.error || 'Error al generar la transferencia bancaria.')
+        }
+
+        setTransferencia(transferenciaData.instrucciones)
+        setDashboardUrl(transferenciaData.redirect || `/organismos/${data.organismo.slug}/dashboard`)
+        return
+      }
+
+      // Plan de pago: lanzar checkout con tarjeta.
       const checkoutRes = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -94,6 +133,69 @@ function NuevoOrganismoForm() {
         {error && (
           <div className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
             {error}
+          </div>
+        )}
+
+        {transferencia && (
+          <div className="mb-6 rounded-3xl border border-teal-200 bg-teal-50 p-5 text-sm text-slate-700">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-white text-teal-700">
+                <CheckCircle2 size={18} />
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900">Transferencia bancaria generada</p>
+                <p className="mt-1 text-slate-600">
+                  Realiza el pago con la referencia indicada. Tu organismo queda en periodo de verificacion mientras se confirma la transferencia.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 rounded-2xl border border-white/80 bg-white/70 p-4">
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Importe</span>
+                <span className="font-semibold text-slate-900">{formatMoney(transferencia.importeCentimos, transferencia.moneda)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Referencia</span>
+                <span className="font-semibold text-slate-900">{transferencia.referencia}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Beneficiario</span>
+                <span className="text-right font-semibold text-slate-900">{transferencia.beneficiario}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Banco</span>
+                <span className="text-right font-semibold text-slate-900">{transferencia.banco}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Cuenta</span>
+                <span className="text-right font-semibold text-slate-900">{transferencia.cuenta}</span>
+              </div>
+              {transferencia.iban && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-500">IBAN</span>
+                  <span className="text-right font-semibold text-slate-900">{transferencia.iban}</span>
+                </div>
+              )}
+              {transferencia.swift && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-500">SWIFT</span>
+                  <span className="text-right font-semibold text-slate-900">{transferencia.swift}</span>
+                </div>
+              )}
+              <div className="border-t border-slate-100 pt-3">
+                <span className="block text-slate-500">Concepto</span>
+                <span className="mt-1 block font-semibold text-slate-900">{transferencia.concepto}</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => router.replace(dashboardUrl || '/dashboard')}
+              className="action-btn-primary mt-4 w-full justify-center"
+            >
+              Ir al dashboard
+            </button>
           </div>
         )}
 
@@ -239,6 +341,8 @@ function NuevoOrganismoForm() {
               ? 'Procesando...'
               : esGratis
               ? 'Crear organismo'
+              : metodoPago === 'transferencia'
+              ? 'Crear y generar transferencia'
               : 'Crear y continuar al pago'}
           </button>
         </form>

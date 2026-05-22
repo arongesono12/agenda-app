@@ -6,6 +6,7 @@ import MiembrosTable from '@/components/MiembrosTable'
 import InvitarMiembroModal from '@/components/InvitarMiembroModal'
 import PageHeader from '@/components/ui/PageHeader'
 import { useUserSession } from '@/components/UserSessionProvider'
+import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES } from '@/lib/access-control'
 import type { MiembroConPerfil } from '@/lib/types'
 
 export default function MiembrosPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -15,8 +16,8 @@ export default function MiembrosPage({ params }: { params: Promise<{ slug: strin
   const [loading, setLoading] = useState(true)
   const [showInvitar, setShowInvitar] = useState(false)
 
-  const puedeInvitar = rolEnOrganismo && ['administrador', 'administradora', 'supervisor'].includes(rolEnOrganismo)
-  const esAdmin = rolEnOrganismo && ['administrador', 'administradora'].includes(rolEnOrganismo)
+  const puedeInvitar = rolEnOrganismo && MANAGER_ROLE_CODES.includes(rolEnOrganismo as (typeof MANAGER_ROLE_CODES)[number])
+  const esAdmin = rolEnOrganismo && ADMIN_ROLE_CODES.includes(rolEnOrganismo as (typeof ADMIN_ROLE_CODES)[number])
 
   const loadMiembros = useCallback(async () => {
     setLoading(true)

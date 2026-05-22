@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getServerSessionProfile } from '@/lib/server-access'
 import { resolverRolActivo, obtenerSuscripcion } from '@/lib/organismo-access'
+import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES } from '@/lib/access-control'
 import { verificarLimiteUsuarios } from '@/lib/plan-limits'
 import { sendAgendaEmail, escapeHtml } from '@/lib/email/resend'
 import type { RolCodigo } from '@/lib/types'
@@ -44,7 +45,7 @@ export async function GET(
     if (!organismo) return NextResponse.json({ ok: false, error: 'Organismo no encontrado.' }, { status: 404 })
 
     const rol = await resolverRolActivo(admin, user.id, organismo.id)
-    if (!rol || !['administrador', 'administradora', 'supervisor'].includes(rol)) {
+    if (!rol || !MANAGER_ROLE_CODES.includes(rol as (typeof MANAGER_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'Sin permiso.' }, { status: 403 })
     }
 
@@ -88,7 +89,7 @@ export async function POST(
     if (!organismo) return NextResponse.json({ ok: false, error: 'Organismo no encontrado.' }, { status: 404 })
 
     const rol = await resolverRolActivo(admin, user.id, organismo.id)
-    if (!rol || !['administrador', 'administradora', 'supervisor'].includes(rol)) {
+    if (!rol || !MANAGER_ROLE_CODES.includes(rol as (typeof MANAGER_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'Sin permiso para invitar.' }, { status: 403 })
     }
 
@@ -168,7 +169,7 @@ export async function DELETE(
     if (!organismo) return NextResponse.json({ ok: false, error: 'Organismo no encontrado.' }, { status: 404 })
 
     const rol = await resolverRolActivo(admin, user.id, organismo.id)
-    if (!rol || !['administrador', 'administradora'].includes(rol)) {
+    if (!rol || !ADMIN_ROLE_CODES.includes(rol as (typeof ADMIN_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'Solo administradores pueden revocar invitaciones.' }, { status: 403 })
     }
 
