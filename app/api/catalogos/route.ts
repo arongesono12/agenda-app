@@ -57,7 +57,7 @@ function readRoleCode(profile: ProfileRoleRow) {
 async function filterAssignableResponsables(
   admin: ReturnType<typeof createAdminSupabaseClient>,
   rows: ResponsableCatalogRow[],
-  options: { roleCodes?: string[]; departamento?: string | null } = {}
+  options: { roleCodes?: string[]; departamento?: string | null; organismoId?: string | null } = {}
 ) {
   const allowedRoles = options.roleCodes?.length
     ? new Set(options.roleCodes.map((role) => role.trim().toLowerCase()))
@@ -76,24 +76,44 @@ async function filterAssignableResponsables(
 
   if (userIds.length === 0) return []
 
-  const { data, error } = await admin
-    .from('perfiles_usuario')
-    .select('id, tipo_usuario:tipos_usuario(codigo)')
-    .in('id', userIds)
+  const roleByUserId = new Map<string, string>()
 
-  if (error) throw error
+  if (options.organismoId) {
+    const { data: miembros, error: miembrosError } = await admin
+      .from('organismo_miembros')
+      .select('usuario_id, rol_codigo')
+      .eq('organismo_id', options.organismoId)
+      .eq('activo', true)
+      .in('usuario_id', userIds)
+
+    if (miembrosError) throw miembrosError
+
+    for (const miembro of miembros ?? []) {
+      if (miembro.usuario_id) roleByUserId.set(miembro.usuario_id, miembro.rol_codigo?.trim().toLowerCase() ?? '')
+    }
+  }
+
+  const fallbackUserIds = userIds.filter((userId) => !roleByUserId.has(userId))
+  if (fallbackUserIds.length > 0) {
+    const { data, error } = await admin
+      .from('perfiles_usuario')
+      .select('id, tipo_usuario:tipos_usuario(codigo)')
+      .in('id', fallbackUserIds)
+
+    if (error) throw error
+
+    for (const profile of (data ?? []) as ProfileRoleRow[]) {
+      roleByUserId.set(profile.id, readRoleCode(profile))
+    }
+  }
 
   const assignableUserIds = new Set(
-    ((data ?? []) as ProfileRoleRow[])
-      .filter((profile) => {
-        const roleCode = readRoleCode(profile)
+    userIds
+      .filter((userId) => {
+        const roleCode = roleByUserId.get(userId) ?? ''
         if (!roleCode || adminRoles.has(roleCode as (typeof ADMIN_ROLE_CODES)[number])) return false
         return allowedRoles ? allowedRoles.has(roleCode) : true
       })
-      .map((profile) => profile.id)
-  )
-  const roleByUserId = new Map(
-    ((data ?? []) as ProfileRoleRow[]).map((profile) => [profile.id, readRoleCode(profile)])
   )
 
   return rows
@@ -155,6 +175,7 @@ export async function GET(request: Request) {
           result.responsables = await filterAssignableResponsables(admin, rows, {
             roleCodes: roleFilter ? [roleFilter] : undefined,
             departamento: departamentoFilter,
+            organismoId,
           })
         } else {
           const userIds = rows.map((r) => r.usuario_id).filter((id): id is string => !!id)

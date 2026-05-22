@@ -646,24 +646,43 @@ async function resolveResponsable(admin: ReturnType<typeof createAdminSupabaseCl
 
 async function attachResponsableRoleCodes(
   admin: ReturnType<typeof createAdminSupabaseClient>,
-  responsables: ResponsableRow[]
+  responsables: ResponsableRow[],
+  organismoId?: string | null
 ) {
   const userIds = Array.from(new Set(responsables.map((item) => item.usuario_id).filter((value): value is string => !!value)))
   if (userIds.length === 0) return responsables
 
-  const { data, error } = await admin
-    .from('perfiles_usuario')
-    .select('id, tipo_usuario:tipos_usuario(codigo)')
-    .in('id', userIds)
+  const roles = new Map<string, string>()
 
-  if (error) throw error
+  if (organismoId) {
+    const { data: miembros, error: miembrosError } = await admin
+      .from('organismo_miembros')
+      .select('usuario_id, rol_codigo')
+      .eq('organismo_id', organismoId)
+      .eq('activo', true)
+      .in('usuario_id', userIds)
 
-  const roles = new Map(
-    ((data ?? []) as Array<{ id: string; tipo_usuario?: { codigo?: string } | Array<{ codigo?: string }> | null }>).map((profile) => {
+    if (miembrosError) throw miembrosError
+
+    for (const miembro of miembros ?? []) {
+      if (miembro.usuario_id) roles.set(miembro.usuario_id, miembro.rol_codigo?.trim().toLowerCase() ?? '')
+    }
+  }
+
+  const fallbackUserIds = userIds.filter((userId) => !roles.has(userId))
+  if (fallbackUserIds.length > 0) {
+    const { data, error } = await admin
+      .from('perfiles_usuario')
+      .select('id, tipo_usuario:tipos_usuario(codigo)')
+      .in('id', fallbackUserIds)
+
+    if (error) throw error
+
+    for (const profile of (data ?? []) as Array<{ id: string; tipo_usuario?: { codigo?: string } | Array<{ codigo?: string }> | null }>) {
       const role = Array.isArray(profile.tipo_usuario) ? profile.tipo_usuario[0] : profile.tipo_usuario
-      return [profile.id, role?.codigo?.trim().toLowerCase() ?? '']
-    })
-  )
+      roles.set(profile.id, role?.codigo?.trim().toLowerCase() ?? '')
+    }
+  }
 
   return responsables.map((responsable) => ({
     ...responsable,
@@ -671,12 +690,12 @@ async function attachResponsableRoleCodes(
   }))
 }
 
-async function resolveResponsables(admin: ReturnType<typeof createAdminSupabaseClient>, payload: TaskPayload) {
+async function resolveResponsables(admin: ReturnType<typeof createAdminSupabaseClient>, payload: TaskPayload, organismoId?: string | null) {
   const ids = uniquePositiveIds(payload.responsable_ids)
 
   if (ids.length === 0) {
     const single = await resolveResponsable(admin, payload)
-    return single ? attachResponsableRoleCodes(admin, [single]) : []
+    return single ? attachResponsableRoleCodes(admin, [single], organismoId) : []
   }
 
   const { data, error } = await admin
@@ -725,7 +744,7 @@ async function resolveResponsables(admin: ReturnType<typeof createAdminSupabaseC
     }
   }
 
-  return attachResponsableRoleCodes(admin, Array.from(uniqueByUser.values()))
+  return attachResponsableRoleCodes(admin, Array.from(uniqueByUser.values()), organismoId)
 }
 
 function buildTaskPayload(
@@ -795,8 +814,21 @@ function isMissingAssignmentOwnerColumn(error: { code?: string; message?: string
   )
 }
 
-async function loadUserRoleCode(admin: ReturnType<typeof createAdminSupabaseClient>, userId: string | null | undefined) {
+async function loadUserRoleCode(admin: ReturnType<typeof createAdminSupabaseClient>, userId: string | null | undefined, organismoId?: string | null) {
   if (!userId) return ''
+
+  if (organismoId) {
+    const { data: miembro, error: miembroError } = await admin
+      .from('organismo_miembros')
+      .select('rol_codigo')
+      .eq('organismo_id', organismoId)
+      .eq('usuario_id', userId)
+      .eq('activo', true)
+      .maybeSingle()
+
+    if (miembroError) throw miembroError
+    if (miembro?.rol_codigo) return miembro.rol_codigo.trim().toLowerCase()
+  }
 
   const { data, error } = await admin
     .from('perfiles_usuario')
@@ -836,6 +868,7 @@ async function validateSupervisorAssignment({
   responsable,
   previous,
   previousAssignments = [],
+  organismoId,
 }: {
   admin: ReturnType<typeof createAdminSupabaseClient>
   userId: string
@@ -843,8 +876,9 @@ async function validateSupervisorAssignment({
   responsable: ResponsableRow | null
   previous: PreviousTaskAssignment | null
   previousAssignments?: TaskAssignmentRow[]
+  organismoId?: string | null
 }) {
-  const targetRole = await loadUserRoleCode(admin, responsable?.usuario_id)
+  const targetRole = await loadUserRoleCode(admin, responsable?.usuario_id, organismoId)
 
   if (targetRole !== 'responsable') {
     throw new Error('Los supervisores solo pueden asignar tareas a usuarios con rol Responsable.')
@@ -880,6 +914,15 @@ function assignmentUserIds(assignments: Array<{ responsable_usuario_id?: string 
   return new Set(assignments.map((assignment) => assignment.responsable_usuario_id).filter((value): value is string => !!value))
 }
 
+function isMissingHistoryAuditColumn(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? ''
+  return (
+    error?.code === '42703' ||
+    error?.code === 'PGRST204' ||
+    /actor_usuario_id|actor_rol_codigo|editado_at|editado_por_usuario_id|eliminado_at|eliminado_por_usuario_id|motivo_eliminacion|column .* does not exist|schema cache/i.test(message)
+  )
+}
+
 async function recordTaskReassignment({
   admin,
   taskId,
@@ -901,7 +944,7 @@ async function recordTaskReassignment({
   nextResponsible?: string | null
   organismoId?: string | null
 }) {
-  const { error } = await admin.from('historial').insert({
+  const historyInsert = {
     fecha: new Date().toISOString(),
     usuario: userLabel || 'Sistema',
     actor_usuario_id: userId,
@@ -914,7 +957,25 @@ async function recordTaskReassignment({
     valor_nuevo: nextResponsible || 'Sin responsable',
     observaciones: `Tarea reasignada por ${userLabel || 'Sistema'}.`,
     ...(organismoId ? { organismo_id: organismoId } : {}),
-  })
+  }
+
+  const insertResult = await admin.from('historial').insert(historyInsert)
+  const legacyInsertResult =
+    insertResult.error && isMissingHistoryAuditColumn(insertResult.error)
+      ? await admin.from('historial').insert({
+          fecha: historyInsert.fecha,
+          usuario: historyInsert.usuario,
+          tarea_id: historyInsert.tarea_id,
+          tarea_nombre: historyInsert.tarea_nombre,
+          modulo: historyInsert.modulo,
+          tipo_cambio: historyInsert.tipo_cambio,
+          valor_anterior: historyInsert.valor_anterior,
+          valor_nuevo: historyInsert.valor_nuevo,
+          observaciones: historyInsert.observaciones,
+          ...(organismoId ? { organismo_id: organismoId } : {}),
+        })
+      : insertResult
+  const { error } = legacyInsertResult
 
   if (error) throw error
 }
@@ -1129,7 +1190,7 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
     }
 
     const admin = createAdminSupabaseClient()
-    const responsables = await resolveResponsables(admin, payload)
+    const responsables = await resolveResponsables(admin, payload, organismoId)
     const responsable = responsables[0] ?? null
     const userLabel = profile?.nombre_completo?.trim() || profile?.email || user.email || null
     const roleCode = activeRoleCode
@@ -1194,6 +1255,7 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
           responsable,
           previous: previousAssignment,
           previousAssignments,
+          organismoId,
         })
       } else {
         validateAdminAssignments(responsables)
@@ -1242,6 +1304,7 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
           mode,
           responsable,
           previous: null,
+          organismoId,
         })
       } else {
         validateAdminAssignments(responsables)

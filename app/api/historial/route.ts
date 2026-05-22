@@ -279,6 +279,15 @@ function isMissingAssignmentProgressColumn(error: { code?: string; message?: str
   )
 }
 
+function isMissingHistoryAuditColumn(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? ''
+  return (
+    error?.code === '42703' ||
+    error?.code === 'PGRST204' ||
+    /actor_usuario_id|actor_rol_codigo|editado_at|editado_por_usuario_id|eliminado_at|eliminado_por_usuario_id|motivo_eliminacion|column .* does not exist|schema cache/i.test(message)
+  )
+}
+
 async function notifyAdminsTaskCompleted(
   admin: ReturnType<typeof createAdminSupabaseClient>,
   task: TaskRow,
@@ -606,7 +615,7 @@ export async function POST(request: Request) {
     const shouldCloseTask = hasAssignments ? allAssignmentsCompleted : shouldComplete
     const nextTaskState = shouldCloseTask ? 'Completado' : nextProgress > 0 && task.estado === 'Pendiente' ? 'En Proceso' : task.estado
 
-    const { error: insertError } = await admin.from('historial').insert({
+    const historyInsert = {
       fecha: new Date().toISOString(),
       usuario: userLabel,
       actor_usuario_id: user.id,
@@ -623,7 +632,25 @@ export async function POST(request: Request) {
         : valorNuevo || `${nextOwnProgress}%`,
       observaciones: observaciones || null,
       ...(organismoId ? { organismo_id: organismoId } : {}),
-    })
+    }
+
+    const insertResult = await admin.from('historial').insert(historyInsert)
+    const legacyInsertResult =
+      insertResult.error && isMissingHistoryAuditColumn(insertResult.error)
+        ? await admin.from('historial').insert({
+            fecha: historyInsert.fecha,
+            usuario: historyInsert.usuario,
+            tarea_id: historyInsert.tarea_id,
+            tarea_nombre: historyInsert.tarea_nombre,
+            modulo: historyInsert.modulo,
+            tipo_cambio: historyInsert.tipo_cambio,
+            valor_anterior: historyInsert.valor_anterior,
+            valor_nuevo: historyInsert.valor_nuevo,
+            observaciones: historyInsert.observaciones,
+            ...(organismoId ? { organismo_id: organismoId } : {}),
+          })
+        : insertResult
+    const { error: insertError } = legacyInsertResult
 
     if (insertError) throw insertError
 
