@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import Image from 'next/image'
 import Link from 'next/link'
@@ -70,6 +70,15 @@ function BrandMark({ className = '' }: { className?: string }) {
   )
 }
 
+function CollapsedNavTooltip({ label }: { label: string }) {
+  return (
+    <span className="pointer-events-none absolute left-[calc(100%+0.9rem)] top-1/2 z-[80] flex min-h-11 -translate-y-1/2 translate-x-0 items-center whitespace-nowrap rounded-[18px] border border-slate-200 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-900 opacity-0 shadow-[0_20px_48px_rgba(15,23,42,0.18)] ring-1 ring-white/80 transition-all duration-200 ease-out group-hover:translate-x-1.5 group-hover:opacity-100 group-focus-visible:translate-x-1.5 group-focus-visible:opacity-100">
+      <span className="absolute -left-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-45 border-b border-l border-slate-200 bg-white" />
+      <span className="relative leading-none">{label}</span>
+    </span>
+  )
+}
+
 function NavGroup({
   label,
   items,
@@ -111,9 +120,9 @@ function NavGroup({
               <Link
                 href={item.href}
                 onClick={onNavigate}
-                title={collapsed ? item.label : undefined}
+                aria-label={collapsed ? item.label : undefined}
                 className={cn(
-                  'group flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
+                  'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
                   collapsed ? 'justify-center px-2' : 'gap-3 px-3',
                   isActive
                     ? 'nav-active border-teal-200/30'
@@ -146,6 +155,7 @@ function NavGroup({
                     )}
                   </>
                 )}
+                {collapsed && <CollapsedNavTooltip label={item.label} />}
               </Link>
             </li>
           )
@@ -234,9 +244,9 @@ function SidebarContent({
   }
 
   return (
-    <div className={cn('surface-panel-strong flex h-full min-h-0 flex-col overflow-hidden text-slate-900', collapsed ? 'p-2.5' : 'p-4')}>
+    <div className={cn('surface-panel-strong flex h-full min-h-0 flex-col text-slate-900', collapsed ? 'overflow-visible p-2.5' : 'overflow-hidden p-4')}>
 
-      {/* ── Brand header ── */}
+      {/* â”€â”€ Brand header â”€â”€ */}
       <div className={cn('rounded-[24px] border border-white/70 bg-white/70', collapsed ? 'px-2.5 py-3' : 'px-4 py-3.5')}>
         <div className="flex items-center gap-3">
           <BrandMark className={cn('flex-shrink-0', collapsed ? 'h-10 w-10' : 'h-11 w-11')} />
@@ -273,16 +283,16 @@ function SidebarContent({
         </div>
       </div>
 
-      {/* ── Organism selector ── */}
+      {/* â”€â”€ Organism selector â”€â”€ */}
       {showOrganismoModule && (
         <div className="mt-3">
           <OrganismoSelector collapsed={collapsed} />
         </div>
       )}
 
-      {/* ── Nav ── */}
-      <div className={cn('mt-4 min-h-0 flex-1 overflow-hidden rounded-[24px] border border-white/70 bg-white/55', collapsed ? 'px-2 py-2.5' : 'px-3 py-3')}>
-        <div className="sidebar-scroll h-full pr-1">
+      {/* â”€â”€ Nav â”€â”€ */}
+      <div className={cn('mt-4 min-h-0 flex-1 rounded-[24px] border border-white/70 bg-white/55', collapsed ? 'overflow-visible px-2 py-2.5' : 'overflow-hidden px-3 py-3')}>
+        <div className={cn('h-full pr-1', collapsed ? 'overflow-visible' : 'sidebar-scroll')}>
           <NavGroup
             label="Trabajo"
             items={workItems}
@@ -301,7 +311,7 @@ function SidebarContent({
             onNavigate={onNavigate}
           />
 
-          {/* ── Organismo ── */}
+          {/* â”€â”€ Organismo â”€â”€ */}
           {showOrganismoModule && (
             <div>
               {collapsed ? (
@@ -317,9 +327,9 @@ function SidebarContent({
                     <Link
                       href={`/organismos/${organismoActivo.slug}/miembros`}
                       onClick={onNavigate}
-                      title={collapsed ? 'Miembros' : undefined}
+                      aria-label={collapsed ? 'Miembros' : undefined}
                       className={cn(
-                        'group flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
+                        'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
                         collapsed ? 'justify-center px-2' : 'gap-3 px-3',
                         pathname.startsWith(`/organismos/${organismoActivo.slug}/miembros`)
                           ? 'nav-active border-teal-200/30'
@@ -335,6 +345,7 @@ function SidebarContent({
                         <Users size={16} />
                       </span>
                       {!collapsed && <span className="min-w-0 flex-1 truncate">Miembros</span>}
+                      {collapsed && <CollapsedNavTooltip label="Miembros" />}
                     </Link>
                   </li>
                 )}
@@ -344,9 +355,9 @@ function SidebarContent({
                       <Link
                         href={`/organismos/${organismoActivo.slug}/facturacion`}
                         onClick={onNavigate}
-                        title={collapsed ? 'Facturación' : undefined}
+                        aria-label={collapsed ? 'Facturacion' : undefined}
                         className={cn(
-                          'group flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
+                          'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
                           collapsed ? 'justify-center px-2' : 'gap-3 px-3',
                           pathname.startsWith(`/organismos/${organismoActivo.slug}/facturacion`)
                             ? 'nav-active border-teal-200/30'
@@ -361,16 +372,17 @@ function SidebarContent({
                         )}>
                           <CreditCard size={16} />
                         </span>
-                        {!collapsed && <span className="min-w-0 flex-1 truncate">Facturación</span>}
+                        {!collapsed && <span className="min-w-0 flex-1 truncate">FacturaciÃ³n</span>}
+                        {collapsed && <CollapsedNavTooltip label="Facturación" />}
                       </Link>
                     </li>
                     <li>
                       <Link
                         href={`/organismos/${organismoActivo.slug}/ajustes`}
                         onClick={onNavigate}
-                        title={collapsed ? 'Ajustes org.' : undefined}
+                        aria-label={collapsed ? 'Ajustes org.' : undefined}
                         className={cn(
-                          'group flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
+                          'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
                           collapsed ? 'justify-center px-2' : 'gap-3 px-3',
                           pathname.startsWith(`/organismos/${organismoActivo.slug}/ajustes`)
                             ? 'nav-active border-teal-200/30'
@@ -386,6 +398,7 @@ function SidebarContent({
                           <Settings size={16} />
                         </span>
                         {!collapsed && <span className="min-w-0 flex-1 truncate">Ajustes org.</span>}
+                        {collapsed && <CollapsedNavTooltip label="Ajustes org." />}
                       </Link>
                     </li>
                   </>
@@ -396,14 +409,14 @@ function SidebarContent({
         </div>
       </div>
 
-      {/* ── User panel ── */}
+      {/* â”€â”€ User panel â”€â”€ */}
       <div ref={menuRef} className={cn('relative mt-4 rounded-[24px] border border-white/70 bg-white/70', collapsed ? 'p-2' : 'p-3')}>
 
         {/* User popup menu */}
         {menuOpen && (
           <div
             className={cn(
-              'avatar-menu-popover absolute z-20 overflow-hidden rounded-[22px] border border-white/80 bg-white/80 p-2 shadow-[0_22px_48px_rgba(15,23,42,0.14)] backdrop-blur-xl',
+              'avatar-menu-popover absolute z-20 overflow-hidden rounded-[22px] border border-white/80 bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.12)]',
               collapsed ? 'bottom-0 left-[calc(100%+0.75rem)] w-64' : 'inset-x-3 bottom-[calc(100%+0.5rem)]'
             )}
           >
@@ -566,7 +579,7 @@ export default function Sidebar() {
         <div className="no-print fixed inset-0 z-50 lg:hidden">
           <button
             type="button"
-            className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm"
+            className="absolute inset-0 bg-slate-950/45"
             aria-label="Cerrar menu"
             onClick={() => setOpen(false)}
           />
@@ -585,3 +598,4 @@ export default function Sidebar() {
     </>
   )
 }
+

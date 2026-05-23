@@ -99,7 +99,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string)
           ? 'toastOut 0.32s cubic-bezier(0.4,0,1,1) forwards'
           : 'toastIn 0.36s cubic-bezier(0.175,0.885,0.32,1.275) forwards',
       }}
-      className={`relative flex w-full max-w-sm items-start gap-3 overflow-hidden rounded-[20px] border ${cfg.border} ${cfg.bg} p-4 shadow-[0_16px_40px_rgba(15,23,42,0.14)] backdrop-blur-xl`}
+      className={`relative flex w-full max-w-sm items-start gap-3 overflow-hidden rounded-[20px] border ${cfg.border} ${cfg.bg} p-4 shadow-[0_14px_34px_rgba(15,23,42,0.12)]`}
       role="alert"
       aria-live="assertive"
     >
