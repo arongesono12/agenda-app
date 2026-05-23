@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Diagramas de funcionamiento - Agenda App</title>
+  <style>
+    :root {
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #cbd5e1;
+      --teal: #0f766e;
+      --teal-soft: #ccfbf1;
+      --blue: #2563eb;
+      --blue-soft: #dbeafe;
+      --amber: #b45309;
+      --amber-soft: #fef3c7;
+      --rose: #be123c;
+      --rose-soft: #ffe4e6;
+      --slate-soft: #f8fafc;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #eef2f7;
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .page {
+      width: 297mm;
+      min-height: 210mm;
+      margin: 0 auto;
+      padding: 14mm 16mm;
+      background: white;
+      page-break-after: always;
+    }
+
+    .page:last-child { page-break-after: auto; }
+
+    header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 26px;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      max-width: 780px;
+    }
+
+    .badge {
+      border: 1px solid #99f6e4;
+      background: #f0fdfa;
+      color: var(--teal);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    svg {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .note {
+      margin-top: 12px;
+      border: 1px solid #e2e8f0;
+      background: var(--slate-soft);
+      border-radius: 14px;
+      padding: 10px 12px;
+      color: #475569;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .box { fill: white; stroke: #cbd5e1; stroke-width: 1.4; }
+    .box-soft { fill: #f8fafc; stroke: #cbd5e1; stroke-width: 1.4; }
+    .auth { fill: var(--blue-soft); stroke: #93c5fd; }
+    .admin { fill: var(--teal-soft); stroke: #5eead4; }
+    .supervisor { fill: var(--amber-soft); stroke: #fbbf24; }
+    .responsable { fill: #ecfdf5; stroke: #86efac; }
+    .consulta { fill: #f1f5f9; stroke: #cbd5e1; }
+    .decision { fill: #fff7ed; stroke: #fdba74; }
+    .danger { fill: var(--rose-soft); stroke: #fda4af; }
+    .db { fill: #eff6ff; stroke: #93c5fd; }
+    .api { fill: #f0fdfa; stroke: #5eead4; }
+    .ui { fill: #f8fafc; stroke: #cbd5e1; }
+    .security { fill: #fefce8; stroke: #fde047; }
+    .text { fill: var(--ink); font-size: 12px; font-weight: 700; }
+    .small { fill: #475569; font-size: 10px; font-weight: 600; }
+    .tiny { fill: #64748b; font-size: 9px; font-weight: 500; }
+    .line { stroke: #94a3b8; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+    .line-soft { stroke: #cbd5e1; stroke-width: 1.2; fill: none; marker-end: url(#arrow); }
+  </style>
+</head>
+<body>
+  <section class="page">
+    <header>
+      <div>
+        <h1>Flujo funcional para usuarios</h1>
+        <p class="subtitle">
+          Vista de alto nivel de cómo interactúan los usuarios con autenticación, organismo activo,
+          roles, tareas oficiales, asignaciones múltiples, historial, alertas y checklist personal.
+        </p>
+      </div>
+      <span class="badge">Agenda App</span>
+    </header>
+
+    <svg viewBox="0 0 1120 640" role="img" aria-label="Diagrama funcional para usuarios">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"></path>
+        </marker>
+      </defs>
+
+      <rect class="box auth" x="30" y="34" width="160" height="54" rx="14"></rect>
+      <text class="text" x="110" y="57" text-anchor="middle">Usuario entra</text>
+      <text class="small" x="110" y="73" text-anchor="middle">Login o sesión activa</text>
+
+      <path class="line" d="M190 61 H250"></path>
+      <rect class="box decision" x="250" y="26" width="150" height="70" rx="16"></rect>
+      <text class="text" x="325" y="55" text-anchor="middle">¿Autenticado?</text>
+      <text class="small" x="325" y="73" text-anchor="middle">Supabase Auth</text>
+
+      <path class="line" d="M325 96 V140"></path>
+      <rect class="box auth" x="230" y="140" width="190" height="54" rx="14"></rect>
+      <text class="text" x="325" y="163" text-anchor="middle">Perfil + organismo</text>
+      <text class="small" x="325" y="179" text-anchor="middle">UserSessionProvider</text>
+
+      <path class="line" d="M400 61 H480"></path>
+      <rect class="box-soft" x="480" y="26" width="190" height="70" rx="16"></rect>
+      <text class="text" x="575" y="55" text-anchor="middle">Permisos por rol</text>
+      <text class="small" x="575" y="73" text-anchor="middle">Sidebar y acciones visibles</text>
+      <path class="line-soft" d="M420 167 H575 V96"></path>
+
+      <rect class="box admin" x="730" y="20" width="175" height="78" rx="16"></rect>
+      <text class="text" x="817" y="45" text-anchor="middle">Administrador</text>
+      <text class="small" x="817" y="63" text-anchor="middle">Crea, edita, elimina</text>
+      <text class="small" x="817" y="79" text-anchor="middle">asigna y gestiona</text>
+
+      <rect class="box supervisor" x="925" y="20" width="160" height="78" rx="16"></rect>
+      <text class="text" x="1005" y="45" text-anchor="middle">Supervisor</text>
+      <text class="small" x="1005" y="63" text-anchor="middle">Crea y reasigna</text>
+      <text class="small" x="1005" y="79" text-anchor="middle">según alcance</text>
+
+      <rect class="box responsable" x="730" y="124" width="175" height="78" rx="16"></rect>
+      <text class="text" x="817" y="149" text-anchor="middle">Responsable</text>
+      <text class="small" x="817" y="167" text-anchor="middle">Actualiza avances</text>
+      <text class="small" x="817" y="183" text-anchor="middle">y completa su parte</text>
+
+      <rect class="box consulta" x="925" y="124" width="160" height="78" rx="16"></rect>
+      <text class="text" x="1005" y="149" text-anchor="middle">Consulta</text>
+      <text class="small" x="1005" y="167" text-anchor="middle">Solo lectura</text>
+      <text class="small" x="1005" y="183" text-anchor="middle">dashboard y reportes</text>
+
+      <path class="line-soft" d="M670 61 H730"></path>
+      <path class="line-soft" d="M670 61 C705 61 700 163 730 163"></path>
+      <path class="line-soft" d="M670 61 C760 61 835 59 925 59"></path>
+      <path class="line-soft" d="M670 61 C760 61 835 163 925 163"></path>
+
+      <rect class="box ui" x="30" y="270" width="176" height="76" rx="16"></rect>
+      <text class="text" x="118" y="296" text-anchor="middle">Agenda diaria</text>
+      <text class="small" x="118" y="314" text-anchor="middle">Pendientes y vencidas</text>
+      <text class="tiny" x="118" y="330" text-anchor="middle">Módulo principal</text>
+
+      <path class="line" d="M206 308 H270"></path>
+      <rect class="box api" x="270" y="270" width="180" height="76" rx="16"></rect>
+      <text class="text" x="360" y="296" text-anchor="middle">Tarea oficial</text>
+      <text class="small" x="360" y="314" text-anchor="middle">Responsables, fechas</text>
+      <text class="tiny" x="360" y="330" text-anchor="middle">prioridad, avance, estado</text>
+
+      <path class="line" d="M450 308 H515"></path>
+      <rect class="box decision" x="515" y="270" width="170" height="76" rx="16"></rect>
+      <text class="text" x="600" y="296" text-anchor="middle">¿Múltiples</text>
+      <text class="text" x="600" y="313" text-anchor="middle">asignaciones?</text>
+      <text class="tiny" x="600" y="331" text-anchor="middle">tarea_asignaciones</text>
+
+      <path class="line" d="M685 290 H755"></path>
+      <rect class="box responsable" x="755" y="250" width="170" height="64" rx="16"></rect>
+      <text class="text" x="840" y="275" text-anchor="middle">Cada usuario</text>
+      <text class="small" x="840" y="293" text-anchor="middle">completa su parte</text>
+
+      <path class="line" d="M925 282 H970"></path>
+      <rect class="box decision" x="970" y="250" width="130" height="64" rx="16"></rect>
+      <text class="text" x="1035" y="276" text-anchor="middle">¿Todos</text>
+      <text class="text" x="1035" y="293" text-anchor="middle">terminaron?</text>
+
+      <path class="line-soft" d="M1035 314 V382"></path>
+      <rect class="box supervisor" x="930" y="382" width="210" height="62" rx="16"></rect>
+      <text class="text" x="1035" y="407" text-anchor="middle">No: sigue En Proceso</text>
+      <text class="small" x="1035" y="425" text-anchor="middle">el admin aún no la ve cerrada</text>
+
+      <path class="line" d="M1035 250 V216 H620 V250"></path>
+      <rect class="box admin" x="510" y="390" width="220" height="70" rx="16"></rect>
+      <text class="text" x="620" y="418" text-anchor="middle">Sí: tarea Completada</text>
+      <text class="small" x="620" y="437" text-anchor="middle">notifica a administradores</text>
+
+      <path class="line" d="M600 346 V390 H620"></path>
+      <text class="tiny" x="570" y="370" text-anchor="middle">No múltiples</text>
+
+      <rect class="box ui" x="30" y="420" width="176" height="76" rx="16"></rect>
+      <text class="text" x="118" y="447" text-anchor="middle">Mis tareas</text>
+      <text class="small" x="118" y="465" text-anchor="middle">Checklist personal</text>
+      <text class="tiny" x="118" y="481" text-anchor="middle">no afecta agenda oficial</text>
+
+      <path class="line" d="M206 458 H270"></path>
+      <rect class="box-soft" x="270" y="420" width="180" height="76" rx="16"></rect>
+      <text class="text" x="360" y="447" text-anchor="middle">Completar pendiente</text>
+      <text class="small" x="360" y="465" text-anchor="middle">se oculta de pendientes</text>
+      <text class="tiny" x="360" y="481" text-anchor="middle">tabla mis_tareas</text>
+
+      <rect class="box ui" x="30" y="540" width="1030" height="54" rx="16"></rect>
+      <text class="text" x="545" y="564" text-anchor="middle">Módulos visibles según rol: Dashboard, Alertas, Cronograma, Estadísticas, Búsqueda, Responsables, Historial, Catálogos y Organismos</text>
+      <text class="small" x="545" y="582" text-anchor="middle">El sidebar y las acciones cambian según access-control.ts y role-capabilities.ts</text>
+    </svg>
+
+    <div class="note">
+      Regla clave: en tareas con múltiples responsables, completar una parte actualiza únicamente la asignación del usuario.
+      La tarea global solo pasa a <strong>Completado</strong> cuando todas las asignaciones activas están completadas.
+    </div>
+  </section>
+
+  <section class="page">
+    <header>
+      <div>
+        <h1>Flujo técnico para desarrolladores</h1>
+        <p class="subtitle">
+          Vista de arquitectura: App Router de Next.js, proveedores globales, componentes UI,
+          rutas API, control de acceso, Supabase, correo, Stripe y migraciones.
+        </p>
+      </div>
+      <span class="badge">Next.js + Supabase</span>
+    </header>
+
+    <svg viewBox="0 0 1120 640" role="img" aria-label="Diagrama técnico para desarrolladores">
+      <defs>
+        <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"></path>
+        </marker>
+      </defs>
+
+      <rect class="box ui" x="30" y="30" width="210" height="78" rx="16"></rect>
+      <text class="text" x="135" y="58" text-anchor="middle">Next.js App Router</text>
+      <text class="small" x="135" y="77" text-anchor="middle">app/layout.tsx</text>
+      <text class="tiny" x="135" y="93" text-anchor="middle">páginas y rutas API</text>
+
+      <path class="line" style="marker-end:url(#arrow2)" d="M240 69 H300"></path>
+      <rect class="box ui" x="300" y="30" width="220" height="78" rx="16"></rect>
+      <text class="text" x="410" y="58" text-anchor="middle">AppChrome</text>
+      <text class="small" x="410" y="77" text-anchor="middle">Theme, Toast, Session</text>
+      <text class="tiny" x="410" y="93" text-anchor="middle">Sidebar + contenido</text>
+
+      <path class="line" style="marker-end:url(#arrow2)" d="M520 69 H590"></path>
+      <rect class="box security" x="590" y="30" width="220" height="78" rx="16"></rect>
+      <text class="text" x="700" y="58" text-anchor="middle">Sesión y permisos</text>
+      <text class="small" x="700" y="77" text-anchor="middle">UserSessionProvider</text>
+      <text class="tiny" x="700" y="93" text-anchor="middle">organismo + rol activo</text>
+
+      <path class="line" style="marker-end:url(#arrow2)" d="M810 69 H880"></path>
+      <rect class="box db" x="880" y="30" width="210" height="78" rx="16"></rect>
+      <text class="text" x="985" y="58" text-anchor="middle">Supabase Auth</text>
+      <text class="small" x="985" y="77" text-anchor="middle">perfiles_usuario</text>
+      <text class="tiny" x="985" y="93" text-anchor="middle">organismo_miembros</text>
+
+      <rect class="box ui" x="30" y="170" width="210" height="340" rx="18"></rect>
+      <text class="text" x="135" y="198" text-anchor="middle">Páginas UI</text>
+      <text class="small" x="135" y="225" text-anchor="middle">/ Agenda diaria</text>
+      <text class="small" x="135" y="249" text-anchor="middle">/mis-tareas</text>
+      <text class="small" x="135" y="273" text-anchor="middle">/dashboard</text>
+      <text class="small" x="135" y="297" text-anchor="middle">/historial</text>
+      <text class="small" x="135" y="321" text-anchor="middle">/alertas</text>
+      <text class="small" x="135" y="345" text-anchor="middle">/cronograma</text>
+      <text class="small" x="135" y="369" text-anchor="middle">/estadisticas</text>
+      <text class="small" x="135" y="393" text-anchor="middle">/organismos/[slug]</text>
+      <text class="tiny" x="135" y="432" text-anchor="middle">Componentes: Sidebar, TaskModal,</text>
+      <text class="tiny" x="135" y="448" text-anchor="middle">TaskHistorialModal, TaskDetailPanel</text>
+      <text class="tiny" x="135" y="464" text-anchor="middle">KPICard, PageHeader, ProgressBar</text>
+
+      <rect class="box api" x="315" y="150" width="250" height="380" rx="18"></rect>
+      <text class="text" x="440" y="178" text-anchor="middle">Rutas API</text>
+      <text class="small" x="440" y="205" text-anchor="middle">/api/tareas</text>
+      <text class="tiny" x="440" y="221" text-anchor="middle">CRUD, filtros, asignaciones</text>
+      <text class="small" x="440" y="249" text-anchor="middle">/api/historial</text>
+      <text class="tiny" x="440" y="265" text-anchor="middle">avances, auditoría, cierre global</text>
+      <text class="small" x="440" y="293" text-anchor="middle">/api/mis-tareas</text>
+      <text class="tiny" x="440" y="309" text-anchor="middle">checklist personal</text>
+      <text class="small" x="440" y="337" text-anchor="middle">/api/dashboard / estadisticas</text>
+      <text class="tiny" x="440" y="353" text-anchor="middle">indicadores y agregaciones</text>
+      <text class="small" x="440" y="381" text-anchor="middle">/api/alertas</text>
+      <text class="tiny" x="440" y="397" text-anchor="middle">notificaciones y vencimientos</text>
+      <text class="small" x="440" y="425" text-anchor="middle">/api/organismos/*</text>
+      <text class="tiny" x="440" y="441" text-anchor="middle">miembros, invitaciones, ajustes</text>
+      <text class="small" x="440" y="469" text-anchor="middle">/api/billing/*</text>
+      <text class="tiny" x="440" y="485" text-anchor="middle">Stripe, facturas, portal, webhook</text>
+
+      <path class="line" style="marker-end:url(#arrow2)" d="M240 340 H315"></path>
+
+      <rect class="box security" x="625" y="150" width="210" height="160" rx="18"></rect>
+      <text class="text" x="730" y="178" text-anchor="middle">Capa de seguridad</text>
+      <text class="small" x="730" y="206" text-anchor="middle">access-control.ts</text>
+      <text class="small" x="730" y="230" text-anchor="middle">role-capabilities.ts</text>
+      <text class="small" x="730" y="254" text-anchor="middle">server-access.ts</text>
+      <text class="small" x="730" y="278" text-anchor="middle">task-scope.ts</text>
+
+      <path class="line-soft" style="marker-end:url(#arrow2)" d="M565 250 H625"></path>
+      <path class="line-soft" style="marker-end:url(#arrow2)" d="M700 108 V150"></path>
+
+      <rect class="box db" x="890" y="140" width="205" height="390" rx="18"></rect>
+      <text class="text" x="992" y="168" text-anchor="middle">Supabase DB</text>
+      <text class="small" x="992" y="197" text-anchor="middle">tareas</text>
+      <text class="small" x="992" y="221" text-anchor="middle">tarea_asignaciones</text>
+      <text class="small" x="992" y="245" text-anchor="middle">tarea_departamentos</text>
+      <text class="small" x="992" y="269" text-anchor="middle">historial</text>
+      <text class="small" x="992" y="293" text-anchor="middle">alertas</text>
+      <text class="small" x="992" y="317" text-anchor="middle">responsables</text>
+      <text class="small" x="992" y="341" text-anchor="middle">mis_tareas</text>
+      <text class="small" x="992" y="365" text-anchor="middle">organismos</text>
+      <text class="small" x="992" y="389" text-anchor="middle">organismo_miembros</text>
+      <text class="small" x="992" y="413" text-anchor="middle">organismo_invitaciones</text>
+      <text class="small" x="992" y="437" text-anchor="middle">suscripciones / facturas</text>
+      <text class="tiny" x="992" y="477" text-anchor="middle">Migraciones en /supabase</text>
+      <text class="tiny" x="992" y="493" text-anchor="middle">RLS + índices + constraints</text>
+
+      <path class="line" style="marker-end:url(#arrow2)" d="M565 340 H890"></path>
+      <path class="line-soft" style="marker-end:url(#arrow2)" d="M835 230 H890"></path>
+
+      <rect class="box-soft" x="315" y="560" width="250" height="52" rx="16"></rect>
+      <text class="text" x="440" y="582" text-anchor="middle">Email Resend</text>
+      <text class="small" x="440" y="600" text-anchor="middle">asignaciones y finalización</text>
+
+      <rect class="box-soft" x="625" y="560" width="210" height="52" rx="16"></rect>
+      <text class="text" x="730" y="582" text-anchor="middle">Stripe Billing</text>
+      <text class="small" x="730" y="600" text-anchor="middle">checkout, portal, webhook</text>
+
+      <path class="line-soft" style="marker-end:url(#arrow2)" d="M440 530 V560"></path>
+      <path class="line-soft" style="marker-end:url(#arrow2)" d="M730 530 V560"></path>
+    </svg>
+
+    <div class="note">
+      La mayor parte de la lógica de negocio está en <strong>/api/tareas</strong> y <strong>/api/historial</strong>.
+      El alcance de lectura/escritura se calcula con el rol activo, el organismo seleccionado y las asignaciones del usuario.
+    </div>
+  </section>
+</body>
+</html>
