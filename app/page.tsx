@@ -153,6 +153,12 @@ export default function AgendaDiariaPage() {
   }, [fetchTasks])
 
   useEffect(() => {
+    const refreshAssignedTasks = () => void fetchTasks()
+    window.addEventListener('agenda:task-assigned', refreshAssignedTasks)
+    return () => window.removeEventListener('agenda:task-assigned', refreshAssignedTasks)
+  }, [fetchTasks])
+
+  useEffect(() => {
     setPage(0)
   }, [filters])
 

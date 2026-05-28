@@ -219,6 +219,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
         seccion: task.seccion || null,
         responsable: responsable.nombre,
         responsable_id: responsable.id,
+        responsable_ids: [responsable.id],
         fecha_inicio: task.fecha_inicio || null,
         fecha_fin: task.fecha_fin || null,
         porcentaje_avance: Number(task.porcentaje_avance ?? 0),

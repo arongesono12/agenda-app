@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { UserSessionProvider } from '@/components/UserSessionProvider'
 import { ToastProvider } from '@/components/ToastProvider'
+import AssignmentAlertToaster from '@/components/AssignmentAlertToaster'
 
 export default function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
@@ -18,6 +19,7 @@ export default function AppChrome({ children }: { children: ReactNode }) {
     <UserSessionProvider>
       <ThemeProvider>
         <ToastProvider>
+          <AssignmentAlertToaster />
           <div className="app-shell">
             {isAuthRoute || isPublicFullPageRoute ? (
               <main className="relative min-h-screen">
