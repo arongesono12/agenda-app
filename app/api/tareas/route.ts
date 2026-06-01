@@ -266,7 +266,9 @@ async function countTasks(
   const departmentTaskIds = await loadTaskIdsForDepartment(admin, filters.departamento)
 
   if (!scope.unrestricted) {
-    const scopedTaskIds = await loadScopedTaskIds(admin, scope)
+    const scopedTaskIds = await loadScopedTaskIds(admin, scope, {
+      onlyOpenAssignments: shouldFilterOpenAssignments(filters),
+    })
 
     if (!scopedTaskIds || scopedTaskIds.length === 0) return 0
 
@@ -356,7 +358,9 @@ async function loadTaskPage({
   const departmentTaskIds = await loadTaskIdsForDepartment(admin, filters.departamento)
 
   if (!scope.unrestricted) {
-    const scopedTaskIds = await loadScopedTaskIds(admin, scope)
+    const scopedTaskIds = await loadScopedTaskIds(admin, scope, {
+      onlyOpenAssignments: shouldFilterOpenAssignments(filters),
+    })
 
     if (!scopedTaskIds || scopedTaskIds.length === 0) {
       return { data: [], count: 0, error: null }
@@ -520,33 +524,86 @@ async function attachTaskAssignments(
   }))
 }
 
-async function loadScopedTaskIds(admin: ReturnType<typeof createAdminSupabaseClient>, scope: TaskScope) {
+function shouldFilterOpenAssignments(filters: TaskFilters) {
+  return filters.soloAbiertas && !['Completado', 'Cancelado'].includes(filters.estado ?? '')
+}
+
+function isOpenAssignment(row: { estado?: string | null; porcentaje_avance?: number | null }) {
+  return row.estado !== 'Completado' && row.estado !== 'Cancelado' && Number(row.porcentaje_avance ?? 0) < 100
+}
+
+async function loadScopedTaskIds(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  scope: TaskScope,
+  options: { onlyOpenAssignments?: boolean } = {}
+) {
   if (scope.unrestricted) return null
 
   const taskIds = new Set<number>()
+  const assignmentTaskIds = new Set<number>()
+  let sawAssignmentsForUser = false
 
   if (scope.userId) {
     const assignmentResult = await admin
       .from('tarea_asignaciones')
-      .select('tarea_id')
+      .select('tarea_id, estado, porcentaje_avance')
       .eq('responsable_usuario_id', scope.userId)
       .eq('activo', true)
 
-    if (assignmentResult.error && !isMissingTaskAssignmentsTable(assignmentResult.error)) {
-      throw assignmentResult.error
-    }
+    if (assignmentResult.error) {
+      const missingProgressColumns =
+        assignmentResult.error.code === 'PGRST204' ||
+        assignmentResult.error.code === '42703' ||
+        /estado|porcentaje_avance|schema cache|column .* does not exist/i.test(assignmentResult.error.message ?? '')
 
-    for (const assignment of assignmentResult.data ?? []) {
-      taskIds.add(Number(assignment.tarea_id))
+      if (isMissingTaskAssignmentsTable(assignmentResult.error)) {
+        // Ignore missing multi-assignment table and rely on legacy task ownership below.
+      } else if (missingProgressColumns) {
+        const fallbackAssignments = await admin
+          .from('tarea_asignaciones')
+          .select('tarea_id')
+          .eq('responsable_usuario_id', scope.userId)
+          .eq('activo', true)
+
+        if (fallbackAssignments.error && !isMissingTaskAssignmentsTable(fallbackAssignments.error)) {
+          throw fallbackAssignments.error
+        }
+
+        for (const assignment of fallbackAssignments.data ?? []) {
+          const taskId = Number(assignment.tarea_id)
+          assignmentTaskIds.add(taskId)
+          sawAssignmentsForUser = true
+          taskIds.add(taskId)
+        }
+      } else {
+        throw assignmentResult.error
+      }
+    } else {
+      const assignmentRows = (assignmentResult.data ?? []) as Array<{
+        tarea_id?: number | string | null
+        estado?: string | null
+        porcentaje_avance?: number | null
+      }>
+      for (const assignment of assignmentRows) {
+        const taskId = Number(assignment.tarea_id)
+        assignmentTaskIds.add(taskId)
+        sawAssignmentsForUser = true
+        if (!options.onlyOpenAssignments || isOpenAssignment(assignment)) {
+          taskIds.add(taskId)
+        }
+      }
     }
 
     const legacyResult = await admin.from('tareas').select('id').eq('responsable_usuario_id', scope.userId)
     if (!legacyResult.error) {
-      for (const task of legacyResult.data ?? []) taskIds.add(Number(task.id))
+      for (const task of legacyResult.data ?? []) {
+        const taskId = Number(task.id)
+        if (!assignmentTaskIds.has(taskId)) taskIds.add(taskId)
+      }
     }
   }
 
-  if (taskIds.size === 0 && scope.assignedNames.length > 0) {
+  if (taskIds.size === 0 && !sawAssignmentsForUser && scope.assignedNames.length > 0) {
     const nameResult = await admin.from('tareas').select('id').in('responsable', scope.assignedNames)
     if (!nameResult.error) {
       for (const task of nameResult.data ?? []) taskIds.add(Number(task.id))

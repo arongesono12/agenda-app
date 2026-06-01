@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import { normalizarTareas } from '@/lib/supabase'
 import type { Tarea } from '@/lib/types'
-import { DEPARTAMENTOS, ESTADOS, PRIORIDADES, TIPOS_TAREA } from '@/lib/types'
+import { DEPARTAMENTOS, PRIORIDADES, TIPOS_TAREA } from '@/lib/types'
 import { cn, formatDateShort } from '@/lib/utils'
 import PageHeader from '@/components/ui/PageHeader'
 import { EstadoBadge, PrioridadBadge, SemaforoBadge, TipoBadge } from '@/components/ui/Badge'
@@ -38,6 +38,7 @@ import { normalizarPreferenciasUsuario } from '@/lib/user-preferences'
 import { useUserSession } from '@/components/UserSessionProvider'
 
 const INIT_FILTERS = { q: '', prioridad: '', departamento: '', estado: '', tipo: '' }
+const AGENDA_ESTADOS = ['Pendiente', 'En Proceso'] as const
 const PAGE_SIZE = 25
 
 type TaskSummary = {
@@ -116,10 +117,11 @@ export default function AgendaDiariaPage() {
       page: String(page),
       pageSize: String(PAGE_SIZE),
       orderBy: 'created_at',
-      solo_abiertas: 'true',
+      solo_abiertas: filters.estado === 'todas' ? 'false' : 'true',
     })
 
     Object.entries(filters).forEach(([key, value]) => {
+      if (key === 'estado' && value === 'todas') return
       if (value) params.set(key, value)
     })
 
@@ -331,7 +333,7 @@ export default function AgendaDiariaPage() {
             {[
               { key: 'prioridad', label: 'Prioridad', options: PRIORIDADES },
               { key: 'departamento', label: 'Departamento', options: DEPARTAMENTOS },
-              { key: 'estado', label: 'Estado', options: ESTADOS },
+              { key: 'estado', label: 'Estado', options: AGENDA_ESTADOS },
               { key: 'tipo', label: 'Tipo de tarea', options: TIPOS_TAREA },
             ].map(({ key, label, options }) => (
               <div key={key}>
@@ -341,7 +343,8 @@ export default function AgendaDiariaPage() {
                   onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))}
                   className="input-shell"
                 >
-                  <option value="">Todos</option>
+                  <option value="">{key === 'estado' ? 'No finalizadas' : 'Todos'}</option>
+                  {key === 'estado' && <option value="todas">Todas las tareas</option>}
                   {options.map((option) => (
                     <option key={option}>{option}</option>
                   ))}

@@ -305,8 +305,9 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="label-field">ID de tarea manual</label>
+                <label className="label-field" htmlFor="codigoId">ID de tarea manual</label>
                 <input
+                  id="codigoId"
                   type="number"
                   min={1}
                   step={1}
@@ -317,16 +318,26 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
                 />
               </div>
               <div>
-                <label className="label-field">Prioridad</label>
-                <select value={form.prioridad} onChange={(e) => set('prioridad', e.target.value)} className="input-shell">
+                <label className="label-field" htmlFor="prioridad">Prioridad</label>
+                <select
+                  id="prioridad"
+                  value={form.prioridad}
+                  onChange={(e) => set('prioridad', e.target.value)}
+                  className="input-shell"
+                >
                   {PRIORIDADES.map((p) => (
                       <option key={p}>{p}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="label-field">Estado</label>
-                  <select value={form.estado} onChange={(e) => set('estado', e.target.value)} className="input-shell">
+                  <label className="label-field" htmlFor="estado">Estado</label>
+                  <select
+                    id="estado"
+                    value={form.estado}
+                    onChange={(e) => set('estado', e.target.value)}
+                    className="input-shell"
+                  >
                     {ESTADOS.map((s) => (
                       <option key={s}>{s}</option>
                     ))}
@@ -416,7 +427,7 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="label-field">{isAdmin ? 'Responsables' : 'Responsable'}</label>
+                  <label className="label-field" htmlFor={!isAdmin ? 'responsable_id' : undefined}>{isAdmin ? 'Responsables' : 'Responsable'}</label>
                   {isAdmin ? (
                     <div ref={responsablesDropdownRef} className="relative">
                       <button
@@ -493,6 +504,7 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
                     </div>
                   ) : (
                     <select
+                      id="responsable_id"
                       value={form.responsable_id ?? responsables.find((item) => item.nombre === form.responsable)?.id ?? ''}
                       onChange={(e) => setResponsable(e.target.value)}
                       className="input-shell"
@@ -534,8 +546,9 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="label-field">Fecha inicio</label>
+                  <label className="label-field" htmlFor="fecha_inicio">Fecha inicio</label>
                   <input
+                    id="fecha_inicio"
                     type="date"
                     value={form.fecha_inicio ?? ''}
                     onChange={(e) => set('fecha_inicio', e.target.value || undefined)}
@@ -543,8 +556,9 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
                   />
                 </div>
                 <div>
-                  <label className="label-field">Fecha fin</label>
+                  <label className="label-field" htmlFor="fecha_fin">Fecha fin</label>
                   <input
+                    id="fecha_fin"
                     type="date"
                     value={form.fecha_fin ?? ''}
                     onChange={(e) => set('fecha_fin', e.target.value || undefined)}
@@ -555,10 +569,11 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
 
               <div className="rounded-[24px] border border-white/80 bg-slate-50/80 p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <label className="label-field mb-0">Avance</label>
+                  <label className="label-field mb-0" htmlFor="porcentaje_avance">Avance</label>
                   <span className="text-sm font-semibold text-teal-700">{form.porcentaje_avance ?? 0}%</span>
                 </div>
                 <input
+                  id="porcentaje_avance"
                   type="range"
                   min={0}
                   max={100}
