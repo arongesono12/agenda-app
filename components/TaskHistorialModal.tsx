@@ -50,6 +50,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
   const [reassignmentDone, setReassignmentDone] = useState(false)
   const [assignableResponsables, setAssignableResponsables] = useState<Responsable[]>([])
   const [nextResponsableId, setNextResponsableId] = useState('')
+  const [reassignmentObservation, setReassignmentObservation] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [editingHistoryId, setEditingHistoryId] = useState<number | null>(null)
   const [deletingHistoryId, setDeletingHistoryId] = useState<number | null>(null)
@@ -225,6 +226,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
         porcentaje_avance: Number(task.porcentaje_avance ?? 0),
         tipo_tarea: task.tipo_tarea || null,
         notas: task.notas || null,
+        asignacion_observacion: reassignmentObservation.trim() || task.notas || null,
       }),
     })
     const result = (await response.json()) as { ok?: boolean; error?: string }
@@ -237,6 +239,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
 
     toast.success(`Tarea reasignada a ${responsable.nombre}.`)
     setNextResponsableId('')
+    setReassignmentObservation('')
     setReassignmentDone(true)
     await fetchHistorial()
     if (onUpdate) onUpdate()
@@ -500,6 +503,14 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                           </option>
                         ))}
                       </select>
+                      <textarea
+                        value={reassignmentObservation}
+                        onChange={(event) => setReassignmentObservation(event.target.value)}
+                        rows={4}
+                        className="input-shell resize-none"
+                        placeholder="Observacion para el responsable. Ej: pasos a seguir, prioridad interna o contexto de la asignacion."
+                        disabled={assigning || assignableResponsables.length === 0}
+                      />
                       <button
                         type="button"
                         onClick={() => void handleReassign()}

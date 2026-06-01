@@ -211,6 +211,7 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
         porcentaje_avance: Number(form.porcentaje_avance ?? 0),
         tipo_tarea: form.tipo_tarea || null,
         notas: form.notas || null,
+        asignacion_observacion: form.notas || null,
         ultima_actualizacion: new Date().toISOString(),
       }
 

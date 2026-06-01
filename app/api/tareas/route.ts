@@ -71,6 +71,7 @@ type TaskPayload = {
   responsable?: string | null
   responsable_id?: number | null
   responsable_ids?: number[]
+  asignacion_observacion?: string | null
   fecha_inicio?: string | null
   fecha_fin?: string | null
   porcentaje_avance?: number
@@ -604,6 +605,10 @@ function payloadDepartmentNames(payload: TaskPayload) {
   )
 }
 
+function normalizeAssignmentObservation(payload: TaskPayload) {
+  return (payload.asignacion_observacion ?? payload.notas ?? null)?.trim() || null
+}
+
 async function resolveResponsable(admin: ReturnType<typeof createAdminSupabaseClient>, payload: TaskPayload) {
   if (!payload.responsable_id && !payload.responsable?.trim()) {
     return null
@@ -938,6 +943,7 @@ async function recordTaskReassignment({
   roleCode,
   previousResponsible,
   nextResponsible,
+  observation,
   organismoId,
 }: {
   admin: ReturnType<typeof createAdminSupabaseClient>
@@ -948,8 +954,12 @@ async function recordTaskReassignment({
   roleCode: string | null
   previousResponsible?: string | null
   nextResponsible?: string | null
+  observation?: string | null
   organismoId?: string | null
 }) {
+  const action = previousResponsible ? 'reasignada' : 'asignada'
+  const baseObservation = `Tarea ${action} por ${userLabel || 'Sistema'}.`
+  const fullObservation = observation ? `${baseObservation}\n\nObservacion: ${observation}` : baseObservation
   const historyInsert = {
     fecha: new Date().toISOString(),
     usuario: userLabel || 'Sistema',
@@ -961,7 +971,7 @@ async function recordTaskReassignment({
     tipo_cambio: 'Asignacion',
     valor_anterior: previousResponsible || 'Sin responsable',
     valor_nuevo: nextResponsible || 'Sin responsable',
-    observaciones: `Tarea reasignada por ${userLabel || 'Sistema'}.`,
+    observaciones: fullObservation,
     ...(organismoId ? { organismo_id: organismoId } : {}),
   }
 
@@ -970,8 +980,11 @@ async function recordTaskReassignment({
   if (error) throw error
 }
 
-function assignmentEmailHtml(task: TaskRow, responsable: ResponsableRow) {
+function assignmentEmailHtml(task: TaskRow, responsable: ResponsableRow, observation?: string | null) {
   const fechaFin = task.fecha_fin ? escapeHtml(task.fecha_fin) : 'Sin fecha fin'
+  const observationHtml = observation
+    ? `<p style="margin:12px 0 0"><strong>Observacion:</strong> ${escapeHtml(observation)}</p>`
+    : ''
 
   return `
     <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6">
@@ -981,6 +994,7 @@ function assignmentEmailHtml(task: TaskRow, responsable: ResponsableRow) {
         <p style="margin:0 0 8px"><strong>Tarea:</strong> ${escapeHtml(task.tarea)}</p>
         <p style="margin:0 0 8px"><strong>Prioridad:</strong> ${escapeHtml(task.prioridad)}</p>
         <p style="margin:0"><strong>Fecha fin:</strong> ${fechaFin}</p>
+        ${observationHtml}
       </div>
       <p>Entra en la aplicacion para revisar detalles y actualizar el avance.</p>
     </div>
@@ -990,12 +1004,15 @@ function assignmentEmailHtml(task: TaskRow, responsable: ResponsableRow) {
 async function notifyAssignment(
   admin: ReturnType<typeof createAdminSupabaseClient>,
   task: TaskRow,
-  responsable: ResponsableRow | null
+  responsable: ResponsableRow | null,
+  observation?: string | null
 ) {
   if (!responsable?.usuario_id) return
 
   const title = 'Nueva tarea asignada'
-  const message = `Se te asigno la tarea "${task.tarea}".`
+  const message = observation
+    ? `Se te asigno la tarea "${task.tarea}". Observacion: ${observation}`
+    : `Se te asigno la tarea "${task.tarea}".`
   const { data: alert, error } = await admin
     .from('alertas')
     .insert({
@@ -1019,7 +1036,7 @@ async function notifyAssignment(
   const emailResult = await sendAgendaEmail({
     to: email,
     subject: `Nueva tarea asignada: ${task.tarea}`,
-    html: assignmentEmailHtml(task, responsable),
+    html: assignmentEmailHtml(task, responsable, observation),
     text: `${message} Fecha fin: ${task.fecha_fin ?? 'Sin fecha fin'}`,
   })
 
@@ -1039,12 +1056,14 @@ async function syncTaskAssignments({
   responsables,
   assignmentOwner,
   previousAssignments,
+  assignmentObservation,
 }: {
   admin: ReturnType<typeof createAdminSupabaseClient>
   task: TaskRow
   responsables: ResponsableRow[]
   assignmentOwner: { userId: string | null; userName: string | null }
   previousAssignments: TaskAssignmentRow[]
+  assignmentObservation?: string | null
 }) {
   const previousUserIds = assignmentUserIds(previousAssignments)
   const nextUserIds = assignmentUserIds(
@@ -1105,7 +1124,7 @@ async function syncTaskAssignments({
 
   for (const responsable of responsables) {
     if (responsable.usuario_id && !previousUserIds.has(responsable.usuario_id)) {
-      await notifyAssignment(admin, task, responsable)
+      await notifyAssignment(admin, task, responsable, assignmentObservation)
     }
   }
 
@@ -1172,6 +1191,7 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
 
     const organismoId = getOrganismoIdFromRequest(request)
     const payload = (await request.json()) as TaskPayload
+    const assignmentObservation = normalizeAssignmentObservation(payload)
 
     if (!payload.tarea?.trim()) {
       return NextResponse.json({ ok: false, error: 'La tarea es obligatoria.' }, { status: 400 })
@@ -1273,6 +1293,11 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
       task = data as TaskRow
 
       if (assignmentChanged) {
+        const previousResponsibleLabel =
+          previousAssignments.length > 0
+            ? previousAssignments.map((assignment) => assignment.responsable_nombre).filter(Boolean).join(', ')
+            : previousResponsibleName
+        const nextResponsibleLabel = responsables.map((item) => item.nombre).join(', ') || responsable?.nombre
         await recordTaskReassignment({
           admin,
           taskId: task.id,
@@ -1280,8 +1305,9 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
           userId: user.id,
           userLabel,
           roleCode,
-          previousResponsible: previousResponsibleName,
-          nextResponsible: responsable?.nombre,
+          previousResponsible: previousResponsibleLabel,
+          nextResponsible: nextResponsibleLabel,
+          observation: assignmentObservation,
           organismoId,
         })
       }
@@ -1316,6 +1342,21 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
 
       if (error) throw error
       task = data as TaskRow
+
+      if (responsables.length > 0) {
+        await recordTaskReassignment({
+          admin,
+          taskId: task.id,
+          taskName: task.tarea ?? payload.tarea ?? 'Tarea',
+          userId: user.id,
+          userLabel,
+          roleCode,
+          previousResponsible: null,
+          nextResponsible: responsables.map((item) => item.nombre).join(', ') || responsable?.nombre,
+          observation: assignmentObservation,
+          organismoId,
+        })
+      }
     }
 
     const syncedAssignments = await syncTaskAssignments({
@@ -1327,10 +1368,11 @@ async function saveTask(request: Request, mode: 'create' | 'update') {
         userName: mode === 'update' ? task.asignado_por_nombre ?? userLabel : userLabel,
       },
       previousAssignments,
+      assignmentObservation,
     })
 
     if (!syncedAssignments && responsable && (mode === 'create' || previousResponsibleUserId !== responsable.usuario_id)) {
-      await notifyAssignment(admin, task, responsable)
+      await notifyAssignment(admin, task, responsable, assignmentObservation)
     }
 
     if (!syncedAssignments && mode === 'update' && previousResponsibleUserId && previousResponsibleUserId !== responsable?.usuario_id) {
