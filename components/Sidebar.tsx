@@ -70,8 +70,8 @@ function BrandMark({ className = '' }: { className?: string }) {
 
 function CollapsedNavTooltip({ label }: { label: string }) {
   return (
-    <span className="pointer-events-none absolute left-[calc(100%+0.9rem)] top-1/2 z-[80] flex min-h-11 -translate-y-1/2 translate-x-0 items-center whitespace-nowrap rounded-[18px] border border-slate-200 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-900 opacity-0 shadow-[0_20px_48px_rgba(15,23,42,0.18)] ring-1 ring-white/80 transition-all duration-200 ease-out group-hover:translate-x-1.5 group-hover:opacity-100 group-focus-visible:translate-x-1.5 group-focus-visible:opacity-100">
-      <span className="absolute -left-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-45 border-b border-l border-slate-200 bg-white" />
+    <span className="collapsed-nav-tooltip pointer-events-none absolute left-[calc(100%+0.9rem)] top-1/2 z-[80] flex min-h-11 -translate-y-1/2 translate-x-0 items-center whitespace-nowrap rounded-[18px] border border-slate-200 bg-white px-4 py-2.5 text-[13px] font-semibold text-slate-900 opacity-0 shadow-[0_20px_48px_rgba(15,23,42,0.18)] ring-1 ring-white/80 transition-all duration-200 ease-out group-hover:translate-x-1.5 group-hover:opacity-100 group-focus-visible:translate-x-1.5 group-focus-visible:opacity-100">
+      <span className="collapsed-nav-tooltip-arrow absolute -left-1.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-45 border-b border-l border-slate-200 bg-white" />
       <span className="relative leading-none">{label}</span>
     </span>
   )
@@ -121,10 +121,10 @@ function NavGroup({
                 aria-label={collapsed ? item.label : undefined}
                 className={cn(
                   'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
-                  collapsed ? 'justify-center px-2' : 'gap-3 px-3',
+                  collapsed ? 'justify-center border-transparent px-2 hover:border-transparent' : 'gap-3 px-3',
                   isActive
-                    ? 'nav-active'
-                    : 'border-transparent text-slate-600 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
+                    ? collapsed ? 'nav-active border-transparent' : 'nav-active'
+                    : 'border-transparent text-slate-600 hover:border-transparent hover:bg-white/25 hover:text-slate-900'
                 )}
               >
                 <span
@@ -242,7 +242,7 @@ function SidebarContent({
   }
 
   return (
-    <div className={cn('surface-panel-strong flex h-full min-h-0 flex-col text-slate-900', collapsed ? 'overflow-visible p-2.5' : 'overflow-hidden p-4')}>
+    <div className={cn('surface-panel-strong flex h-full min-h-0 flex-col overflow-visible text-slate-900', collapsed ? 'p-2.5' : 'p-4')}>
 
       {/* â”€â”€ Brand header â”€â”€ */}
       <div className={cn('rounded-[24px] border border-white/70 bg-white/70', collapsed ? 'px-2.5 py-3' : 'px-4 py-3.5')}>
@@ -261,7 +261,7 @@ function SidebarContent({
               <button
                 type="button"
                 onClick={onToggleCollapsed}
-                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-100 bg-white/80 text-slate-400 transition-colors hover:border-slate-200 hover:text-slate-700"
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-100 bg-white/55 text-slate-400 transition-colors hover:border-slate-100 hover:bg-white/30 hover:text-slate-700"
                 aria-label={collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
               >
                 {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
@@ -271,7 +271,7 @@ function SidebarContent({
               <button
                 type="button"
                 onClick={onClose}
-                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-100 bg-white/80 text-slate-400 transition-colors hover:text-slate-900"
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-100 bg-white/55 text-slate-400 transition-colors hover:bg-white/30 hover:text-slate-900"
                 aria-label="Cerrar menu"
               >
                 <X size={14} />
@@ -328,10 +328,10 @@ function SidebarContent({
                       aria-label={collapsed ? 'Miembros' : undefined}
                       className={cn(
                         'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
-                        collapsed ? 'justify-center px-2' : 'gap-3 px-3',
+                        collapsed ? 'justify-center border-transparent px-2 hover:border-transparent' : 'gap-3 px-3',
                         pathname.startsWith(`/organismos/${organismoActivo.slug}/miembros`)
-                          ? 'nav-active'
-                          : 'border-transparent text-slate-600 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
+                          ? collapsed ? 'nav-active border-transparent' : 'nav-active'
+                          : 'border-transparent text-slate-600 hover:border-transparent hover:bg-white/25 hover:text-slate-900'
                       )}
                     >
                       <span className={cn(
@@ -356,10 +356,10 @@ function SidebarContent({
                         aria-label={collapsed ? 'Facturacion' : undefined}
                         className={cn(
                           'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
-                          collapsed ? 'justify-center px-2' : 'gap-3 px-3',
+                          collapsed ? 'justify-center border-transparent px-2 hover:border-transparent' : 'gap-3 px-3',
                           pathname.startsWith(`/organismos/${organismoActivo.slug}/facturacion`)
-                            ? 'nav-active'
-                            : 'border-transparent text-slate-600 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
+                            ? collapsed ? 'nav-active border-transparent' : 'nav-active'
+                            : 'border-transparent text-slate-600 hover:border-transparent hover:bg-white/25 hover:text-slate-900'
                         )}
                       >
                         <span className={cn(
@@ -381,10 +381,10 @@ function SidebarContent({
                         aria-label={collapsed ? 'Ajustes org.' : undefined}
                         className={cn(
                           'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
-                          collapsed ? 'justify-center px-2' : 'gap-3 px-3',
+                          collapsed ? 'justify-center border-transparent px-2 hover:border-transparent' : 'gap-3 px-3',
                           pathname.startsWith(`/organismos/${organismoActivo.slug}/ajustes`)
-                            ? 'nav-active'
-                            : 'border-transparent text-slate-600 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
+                            ? collapsed ? 'nav-active border-transparent' : 'nav-active'
+                            : 'border-transparent text-slate-600 hover:border-transparent hover:bg-white/25 hover:text-slate-900'
                         )}
                       >
                         <span className={cn(
@@ -408,14 +408,14 @@ function SidebarContent({
       </div>
 
       {/* â”€â”€ User panel â”€â”€ */}
-      <div ref={menuRef} className={cn('relative mt-4 rounded-[24px] border border-white/70 bg-white/70', collapsed ? 'p-2' : 'p-3')}>
+      <div ref={menuRef} className={cn('relative z-[90] mt-4 overflow-visible rounded-[24px] border border-white/70 bg-white/70', collapsed ? 'p-2' : 'p-3')}>
 
         {/* User popup menu */}
         {menuOpen && (
           <div
             className={cn(
-              'avatar-menu-popover absolute z-20 overflow-hidden rounded-[22px] border border-white/80 bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.12)]',
-              collapsed ? 'bottom-0 left-[calc(100%+0.75rem)] w-64' : 'inset-x-3 bottom-[calc(100%+0.5rem)]'
+              'avatar-menu-popover z-[999] overflow-hidden rounded-[22px] border border-white/80 bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.12)]',
+              collapsed ? 'fixed bottom-8 left-[6.75rem] w-64' : 'absolute inset-x-3 bottom-[calc(100%+0.5rem)]'
             )}
           >
             <div className="avatar-menu-card rounded-[18px] border border-slate-100 bg-slate-50/80 px-4 py-3">
@@ -461,7 +461,7 @@ function SidebarContent({
           onClick={() => setMenuOpen((c) => !c)}
           title={collapsed ? userName : undefined}
           className={cn(
-            'group flex w-full items-center rounded-[18px] text-left transition-colors hover:bg-white/60',
+            'group flex w-full items-center rounded-[18px] text-left transition-colors hover:bg-white/25',
             collapsed ? 'justify-center p-1.5' : 'gap-3 p-2'
           )}
         >
@@ -470,7 +470,7 @@ function SidebarContent({
               name={userName}
               avatarUrl={avatarUrl}
               size="md"
-              className="h-11 w-11 rounded-full ring-0 transition-all duration-200 group-hover:ring-2 group-hover:ring-teal-200"
+              className="h-11 w-11 rounded-full ring-0 transition-all duration-200"
             />
             <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-400" />
           </div>
@@ -496,7 +496,7 @@ function SidebarContent({
           </div>
           <ThemeToggle
             className={cn(
-              'border-white/70 bg-white/70 text-slate-600 hover:bg-white hover:text-slate-900',
+              'border-white/50 bg-white/45 text-slate-600 hover:bg-white/25 hover:text-slate-900',
               collapsed ? 'h-9 w-full min-w-0 justify-center px-0 [&>span]:hidden' : 'h-8 px-2.5 text-[11px]'
             )}
           />
@@ -559,11 +559,11 @@ export default function Sidebar() {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'no-print hidden flex-shrink-0 p-4 transition-[width,padding] duration-300 lg:block',
+          'no-print relative z-[120] hidden flex-shrink-0 p-4 transition-[width,padding] duration-300 lg:block',
           collapsed ? 'w-[7.5rem]' : 'w-[var(--sidebar-width)]'
         )}
       >
-        <div className="sticky top-4 h-[calc(100vh-2rem)]">
+        <div className="sticky top-4 z-[120] h-[calc(100vh-2rem)]">
           <SidebarContent
             pathname={pathname}
             collapsed={collapsed}
@@ -582,7 +582,7 @@ export default function Sidebar() {
             onClick={() => setOpen(false)}
           />
           <div className="absolute inset-y-2 left-2 w-[min(92vw,22rem)] sm:inset-y-4 sm:left-4 sm:w-[min(88vw,22rem)]">
-            <div className="h-full overflow-hidden">
+            <div className="h-full overflow-visible">
               <SidebarContent
                 pathname={pathname}
                 onNavigate={() => setOpen(false)}

@@ -874,6 +874,19 @@ html[data-theme='dark'] .avatar-menu-danger:hover {
   color: #fecdd3 !important;
 }
 
+html[data-theme='dark'] .collapsed-nav-tooltip {
+  background: rgba(15, 23, 42, 0.96) !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+  color: #e2e8f0 !important;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.28) !important;
+  --tw-ring-color: rgba(148, 163, 184, 0.08) !important;
+}
+
+html[data-theme='dark'] .collapsed-nav-tooltip-arrow {
+  background: rgba(15, 23, 42, 0.96) !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+}
+
 @keyframes pageEnter {
   from {
     opacity: 0;

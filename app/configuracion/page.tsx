@@ -15,6 +15,12 @@ import {
 
 type ConfigQueryRow = Pick<PerfilUsuario, 'id' | 'email' | 'nombre_completo' | 'preferencias'>
 
+function getPreferencesObject(value: ConfigQueryRow['preferencias'] | Json | null | undefined): PreferenciasUsuario | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as PreferenciasUsuario)
+    : null
+}
+
 export default function ConfiguracionPage() {
   const { refreshProfile, profile: sessionProfile } = useUserSession()
   const { themePreference, resolvedTheme, setThemePreference } = useTheme()
@@ -57,9 +63,10 @@ export default function ConfiguracionPage() {
       setSchemaWarning('')
     }
 
+    const storedPreferences = getPreferencesObject(profileRow?.preferencias)
     const nextPreferences = normalizarPreferenciasUsuario({
-      ...profileRow?.preferencias,
-      theme: profileRow?.preferencias?.theme ?? sessionProfile?.preferencias?.theme ?? themePreference,
+      ...storedPreferences,
+      theme: storedPreferences?.theme ?? sessionProfile?.preferencias?.theme ?? themePreference,
     })
 
     setProfile({
@@ -107,7 +114,7 @@ export default function ConfiguracionPage() {
         throw new Error(userError?.message ?? 'No se pudo identificar al usuario autenticado.')
       }
 
-      const normalizedPreferences: PreferenciasUsuario = normalizarPreferenciasUsuario(preferences)
+      const normalizedPreferences = normalizarPreferenciasUsuario(preferences)
 
       const { error: saveError } = await supabase.from('perfiles_usuario').upsert(
         {
@@ -125,10 +132,21 @@ export default function ConfiguracionPage() {
         throw saveError
       }
 
+      setPreferences(normalizedPreferences)
+      setProfile((current) => current
+        ? {
+            ...current,
+            email: user.email ?? current.email,
+            nombre_completo:
+              current.nombre_completo ??
+              (typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : null),
+            preferencias: normalizedPreferences,
+          }
+        : current
+      )
       await setThemePreference(normalizedPreferences.theme ?? 'system', { persist: false })
       await refreshProfile()
       setSuccess('Preferencias guardadas correctamente.')
-      await loadSettings()
     } catch (submitError: unknown) {
       setError(submitError instanceof Error ? submitError.message : 'No se pudieron guardar las preferencias.')
     } finally {

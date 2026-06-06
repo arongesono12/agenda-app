@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   BadgeCheck,
   CalendarDays,
+  Check,
   KeyRound,
   Loader2,
   Mail,
@@ -34,6 +35,20 @@ const EMPTY_FORM = {
 }
 
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024
+const AVATAR_CROP_SIZE = 512
+const AVATAR_CROP_VIEW_SIZE = 280
+
+type CropImageState = {
+  src: string
+  fileName: string
+  naturalWidth: number
+  naturalHeight: number
+}
+
+type CropOffset = {
+  x: number
+  y: number
+}
 
 function normalizarTipoUsuario(value?: TipoUsuario | TipoUsuario[] | null) {
   if (!value) return null
@@ -58,6 +73,67 @@ function getAvatarPath(userId: string, file: File) {
   return `${userId}/${Date.now()}-${safeName}`
 }
 
+function getCoveredImageSize(naturalWidth: number, naturalHeight: number, viewSize: number, zoom: number) {
+  const baseScale = Math.max(viewSize / naturalWidth, viewSize / naturalHeight)
+  return {
+    width: naturalWidth * baseScale * zoom,
+    height: naturalHeight * baseScale * zoom,
+    scale: baseScale * zoom,
+  }
+}
+
+function clampCropOffset(image: CropImageState, zoom: number, offset: CropOffset): CropOffset {
+  const covered = getCoveredImageSize(image.naturalWidth, image.naturalHeight, AVATAR_CROP_VIEW_SIZE, zoom)
+  const maxX = Math.max(0, (covered.width - AVATAR_CROP_VIEW_SIZE) / 2)
+  const maxY = Math.max(0, (covered.height - AVATAR_CROP_VIEW_SIZE) / 2)
+
+  return {
+    x: Math.min(maxX, Math.max(-maxX, offset.x)),
+    y: Math.min(maxY, Math.max(-maxY, offset.y)),
+  }
+}
+
+async function createCroppedAvatarFile(image: CropImageState, zoom: number, offset: CropOffset) {
+  const sourceImage = new Image()
+  sourceImage.src = image.src
+  await new Promise<void>((resolve, reject) => {
+    sourceImage.onload = () => resolve()
+    sourceImage.onerror = () => reject(new Error('No se pudo preparar la imagen seleccionada.'))
+  })
+
+  const canvas = document.createElement('canvas')
+  canvas.width = AVATAR_CROP_SIZE
+  canvas.height = AVATAR_CROP_SIZE
+
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('No se pudo crear el recorte de la imagen.')
+
+  const covered = getCoveredImageSize(image.naturalWidth, image.naturalHeight, AVATAR_CROP_VIEW_SIZE, zoom)
+  const left = (AVATAR_CROP_VIEW_SIZE - covered.width) / 2 + offset.x
+  const top = (AVATAR_CROP_VIEW_SIZE - covered.height) / 2 + offset.y
+  const sourceX = Math.max(0, -left / covered.scale)
+  const sourceY = Math.max(0, -top / covered.scale)
+  const sourceSize = AVATAR_CROP_VIEW_SIZE / covered.scale
+
+  context.drawImage(
+    sourceImage,
+    sourceX,
+    sourceY,
+    Math.min(image.naturalWidth - sourceX, sourceSize),
+    Math.min(image.naturalHeight - sourceY, sourceSize),
+    0,
+    0,
+    AVATAR_CROP_SIZE,
+    AVATAR_CROP_SIZE
+  )
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9))
+  if (!blob) throw new Error('No se pudo generar la imagen recortada.')
+
+  const safeName = image.fileName.replace(/\.[^.]+$/, '') || 'avatar'
+  return new File([blob], `${safeName}-recortada.jpg`, { type: 'image/jpeg' })
+}
+
 export default function PerfilPage() {
   const router = useRouter()
   const { refreshProfile } = useUserSession()
@@ -72,6 +148,10 @@ export default function PerfilPage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [removeAvatar, setRemoveAvatar] = useState(false)
+  const [cropImage, setCropImage] = useState<CropImageState | null>(null)
+  const [cropZoom, setCropZoom] = useState(1)
+  const [cropOffset, setCropOffset] = useState<CropOffset>({ x: 0, y: 0 })
+  const [cropDragStart, setCropDragStart] = useState<{ pointerId: number; x: number; y: number; offset: CropOffset } | null>(null)
 
   const loadProfile = useCallback(async () => {
     setLoading(true)
@@ -129,6 +209,7 @@ export default function PerfilPage() {
     setAvatarFile(null)
     setAvatarPreview(mergedProfile.avatar_url ?? null)
     setRemoveAvatar(false)
+    setCropImage(null)
     setLoading(false)
   }, [])
 
@@ -150,6 +231,7 @@ export default function PerfilPage() {
     setAvatarFile(null)
     setAvatarPreview(profile?.avatar_url ?? null)
     setRemoveAvatar(false)
+    setCropImage(null)
     setError('')
     setSuccess('')
     setEditOpen(true)
@@ -182,23 +264,80 @@ export default function PerfilPage() {
     }
 
     setError('')
-    setAvatarFile(file)
-    setRemoveAvatar(false)
 
     const reader = new FileReader()
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        setAvatarPreview(reader.result)
+        const image = new Image()
+        image.onload = () => {
+          setCropImage({
+            src: reader.result as string,
+            fileName: file.name,
+            naturalWidth: image.naturalWidth,
+            naturalHeight: image.naturalHeight,
+          })
+          setCropZoom(1)
+          setCropOffset({ x: 0, y: 0 })
+        }
+        image.onerror = () => setError('No se pudo leer la imagen seleccionada.')
+        image.src = reader.result
       }
     }
     reader.readAsDataURL(file)
+    event.target.value = ''
   }
 
   const clearAvatar = () => {
     setAvatarFile(null)
     setRemoveAvatar(true)
     setAvatarPreview(null)
+    setCropImage(null)
   }
+
+  const closeCropModal = () => {
+    setCropImage(null)
+    setCropDragStart(null)
+  }
+
+  const handleCropZoom = (value: number) => {
+    if (!cropImage) return
+    const nextZoom = Math.min(3, Math.max(1, value))
+    setCropZoom(nextZoom)
+    setCropOffset((current) => clampCropOffset(cropImage, nextZoom, current))
+  }
+
+  const applyAvatarCrop = async () => {
+    if (!cropImage) return
+
+    try {
+      const safeOffset = clampCropOffset(cropImage, cropZoom, cropOffset)
+      const croppedFile = await createCroppedAvatarFile(cropImage, cropZoom, safeOffset)
+      const reader = new FileReader()
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setAvatarPreview(reader.result)
+        }
+      }
+      reader.readAsDataURL(croppedFile)
+      setAvatarFile(croppedFile)
+      setRemoveAvatar(false)
+      closeCropModal()
+    } catch (cropError: unknown) {
+      setError(cropError instanceof Error ? cropError.message : 'No se pudo recortar la imagen.')
+    }
+  }
+
+  const cropCovered = cropImage
+    ? getCoveredImageSize(cropImage.naturalWidth, cropImage.naturalHeight, AVATAR_CROP_VIEW_SIZE, cropZoom)
+    : null
+  const cropImageStyle = cropImage && cropCovered
+    ? {
+        width: `${cropCovered.width}px`,
+        height: `${cropCovered.height}px`,
+        left: `${(AVATAR_CROP_VIEW_SIZE - cropCovered.width) / 2 + cropOffset.x}px`,
+        top: `${(AVATAR_CROP_VIEW_SIZE - cropCovered.height) / 2 + cropOffset.y}px`,
+      }
+    : undefined
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -579,6 +718,109 @@ export default function PerfilPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cropImage && cropCovered && cropImageStyle && (
+        <div
+          className="agenda-modal-overlay z-[220]"
+          onClick={(e) => { if (e.target === e.currentTarget) closeCropModal() }}
+        >
+          <div className="agenda-modal-shell w-full max-w-md">
+            <div className="flex items-center justify-between border-b border-white/70 px-6 py-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Foto de perfil</p>
+                <p className="mt-0.5 text-lg font-semibold text-slate-900">Recortar imagen</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeCropModal}
+                className="agenda-modal-close"
+                aria-label="Cerrar recorte"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              <div className="flex justify-center">
+                <div
+                  className="relative overflow-hidden rounded-full border border-white/80 bg-slate-950 shadow-[0_20px_55px_rgba(15,23,42,0.22)]"
+                  style={{
+                    width: AVATAR_CROP_VIEW_SIZE,
+                    height: AVATAR_CROP_VIEW_SIZE,
+                    touchAction: 'none',
+                  }}
+                  onPointerDown={(event) => {
+                    event.currentTarget.setPointerCapture(event.pointerId)
+                    setCropDragStart({
+                      pointerId: event.pointerId,
+                      x: event.clientX,
+                      y: event.clientY,
+                      offset: cropOffset,
+                    })
+                  }}
+                  onPointerMove={(event) => {
+                    if (!cropDragStart || cropDragStart.pointerId !== event.pointerId) return
+                    setCropOffset(clampCropOffset(cropImage, cropZoom, {
+                      x: cropDragStart.offset.x + event.clientX - cropDragStart.x,
+                      y: cropDragStart.offset.y + event.clientY - cropDragStart.y,
+                    }))
+                  }}
+                  onPointerUp={(event) => {
+                    if (cropDragStart?.pointerId === event.pointerId) setCropDragStart(null)
+                  }}
+                  onPointerCancel={() => setCropDragStart(null)}
+                >
+                  <img
+                    src={cropImage.src}
+                    alt="Imagen seleccionada para recortar"
+                    className="absolute max-w-none select-none"
+                    draggable={false}
+                    style={cropImageStyle}
+                  />
+                  <div className="pointer-events-none absolute inset-0 rounded-full ring-2 ring-white/90" />
+                  <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle,transparent_62%,rgba(15,23,42,0.48)_63%)]" />
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <label className="label-field">Zoom</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="3"
+                  step="0.01"
+                  value={cropZoom}
+                  onChange={(event) => handleCropZoom(Number(event.target.value))}
+                  className="w-full accent-teal-600"
+                  aria-label="Ajustar zoom del recorte"
+                />
+              </div>
+
+              <p className="mt-3 text-center text-xs leading-5 text-slate-500">
+                Arrastra la imagen para encuadrarla dentro del circulo.
+              </p>
+
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeCropModal}
+                  className="action-btn-ghost flex-1 justify-center"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void applyAvatarCrop()}
+                  className="action-btn-primary flex-1 justify-center"
+                >
+                  <Check size={16} />
+                  Usar recorte
+                </button>
+              </div>
             </div>
           </div>
         </div>
