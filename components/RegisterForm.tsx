@@ -19,7 +19,7 @@ import {
   UsersRound,
 } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
-import { PUBLIC_REGISTRATION_ROLES, REGISTRATION_DEPARTAMENTOS } from '@/lib/registration-options'
+import { PUBLIC_REGISTRATION_ROLES, REGISTRATION_DEPARTAMENTOS, REGISTRATION_ROLES } from '@/lib/registration-options'
 import { supabase } from '@/lib/supabase'
 
 type PublicRole = {
@@ -39,7 +39,13 @@ type PublicOrganismo = {
   slug?: string | null
 }
 
-export default function RegisterForm({ nextPath = '/organismos/nuevo' }: { nextPath?: string }) {
+export default function RegisterForm({
+  nextPath = '/organismos/nuevo',
+  invitacionToken,
+}: {
+  nextPath?: string
+  invitacionToken?: string
+}) {
   const router = useRouter()
   const [roles, setRoles] = useState<PublicRole[]>(PUBLIC_REGISTRATION_ROLES)
   const [departamentos, setDepartamentos] = useState<PublicDepartamento[]>(REGISTRATION_DEPARTAMENTOS)
@@ -60,7 +66,6 @@ export default function RegisterForm({ nextPath = '/organismos/nuevo' }: { nextP
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  const selectedRole = useMemo(() => roles.find(role => role.codigo === roleCode), [roles, roleCode])
   const normalizedEmail = email.trim().toLowerCase()
   const isSegesaEmail = normalizedEmail.endsWith('@segesa.gq')
   const segesaOrganismo = useMemo(
@@ -72,10 +77,27 @@ export default function RegisterForm({ nextPath = '/organismos/nuevo' }: { nextP
       ),
     [organismos]
   )
+  const selectableRoles = useMemo(() => {
+    if (!isSegesaEmail) return roles.filter((role) => role.codigo !== 'supervisor')
+    if (roles.some((role) => role.codigo === 'supervisor')) return roles
+
+    const supervisorRole = REGISTRATION_ROLES.find((role) => role.codigo === 'supervisor')
+    return supervisorRole ? [...roles, supervisorRole] : roles
+  }, [isSegesaEmail, roles])
+  const selectedRole = useMemo(
+    () => selectableRoles.find(role => role.codigo === roleCode),
+    [selectableRoles, roleCode]
+  )
 
   useEffect(() => {
     roleCodeRef.current = roleCode
   }, [roleCode])
+
+  useEffect(() => {
+    if (!selectableRoles.some((role) => role.codigo === roleCode)) {
+      setRoleCode(selectableRoles[0]?.codigo ?? 'responsable')
+    }
+  }, [roleCode, selectableRoles])
 
   useEffect(() => {
     const loadRoles = async () => {
@@ -165,6 +187,7 @@ export default function RegisterForm({ nextPath = '/organismos/nuevo' }: { nextP
           roleCode,
           departamento,
           organismoId: isSegesaEmail ? segesaOrganismo?.id : organismoId || undefined,
+          invitacionToken,
         }),
       })
 
@@ -354,7 +377,7 @@ export default function RegisterForm({ nextPath = '/organismos/nuevo' }: { nextP
                     disabled={loadingRoles}
                     className="input-shell appearance-none pl-11 pr-10"
                   >
-                    {roles.map((role) => (
+                    {selectableRoles.map((role) => (
                       <option key={role.codigo} value={role.codigo}>
                         {role.nombre}
                       </option>

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { timingSafeEqual } from 'crypto'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 
 export const dynamic = 'force-dynamic'
@@ -37,6 +38,17 @@ function readBootstrapToken(request: Request) {
   return request.headers.get('x-bootstrap-token')?.trim() ?? ''
 }
 
+function isBootstrapEnabled() {
+  if (process.env.NODE_ENV !== 'production') return true
+  return process.env.AGENDA_BOOTSTRAP_ENABLED?.trim().toLowerCase() === 'true'
+}
+
+function tokenMatches(providedToken: string, expectedToken: string) {
+  const provided = Buffer.from(providedToken)
+  const expected = Buffer.from(expectedToken)
+  return provided.length === expected.length && timingSafeEqual(provided, expected)
+}
+
 function canUpdateExistingPasswords() {
   return process.env.AGENDA_BOOTSTRAP_UPDATE_EXISTING_PASSWORDS?.trim().toLowerCase() === 'true'
 }
@@ -44,6 +56,16 @@ function canUpdateExistingPasswords() {
 export async function POST(request: Request) {
   const expectedToken = process.env.AGENDA_BOOTSTRAP_TOKEN?.trim()
   const bootstrapUsers = readBootstrapUsers()
+
+  if (!isBootstrapEnabled()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'Bootstrap deshabilitado en produccion.',
+      },
+      { status: 403 }
+    )
+  }
 
   if (!expectedToken) {
     return NextResponse.json(
@@ -67,7 +89,7 @@ export async function POST(request: Request) {
 
   const providedToken = readBootstrapToken(request)
 
-  if (!providedToken || providedToken !== expectedToken) {
+  if (!providedToken || !tokenMatches(providedToken, expectedToken)) {
     return NextResponse.json(
       {
         ok: false,

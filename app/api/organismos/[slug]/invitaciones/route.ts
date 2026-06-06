@@ -4,6 +4,7 @@ import { getServerSessionProfile } from '@/lib/server-access'
 import { resolverRolActivo, obtenerSuscripcion } from '@/lib/organismo-access'
 import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES } from '@/lib/access-control'
 import { verificarLimiteUsuarios } from '@/lib/plan-limits'
+import { rejectRateLimited } from '@/lib/request-security'
 import { sendAgendaEmail, escapeHtml } from '@/lib/email/resend'
 import type { RolCodigo } from '@/lib/types'
 
@@ -23,6 +24,12 @@ function invitacionEmailHtml(organismoNombre: string, invitadoPorNombre: string,
       <p style="color:#64748b;font-size:13px">El enlace expira en 48 horas.</p>
     </div>
   `
+}
+
+function canInviteRole(inviterRole: string, invitedRole: RolCodigo) {
+  const normalizedInviterRole = inviterRole.trim().toLowerCase()
+  if (ADMIN_ROLE_CODES.includes(normalizedInviterRole as (typeof ADMIN_ROLE_CODES)[number])) return true
+  return invitedRole === 'responsable' || invitedRole === 'consulta'
 }
 
 export async function GET(
@@ -69,6 +76,9 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
+    const rateLimited = rejectRateLimited(request, 'organismo-invitaciones', { limit: 20, windowMs: 15 * 60 * 1000 })
+    if (rateLimited) return rateLimited
+
     const { user, profile } = await getServerSessionProfile()
     if (!user) return NextResponse.json({ ok: false, error: 'No autenticado.' }, { status: 401 })
 
@@ -91,6 +101,13 @@ export async function POST(
     const rol = await resolverRolActivo(admin, user.id, organismo.id)
     if (!rol || !MANAGER_ROLE_CODES.includes(rol as (typeof MANAGER_ROLE_CODES)[number])) {
       return NextResponse.json({ ok: false, error: 'Sin permiso para invitar.' }, { status: 403 })
+    }
+
+    if (!canInviteRole(rol, rolCodigo)) {
+      return NextResponse.json(
+        { ok: false, error: 'No puedes invitar usuarios con ese rol.' },
+        { status: 403 }
+      )
     }
 
     // Verificar límite de usuarios del plan

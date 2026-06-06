@@ -534,22 +534,22 @@ export default function Sidebar() {
     <>
       {/* Mobile topbar */}
       <div className="mobile-topbar no-print fixed inset-x-0 top-0 z-40 lg:hidden">
-        <div className="mobile-topbar-inner mx-auto flex w-full max-w-[1560px] items-center justify-between gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.8rem)] sm:px-6">
+        <div className="mobile-topbar-inner mx-auto flex w-full max-w-[1560px] items-center justify-between gap-2 px-3 pb-2.5 pt-[calc(env(safe-area-inset-top)+0.65rem)] sm:gap-3 sm:px-6 sm:pb-3 sm:pt-[calc(env(safe-area-inset-top)+0.8rem)]">
           <div className="flex min-w-0 items-center gap-3">
-            <BrandMark className="h-11 w-11 flex-shrink-0" />
+            <BrandMark className="h-10 w-10 flex-shrink-0 sm:h-11 sm:w-11" />
             <div className="min-w-0">
-              <p className="truncate text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500">
+              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 sm:text-[11px] sm:tracking-[0.22em]">
                 Plan de Trabajo
               </p>
               <p className="truncate text-sm font-semibold text-slate-900">{activeItem}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle className="mobile-topbar-btn h-11 w-11 rounded-2xl p-0 sm:w-auto sm:px-3" />
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <ThemeToggle className="mobile-topbar-btn h-10 w-10 rounded-xl p-0 sm:h-11 sm:w-auto sm:rounded-2xl sm:px-3" />
             <button
               type="button"
               onClick={() => setOpen(true)}
-              className="mobile-topbar-btn flex h-11 w-11 items-center justify-center rounded-2xl"
+              className="mobile-topbar-btn flex h-10 w-10 items-center justify-center rounded-xl sm:h-11 sm:w-11 sm:rounded-2xl"
               aria-label="Abrir menu"
             >
               <Menu size={18} />
@@ -583,7 +583,7 @@ export default function Sidebar() {
             aria-label="Cerrar menu"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute inset-y-4 left-4 w-[min(88vw,22rem)]">
+          <div className="absolute inset-y-2 left-2 w-[min(92vw,22rem)] sm:inset-y-4 sm:left-4 sm:w-[min(88vw,22rem)]">
             <div className="h-full overflow-hidden">
               <SidebarContent
                 pathname={pathname}

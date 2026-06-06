@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { ORGANISMO_COOKIE } from '@/lib/organismo-access'
 import { PUBLIC_REGISTRATION_ROLE_CODES, PUBLIC_REGISTRATION_ROLES, REGISTRATION_DEPARTAMENTOS } from '@/lib/registration-options'
+import { emailsMatch, rejectRateLimited } from '@/lib/request-security'
 import { SEGESA_ORGANISMO_ID } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -13,9 +14,19 @@ type RegisterPayload = {
   roleCode?: string
   departamento?: string
   organismoId?: string
+  invitacionToken?: string
 }
 
 type AdminClient = ReturnType<typeof createAdminSupabaseClient>
+
+type InvitationRow = {
+  id: number
+  organismo_id: string
+  email: string
+  rol_codigo: string
+  usado: boolean | null
+  expira_at: string | null
+}
 
 function fallbackNameFromEmail(email: string) {
   return email.split('@')[0]?.replace(/[._-]+/g, ' ').trim() || email
@@ -33,9 +44,11 @@ function normalizeCatalogText(value?: string | null) {
     .toLowerCase()
 }
 
-function isRegistrationRole(roleCode?: string | null) {
+function isRegistrationRole(roleCode?: string | null, email?: string | null, organismoId?: string | null) {
   const normalizedRole = roleCode?.trim().toLowerCase()
-  return !!normalizedRole && PUBLIC_REGISTRATION_ROLE_CODES.includes(normalizedRole)
+  if (!normalizedRole) return false
+  if (PUBLIC_REGISTRATION_ROLE_CODES.includes(normalizedRole)) return true
+  return normalizedRole === 'supervisor' && !!email && isSegesaEmail(email) && organismoId === SEGESA_ORGANISMO_ID
 }
 
 function isSegesaEmail(email: string) {
@@ -210,6 +223,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const rateLimited = rejectRateLimited(request, 'register', { limit: 8, windowMs: 15 * 60 * 1000 })
+    if (rateLimited) return rateLimited
+
     const body = (await request.json()) as RegisterPayload
     const email = body.email?.trim().toLowerCase()
     const password = body.password ?? ''
@@ -217,6 +233,7 @@ export async function POST(request: Request) {
     const roleCode = normalizeRoleCode(body.roleCode)
     const departamento = body.departamento?.trim()
     const requestedOrganismoId = body.organismoId?.trim() || null
+    const invitacionToken = body.invitacionToken?.trim() || null
 
     if (!email || !password) {
       return NextResponse.json(
@@ -249,7 +266,37 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminSupabaseClient()
-    const targetOrganismoId = email && isSegesaEmail(email) ? SEGESA_ORGANISMO_ID : requestedOrganismoId
+    let invitation: InvitationRow | null = null
+
+    if (invitacionToken) {
+      const { data: invitationRow, error: invitationError } = await admin
+        .from('organismo_invitaciones')
+        .select('id, organismo_id, email, rol_codigo, usado, expira_at')
+        .eq('token', invitacionToken)
+        .maybeSingle()
+
+      if (invitationError) throw invitationError
+
+      if (!invitationRow || invitationRow.usado) {
+        return NextResponse.json({ ok: false, error: 'Invitacion no valida o ya usada.' }, { status: 400 })
+      }
+
+      if (invitationRow.expira_at && new Date(invitationRow.expira_at) < new Date()) {
+        return NextResponse.json({ ok: false, error: 'La invitacion ha expirado.' }, { status: 400 })
+      }
+
+      if (!emailsMatch(email, invitationRow.email)) {
+        return NextResponse.json(
+          { ok: false, error: 'El correo no coincide con la invitacion recibida.' },
+          { status: 403 }
+        )
+      }
+
+      invitation = invitationRow
+    }
+
+    const targetRoleCode = invitation?.rol_codigo?.trim().toLowerCase() || roleCode
+    const targetOrganismoId = invitation?.organismo_id || (email && isSegesaEmail(email) ? SEGESA_ORGANISMO_ID : requestedOrganismoId)
 
     let targetOrganismo: { id: string; slug: string | null } | null = null
 
@@ -299,12 +346,12 @@ export async function POST(request: Request) {
     const { data: roleRow, error: roleError } = await admin
       .from('tipos_usuario')
       .select('id, codigo, nombre')
-      .eq('codigo', roleCode)
+      .eq('codigo', targetRoleCode)
       .maybeSingle()
 
     if (roleError) throw roleError
 
-    if (!roleRow || !isRegistrationRole(roleRow.codigo)) {
+    if (!roleRow || (!invitation && !isRegistrationRole(roleRow.codigo, email, targetOrganismoId))) {
       return NextResponse.json(
         {
           ok: false,
@@ -364,6 +411,16 @@ export async function POST(request: Request) {
       )
 
       if (memberError) throw memberError
+    }
+
+    if (invitation) {
+      const { error: invitationUpdateError } = await admin
+        .from('organismo_invitaciones')
+        .update({ usado: true })
+        .eq('id', invitation.id)
+        .eq('usado', false)
+
+      if (invitationUpdateError) throw invitationUpdateError
     }
 
     await syncRegisteredResponsable({

@@ -239,21 +239,21 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
   return (
     <div className="agenda-modal-overlay">
       <div className="agenda-modal-shell agenda-modal-shell-compact">
-        <div className="grid max-h-[92vh] grid-cols-1 lg:grid-cols-[1.05fr_1.3fr]">
-          <div className="relative overflow-hidden border-b border-white/50 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 p-6 text-white lg:border-b-0 lg:border-r lg:border-white/10">
+        <div className="grid max-h-[94dvh] grid-cols-1 overflow-y-auto md:max-h-[92vh] lg:grid-cols-[1.05fr_1.3fr] lg:overflow-hidden">
+          <div className="relative max-h-64 overflow-hidden border-b border-white/50 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 p-4 text-white sm:p-6 lg:max-h-none lg:border-b-0 lg:border-r lg:border-white/10">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.22),transparent_40%)]" />
             <div className="relative">
               <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-100/90">
                 {isEdit ? 'Modo edicion' : 'Nueva entrada'}
               </span>
-              <h2 className="mt-5 text-3xl font-semibold tracking-[-0.05em]">
+              <h2 className="mt-4 text-2xl font-semibold tracking-[-0.05em] sm:mt-5 sm:text-3xl">
                 {isEdit ? 'Editar tarea' : 'Crear tarea'}
               </h2>
               <p className="mt-3 max-w-sm text-sm leading-6 text-slate-300">
                 Registra responsables, prioridad, fechas y avance para mantener el tablero siempre claro y accionable.
               </p>
 
-              <div className="mt-8 space-y-3">
+              <div className="mt-5 hidden space-y-3 sm:block lg:mt-8">
                 {[
                   { icon: <FileText size={16} />, label: 'Descripcion ejecutiva' },
                   { icon: <Flag size={16} />, label: 'Prioridad y estado' },
@@ -271,7 +271,7 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
             </div>
           </div>
 
-          <div className="max-h-[92vh] overflow-y-auto p-5 sm:p-6">
+          <div className="overflow-y-visible p-4 sm:p-6 lg:max-h-[92vh] lg:overflow-y-auto">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Formulario</p>
@@ -288,7 +288,7 @@ export default function TaskModal({ task, onClose, onSave }: TaskModalProps) {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
 
               <div>
                 <label className="label-field">

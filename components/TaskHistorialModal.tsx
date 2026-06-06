@@ -309,9 +309,9 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
 
   return (
     <div className="agenda-modal-overlay">
-      <div className="agenda-modal-shell agenda-modal-shell-xl flex h-[92vh]">
-        <div className="grid h-full w-full grid-cols-1 xl:grid-cols-[0.95fr_1.3fr]">
-          <aside className="relative overflow-hidden border-b border-white/50 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 p-6 text-white xl:border-b-0 xl:border-r xl:border-white/10">
+      <div className="agenda-modal-shell agenda-modal-shell-xl flex h-[94dvh] md:h-[92vh]">
+        <div className="h-full w-full overflow-y-auto xl:grid xl:grid-cols-[0.95fr_1.3fr] xl:overflow-hidden">
+          <aside className="relative max-h-80 overflow-hidden border-b border-white/50 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 p-4 text-white sm:p-6 md:max-h-none xl:border-b-0 xl:border-r xl:border-white/10">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.22),transparent_40%)]" />
             <div className="relative">
               <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-teal-100/90">
@@ -322,10 +322,10 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
               <div className="mt-5 space-y-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Tarea</p>
-                  <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em]">{task.tarea}</h2>
+                  <h2 className="mt-2 line-clamp-3 text-xl font-semibold tracking-[-0.04em] sm:text-2xl">{task.tarea}</h2>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1">
                   <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-3">
                     <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Identificador</p>
                     <p className="mt-2 text-sm font-semibold text-slate-100">#{task.codigo_id ?? task.id}</p>
@@ -340,7 +340,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-4">
+                <div className="hidden rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-4 sm:block">
                   <div className="flex items-start gap-3">
                     <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 text-teal-100">
                       {canAdd ? <NotebookPen size={18} /> : <Ban size={18} />}
@@ -361,7 +361,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
             </div>
           </aside>
 
-          <section className="flex min-h-0 flex-col">
+          <section className="min-h-0 xl:flex xl:flex-col">
             <div className="flex items-center justify-between border-b border-white/70 px-5 py-4 sm:px-6">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Bitácora</p>
@@ -377,7 +377,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
             </div>
 
             <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[1.05fr_1.2fr]">
-              <div className="border-b border-white/70 p-5 xl:border-b-0 xl:border-r xl:p-6">
+              <div className="order-2 border-t border-white/70 p-4 sm:p-5 xl:order-1 xl:border-r xl:border-t-0 xl:p-6">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">Registrar nueva entrada</p>
@@ -530,13 +530,13 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                 )}
               </div>
 
-              <div className="flex min-h-0 flex-col">
+              <div className="order-1 flex min-h-0 flex-col xl:order-2">
                 <div className="border-b border-white/70 px-5 py-4 sm:px-6">
                   <p className="text-sm font-semibold text-slate-900">{rows.length} registro{rows.length !== 1 ? 's' : ''}</p>
                   <p className="mt-1 text-xs text-slate-500">Se muestran primero las entradas más recientes.</p>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+                <div className="min-h-0 flex-1 overflow-visible px-4 py-4 sm:px-6 sm:py-5 xl:overflow-y-auto">
                   {loading ? (
                     <div className="py-16 text-center">
                       <Loader2 size={24} className="mx-auto animate-spin text-teal-600" />

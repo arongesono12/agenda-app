@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getServerSessionProfile } from '@/lib/server-access'
 import { agregarMiembro } from '@/lib/organismo-access'
+import { emailsMatch, rejectUnsafeMutation } from '@/lib/request-security'
 import type { RolCodigo } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -36,6 +37,10 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL(`/registro?invitacion=${token}`, url))
   }
 
+  if (!emailsMatch(user.email, invitacion.email)) {
+    return NextResponse.redirect(new URL('/login?error=email_invitacion_no_coincide', url))
+  }
+
   // Usuario ya autenticado: aceptar directamente
   const slug = Array.isArray(invitacion.organismo)
     ? invitacion.organismo[0]?.slug
@@ -53,6 +58,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const unsafeMutation = rejectUnsafeMutation(request)
+    if (unsafeMutation) return unsafeMutation
+
     const { user } = await getServerSessionProfile()
     if (!user) return NextResponse.json({ ok: false, error: 'No autenticado.' }, { status: 401 })
 
@@ -73,6 +81,13 @@ export async function POST(request: Request) {
 
     if (invitacion.expira_at && new Date(invitacion.expira_at) < new Date()) {
       return NextResponse.json({ ok: false, error: 'La invitación ha expirado.' }, { status: 400 })
+    }
+
+    if (!emailsMatch(user.email, invitacion.email)) {
+      return NextResponse.json(
+        { ok: false, error: 'Esta invitacion pertenece a otro correo electronico.' },
+        { status: 403 }
+      )
     }
 
     await agregarMiembro(admin, invitacion.organismo_id, user.id, invitacion.rol_codigo as RolCodigo)

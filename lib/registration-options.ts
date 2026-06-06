@@ -38,7 +38,7 @@ export const REGISTRATION_ROLES: RegistrationRole[] = [
 ]
 
 export const PUBLIC_REGISTRATION_ROLES = REGISTRATION_ROLES.filter(
-  (role) => role.codigo !== 'administrador' && role.codigo !== 'administradora'
+  (role) => role.codigo === 'responsable' || role.codigo === 'consulta'
 )
 
 export const REGISTRATION_DEPARTAMENTOS: RegistrationDepartamento[] = [

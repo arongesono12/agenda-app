@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { canAccessPathForRole, getLandingPathForRole, PUBLIC_ROUTES } from '@/lib/access-control'
 import { ORGANISMO_COOKIE, obtenerSuscripcion, resolverOrganismoActivo, suscripcionActiva } from '@/lib/organismo-access'
+import { rejectUnsafeMutation } from '@/lib/request-security'
 import type { Database } from '@/lib/database.types'
 
 type CookieMutation = {
@@ -18,6 +19,10 @@ function copyCookies(source: NextResponse, target: NextResponse) {
 
 function isApiRoute(pathname: string) {
   return pathname.startsWith('/api/')
+}
+
+function isExternalApiRoute(pathname: string) {
+  return pathname === '/api/billing/webhook' || pathname === '/api/bootstrap/agenda-users'
 }
 
 function isPublicRoute(pathname: string) {
@@ -99,6 +104,11 @@ export async function updateSession(request: NextRequest) {
     !isBootstrapApi &&
     !isBillingWebhook &&
     !isPublic
+
+  if (isApiRoute(pathname) && !isExternalApiRoute(pathname)) {
+    const unsafeMutation = rejectUnsafeMutation(request)
+    if (unsafeMutation) return unsafeMutation
+  }
 
   let resolvedRoleCode: string | null = null
 
