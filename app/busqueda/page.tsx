@@ -1,12 +1,13 @@
 'use client'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Search, SlidersHorizontal, X, Loader2, History, ChevronLeft, ChevronRight } from 'lucide-react'
 import { normalizarTareas } from '@/lib/supabase'
 import type { Tarea } from '@/lib/types'
 import { DEPARTAMENTOS, PRIORIDADES, ESTADOS, TIPOS_TAREA } from '@/lib/types'
-import { formatDateShort } from '@/lib/utils'
+import { cn, formatDateShort } from '@/lib/utils'
 import PageHeader from '@/components/ui/PageHeader'
 import TaskHistorialModal from '@/components/TaskHistorialModal'
+import TaskDetailModal from '@/components/TaskDetailModal'
 import { PrioridadBadge, EstadoBadge, TipoBadge, SemaforoBadge } from '@/components/ui/Badge'
 import ProgressBar from '@/components/ui/ProgressBar'
 
@@ -36,9 +37,13 @@ export default function BusquedaPage() {
   const [searched, setSearched] = useState(false)
   const [loading, setLoading] = useState(false)
   const [historialTask, setHistorialTask] = useState<Tarea | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailClosing, setDetailClosing] = useState(false)
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
   const [page, setPage] = useState(0)
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
+  const detailCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const set = (k: string, v: string) => setFilters((f) => ({ ...f, [k]: v }))
 
@@ -78,12 +83,51 @@ export default function BusquedaPage() {
     setFilters(INIT)
     setResults([])
     setSearched(false)
+    setDetailOpen(false)
+    setDetailClosing(false)
+    setSelectedTaskId(null)
     setPage(0)
     setTotal(0)
     setTotalPages(0)
   }
 
   const activeCount = Object.values(filters).filter(Boolean).length
+  const selectedTask = selectedTaskId === null ? null : results.find((task) => task.id === selectedTaskId) ?? null
+  const selectedTaskIndex = selectedTask ? results.findIndex((task) => task.id === selectedTask.id) : -1
+
+  useEffect(() => {
+    return () => {
+      if (detailCloseTimerRef.current) clearTimeout(detailCloseTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (selectedTaskId !== null && !results.some((task) => task.id === selectedTaskId)) {
+      setDetailOpen(false)
+      setDetailClosing(false)
+      setSelectedTaskId(null)
+    }
+  }, [results, selectedTaskId])
+
+  const openTaskDetail = (task: Tarea) => {
+    if (detailCloseTimerRef.current) {
+      clearTimeout(detailCloseTimerRef.current)
+      detailCloseTimerRef.current = null
+    }
+    setSelectedTaskId(task.id)
+    setDetailClosing(false)
+    setDetailOpen(true)
+  }
+
+  const closeTaskDetail = () => {
+    if (!detailOpen || detailClosing) return
+    setDetailClosing(true)
+    detailCloseTimerRef.current = setTimeout(() => {
+      setDetailOpen(false)
+      setDetailClosing(false)
+      detailCloseTimerRef.current = null
+    }, 220)
+  }
 
   return (
     <div className="page-stack">
@@ -196,7 +240,22 @@ export default function BusquedaPage() {
             <>
             <div className="mobile-card-list p-4 md:hidden">
               {results.map((t) => (
-                <article key={t.id} className="mobile-card">
+                <article
+                  key={t.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openTaskDetail(t)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      openTaskDetail(t)
+                    }
+                  }}
+                  className={cn(
+                    'mobile-card cursor-pointer transition-all duration-200',
+                    detailOpen && selectedTaskId === t.id && 'border-slate-300 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.10)]'
+                  )}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="mobile-card-meta">ID #{t.codigo_id ?? t.id}</p>
@@ -228,7 +287,14 @@ export default function BusquedaPage() {
 
                   <ProgressBar value={t.porcentaje_avance} showLabel className="mt-4" size="md" />
 
-                  <button onClick={() => setHistorialTask(t)} className="action-btn mt-4 w-full justify-center" title="Historial">
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setHistorialTask(t)
+                    }}
+                    className="action-btn mt-4 w-full justify-center"
+                    title="Historial"
+                  >
                     <History size={14} />
                     Historial
                   </button>
@@ -248,7 +314,16 @@ export default function BusquedaPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100/80">
                   {results.map((t, index) => (
-                    <tr key={t.id} className={index % 2 === 0 ? 'bg-white/10 hover:bg-white/50' : 'bg-white/30 hover:bg-white/60'}>
+                    <tr
+                      key={t.id}
+                      onClick={() => openTaskDetail(t)}
+                      aria-selected={selectedTaskId === t.id}
+                      className={cn(
+                        'cursor-pointer transition-colors',
+                        index % 2 === 0 ? 'bg-white/10 hover:bg-white/50' : 'bg-white/30 hover:bg-white/60',
+                        detailOpen && selectedTaskId === t.id && 'bg-white shadow-[inset_3px_0_0_rgba(100,116,139,0.45)] hover:bg-white'
+                      )}
+                    >
                       <td className="px-4 py-3 text-xs font-semibold text-slate-400">{t.codigo_id ?? t.id}</td>
                       <td className="px-4 py-3 max-w-xs">
                         <p className="line-clamp-2 text-sm font-semibold text-slate-800">{t.tarea}</p>
@@ -265,7 +340,10 @@ export default function BusquedaPage() {
                       <td className="px-4 py-3"><TipoBadge value={t.tipo_tarea} /></td>
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => setHistorialTask(t)}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setHistorialTask(t)
+                          }}
                           className="flex h-9 w-9 items-center justify-center rounded-2xl border border-white/70 bg-white/70 text-slate-500 transition-colors hover:text-teal-600"
                           title="Historial"
                         >
@@ -287,7 +365,7 @@ export default function BusquedaPage() {
                   <button
                     onClick={() => search(Math.max(0, page - 1))}
                     disabled={page === 0 || loading}
-                    className="action-btn h-10 w-10 rounded-2xl p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="action-btn icon-action-btn h-10 w-10 rounded-2xl disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Pagina anterior"
                   >
                     <ChevronLeft size={16} />
@@ -295,7 +373,7 @@ export default function BusquedaPage() {
                   <button
                     onClick={() => search(Math.min(totalPages - 1, page + 1))}
                     disabled={page >= totalPages - 1 || loading}
-                    className="action-btn h-10 w-10 rounded-2xl p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="action-btn icon-action-btn h-10 w-10 rounded-2xl disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Pagina siguiente"
                   >
                     <ChevronRight size={16} />
@@ -311,6 +389,31 @@ export default function BusquedaPage() {
       {historialTask && (
         <TaskHistorialModal task={historialTask} onClose={() => setHistorialTask(null)} />
       )}
+
+      <TaskDetailModal
+        task={detailOpen || detailClosing ? selectedTask : null}
+        isClosing={detailClosing}
+        currentIndex={selectedTaskIndex}
+        totalTasks={results.length}
+        canGoPrev={selectedTaskIndex > 0}
+        canGoNext={selectedTaskIndex >= 0 && selectedTaskIndex < results.length - 1}
+        canEditTask={false}
+        canDeleteTask={false}
+        onClose={closeTaskDetail}
+        onPrev={() => {
+          if (selectedTaskIndex > 0) {
+            setSelectedTaskId(results[selectedTaskIndex - 1].id)
+          }
+        }}
+        onNext={() => {
+          if (selectedTaskIndex >= 0 && selectedTaskIndex < results.length - 1) {
+            setSelectedTaskId(results[selectedTaskIndex + 1].id)
+          }
+        }}
+        onEdit={() => undefined}
+        onDelete={() => undefined}
+        onOpenHistory={(task) => setHistorialTask(task)}
+      />
     </div>
   )
 }

@@ -151,7 +151,7 @@ export default function ConfiguracionPage() {
         subtitle="Administra las preferencias personales que afectan la experiencia de la agenda para tu usuario."
         icon={<SlidersHorizontal size={22} />}
         actions={
-          <button onClick={() => void loadSettings()} className="action-btn h-12 w-12 rounded-2xl p-0" aria-label="Recargar configuracion">
+          <button onClick={() => void loadSettings()} className="action-btn icon-action-btn h-12 w-12 rounded-2xl" aria-label="Recargar configuracion">
             <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
           </button>
         }

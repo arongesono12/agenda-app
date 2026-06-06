@@ -257,7 +257,7 @@ body {
   }
 
   .agenda-modal-close {
-    @apply action-btn h-11 w-11 rounded-2xl p-0;
+    @apply action-btn icon-action-btn h-11 w-11 rounded-2xl;
   }
 
   @media (max-width: 767px) {
@@ -329,6 +329,10 @@ body {
     color: var(--ghost-hover-text);
   }
 
+  .icon-action-btn {
+    @apply aspect-square flex-shrink-0 p-0;
+  }
+
   .input-shell {
     background: var(--input-bg);
     border-color: var(--input-border);
@@ -374,6 +378,11 @@ body {
     .action-btn-primary,
     .action-btn-ghost {
       @apply min-h-11 rounded-xl px-3 py-2.5;
+    }
+
+    .icon-action-btn {
+      min-height: 0;
+      padding: 0;
     }
 
     .input-shell {
@@ -427,7 +436,7 @@ body {
     inset: 0 auto auto 0;
     width: 100%;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(15, 118, 110, 0.35), transparent);
+    background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.28), transparent);
   }
 
   .kpi-card:hover {
@@ -472,6 +481,7 @@ body {
     background: var(--mobile-topbar-btn-bg);
     border: 1px solid var(--mobile-topbar-btn-border);
     color: var(--mobile-topbar-btn-text);
+    min-height: 0;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
     backdrop-filter: none;
     transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease, color 160ms ease;
@@ -531,9 +541,10 @@ body {
   }
 
   .nav-active {
-    background: linear-gradient(135deg, rgba(15, 118, 110, 0.28), rgba(30, 41, 59, 0.2));
-    border-color: rgba(94, 234, 212, 0.18);
-    color: #f8fafc;
+    background: var(--action-bg);
+    border-color: var(--action-border);
+    color: var(--action-hover-text);
+    box-shadow: none;
   }
 
   .animate-in {

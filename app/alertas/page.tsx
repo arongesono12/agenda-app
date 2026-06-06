@@ -180,7 +180,7 @@ export default function AlertasPage() {
         subtitle="Prioriza tareas con mayor riesgo operativo y detecta vencimientos antes de que afecten la ejecucion."
         icon={<Bell size={22} />}
         actions={
-          <button onClick={() => void fetchData()} className="action-btn h-12 w-12 rounded-2xl p-0">
+          <button onClick={() => void fetchData()} className="action-btn icon-action-btn h-12 w-12 rounded-2xl" aria-label="Actualizar alertas">
             <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
           </button>
         }

@@ -337,7 +337,7 @@ export default function PerfilPage() {
         subtitle="Actualiza tu nombre visible, tu foto y tu contrasena para mantener tu cuenta al dia."
         icon={<UserRound size={22} />}
         actions={
-          <button onClick={() => void loadProfile()} className="action-btn h-12 w-12 rounded-2xl p-0" aria-label="Recargar perfil">
+          <button onClick={() => void loadProfile()} className="action-btn icon-action-btn h-12 w-12 rounded-2xl" aria-label="Recargar perfil">
             <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
           </button>
         }

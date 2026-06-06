@@ -28,7 +28,7 @@ export default function PageHeader({ title, subtitle, icon, actions, className }
         </div>
 
         {actions && (
-          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:[&>*]:w-auto lg:w-auto lg:justify-end [&>*]:w-full">
+          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
             {actions}
           </div>
         )}

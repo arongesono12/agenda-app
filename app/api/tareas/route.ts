@@ -208,7 +208,7 @@ function readFilters(searchParams: URLSearchParams): TaskFilters {
 function applyTaskFilters(
   query: SupabaseFilterQuery,
   filters: TaskFilters,
-  options: { departmentTaskIds?: number[] | null } = {}
+  options: { departmentTaskIds?: number[] | null; responsableTaskIds?: number[] | null } = {}
 ) {
   let next: SupabaseFilterQuery = query
 
@@ -223,8 +223,11 @@ function applyTaskFilters(
   if (filters.estado) next = next.eq('estado', filters.estado)
   else if (filters.soloAbiertas) next = next.not('estado', 'in', '("Completado","Cancelado")')
   if (filters.tipo) next = next.eq('tipo_tarea', filters.tipo)
-  if (filters.responsableExact) next = next.eq('responsable', filters.responsableExact)
-  else if (filters.responsable) next = next.ilike('responsable', `%${sanitizeSearchTerm(filters.responsable)}%`)
+  if (filters.responsableExact && options.responsableTaskIds) {
+    next = options.responsableTaskIds.length > 0 ? next.in('id', options.responsableTaskIds) : next.eq('id', -1)
+  } else if (filters.responsableExact) {
+    next = next.eq('responsable', filters.responsableExact)
+  } else if (filters.responsable) next = next.ilike('responsable', `%${sanitizeSearchTerm(filters.responsable)}%`)
   if (filters.fechaDesde) next = next.gte('fecha_fin', filters.fechaDesde)
   if (filters.fechaHasta) next = next.lte('fecha_fin', filters.fechaHasta)
   if (filters.conFechas) {
@@ -264,6 +267,7 @@ async function countTasks(
   const supabase = await createServerSupabaseClient()
   const admin = createAdminSupabaseClient()
   const departmentTaskIds = await loadTaskIdsForDepartment(admin, filters.departamento)
+  const responsableTaskIds = await loadTaskIdsForResponsableExact(admin, filters.responsableExact)
 
   if (!scope.unrestricted) {
     const scopedTaskIds = await loadScopedTaskIds(admin, scope, {
@@ -274,7 +278,7 @@ async function countTasks(
 
     let baseQuery = admin.from('tareas').select('id', { count: 'exact', head: true }).in('id', scopedTaskIds)
     if (scope.organismoId) baseQuery = baseQuery.eq('organismo_id', scope.organismoId)
-    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds }) as unknown as typeof baseQuery
+    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds, responsableTaskIds }) as unknown as typeof baseQuery
 
     if (filters.fechaFinLt) query = query.lt('fecha_fin', filters.fechaFinLt)
     if (filters.fechaFinGte) query = query.gte('fecha_fin', filters.fechaFinGte)
@@ -287,7 +291,7 @@ async function countTasks(
 
   const runCount = async (includeUserColumn: boolean) => {
     const baseQuery = supabase.from('tareas').select('id', { count: 'exact', head: true })
-    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds }) as unknown as typeof baseQuery
+    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds, responsableTaskIds }) as unknown as typeof baseQuery
     query = applyTaskScope(query as unknown as SupabaseFilterQuery, scope, { includeUserColumn }) as unknown as typeof baseQuery
 
     if (filters.fechaFinLt) query = query.lt('fecha_fin', filters.fechaFinLt)
@@ -356,6 +360,7 @@ async function loadTaskPage({
   const supabase = await createServerSupabaseClient()
   const admin = createAdminSupabaseClient()
   const departmentTaskIds = await loadTaskIdsForDepartment(admin, filters.departamento)
+  const responsableTaskIds = await loadTaskIdsForResponsableExact(admin, filters.responsableExact)
 
   if (!scope.unrestricted) {
     const scopedTaskIds = await loadScopedTaskIds(admin, scope, {
@@ -372,7 +377,7 @@ async function loadTaskPage({
       .in('id', scopedTaskIds)
       .order(orderBy, { ascending })
       .range(from, to)
-    const query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds }) as unknown as typeof baseQuery
+    const query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds, responsableTaskIds }) as unknown as typeof baseQuery
     const result = await query
 
     if (result.error) return result
@@ -389,7 +394,7 @@ async function loadTaskPage({
       .select(columns, { count: 'exact' })
       .order(orderBy, { ascending })
       .range(from, to)
-    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds }) as unknown as typeof baseQuery
+    let query = applyTaskFilters(baseQuery as unknown as SupabaseFilterQuery, filters, { departmentTaskIds, responsableTaskIds }) as unknown as typeof baseQuery
     query = applyTaskScope(query as unknown as SupabaseFilterQuery, scope, { includeUserColumn }) as unknown as typeof baseQuery
     return query
   }
@@ -487,6 +492,45 @@ async function loadTaskIdsForDepartment(
   }
 
   return Array.from(new Set((data ?? []).map((row) => Number(row.tarea_id)).filter((id) => Number.isInteger(id) && id > 0)))
+}
+
+async function loadTaskIdsForResponsableExact(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  responsable?: string
+) {
+  const target = responsable?.trim()
+  if (!target) return null
+
+  const taskIds = new Set<number>()
+
+  const assignmentResult = await admin
+    .from('tarea_asignaciones')
+    .select('tarea_id')
+    .eq('responsable_nombre', target)
+    .eq('activo', true)
+
+  if (assignmentResult.error) {
+    if (!isMissingTaskAssignmentsTable(assignmentResult.error)) throw assignmentResult.error
+  } else {
+    for (const row of assignmentResult.data ?? []) {
+      const taskId = Number(row.tarea_id)
+      if (Number.isInteger(taskId) && taskId > 0) taskIds.add(taskId)
+    }
+  }
+
+  const legacyResult = await admin
+    .from('tareas')
+    .select('id')
+    .eq('responsable', target)
+
+  if (legacyResult.error) throw legacyResult.error
+
+  for (const row of legacyResult.data ?? []) {
+    const taskId = Number(row.id)
+    if (Number.isInteger(taskId) && taskId > 0) taskIds.add(taskId)
+  }
+
+  return Array.from(taskIds)
 }
 
 async function attachTaskAssignments(

@@ -37,7 +37,16 @@ import { es } from 'date-fns/locale'
 import { normalizarPreferenciasUsuario } from '@/lib/user-preferences'
 import { useUserSession } from '@/components/UserSessionProvider'
 
-const INIT_FILTERS = { q: '', prioridad: '', departamento: '', estado: '', tipo: '' }
+const INIT_FILTERS = {
+  q: '',
+  responsable: '',
+  prioridad: '',
+  departamento: '',
+  estado: '',
+  tipo: '',
+  fecha_desde: '',
+  fecha_hasta: '',
+}
 const AGENDA_ESTADOS = ['Pendiente', 'En Proceso'] as const
 const PAGE_SIZE = 25
 
@@ -269,7 +278,7 @@ export default function AgendaDiariaPage() {
         icon={<CalendarDays size={22} />}
         actions={
           <>
-            <button onClick={() => void fetchTasks()} className="action-btn h-12 w-12 rounded-2xl p-0">
+            <button onClick={() => void fetchTasks()} className="action-btn icon-action-btn h-12 w-12 rounded-2xl" aria-label="Actualizar tareas">
               <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
             </button>
             {canCreateTask && (
@@ -299,13 +308,20 @@ export default function AgendaDiariaPage() {
             <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Buscar por tarea o responsable..."
+              placeholder="Buscar por descripcion, ID, codigo manual o responsable..."
               value={filters.q}
               onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void fetchTasks()
+              }}
               className="input-shell pl-11"
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => void fetchTasks()} className="action-btn-primary">
+              <Search size={15} />
+              Buscar
+            </button>
             <button
               onClick={() => setShowFilters((current) => !current)}
               className={showFilters || activeFilters > 0 ? 'action-btn border-teal-200 bg-teal-50/90 text-teal-700' : 'action-btn'}
@@ -329,7 +345,18 @@ export default function AgendaDiariaPage() {
         </div>
 
         {showFilters && (
-          <div className="grid grid-cols-1 gap-3 border-t border-white/70 px-4 pb-4 pt-1 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 border-t border-white/70 px-4 pb-4 pt-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="sm:col-span-2 xl:col-span-1">
+              <label className="label-field" htmlFor="agenda-responsable-filter">Responsable</label>
+              <input
+                id="agenda-responsable-filter"
+                type="text"
+                value={filters.responsable}
+                onChange={(event) => setFilters((current) => ({ ...current, responsable: event.target.value }))}
+                placeholder="Nombre del responsable"
+                className="input-shell"
+              />
+            </div>
             {[
               { key: 'prioridad', label: 'Prioridad', options: PRIORIDADES },
               { key: 'departamento', label: 'Departamento', options: DEPARTAMENTOS },
@@ -351,6 +378,26 @@ export default function AgendaDiariaPage() {
                 </select>
               </div>
             ))}
+            <div>
+              <label className="label-field" htmlFor="agenda-fecha-desde">Fecha fin desde</label>
+              <input
+                id="agenda-fecha-desde"
+                type="date"
+                value={filters.fecha_desde}
+                onChange={(event) => setFilters((current) => ({ ...current, fecha_desde: event.target.value }))}
+                className="input-shell"
+              />
+            </div>
+            <div>
+              <label className="label-field" htmlFor="agenda-fecha-hasta">Fecha fin hasta</label>
+              <input
+                id="agenda-fecha-hasta"
+                type="date"
+                value={filters.fecha_hasta}
+                onChange={(event) => setFilters((current) => ({ ...current, fecha_hasta: event.target.value }))}
+                className="input-shell"
+              />
+            </div>
           </div>
         )}
       </div>
@@ -387,7 +434,7 @@ export default function AgendaDiariaPage() {
                   key={task.id}
                   className={cn(
                     'mobile-card transition-all duration-200',
-                    detailOpen && selectedTaskId === task.id && 'border-teal-200 bg-teal-50/80 shadow-[0_18px_40px_rgba(13,148,136,0.14)]',
+                    detailOpen && selectedTaskId === task.id && 'border-slate-300 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.10)]',
                   )}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -424,7 +471,7 @@ export default function AgendaDiariaPage() {
 
                   <button
                     onClick={() => openTaskDetail(task)}
-                    className="mt-4 flex w-full items-center justify-between rounded-[20px] border border-white/80 bg-white/70 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-teal-200 hover:bg-teal-50/90 hover:text-teal-700"
+                    className="mt-4 flex w-full items-center justify-between rounded-[20px] border border-slate-200 bg-white/70 px-4 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-white hover:text-slate-900"
                   >
                     <span>Ver detalle completo</span>
                     <ChevronDown size={16} className="-rotate-90 transition-transform" />
@@ -480,7 +527,7 @@ export default function AgendaDiariaPage() {
                         className={cn(
                           'cursor-pointer transition-colors',
                           index % 2 === 0 ? 'bg-white/10 hover:bg-white/50' : 'bg-white/30 hover:bg-white/60',
-                          detailOpen && selectedTaskId === task.id && 'bg-teal-50/90 hover:bg-teal-50/90',
+                          detailOpen && selectedTaskId === task.id && 'bg-white shadow-[inset_3px_0_0_rgba(100,116,139,0.45)] hover:bg-white',
                         )}
                       >
                         <td className="px-4 py-3 text-xs font-semibold text-slate-400">{task.codigo_id ?? task.id}</td>
@@ -564,7 +611,7 @@ export default function AgendaDiariaPage() {
                   <button
                     onClick={() => setPage((current) => Math.max(0, current - 1))}
                     disabled={page === 0 || loading}
-                    className="action-btn h-10 w-10 rounded-2xl p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="action-btn icon-action-btn h-10 w-10 rounded-2xl disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Pagina anterior"
                   >
                     <ChevronLeft size={16} />
@@ -572,7 +619,7 @@ export default function AgendaDiariaPage() {
                   <button
                     onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
                     disabled={page >= totalPages - 1 || loading}
-                    className="action-btn h-10 w-10 rounded-2xl p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="action-btn icon-action-btn h-10 w-10 rounded-2xl disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Pagina siguiente"
                   >
                     <ChevronRight size={16} />

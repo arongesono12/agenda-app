@@ -12,38 +12,32 @@ interface KPICardProps {
 
 const colorMap = {
   teal: {
-    border: 'border-teal-100/80',
-    glow: 'from-teal-500/18 via-cyan-400/10 to-transparent',
+    glow: 'from-slate-200/24 via-slate-100/14 to-transparent',
     icon: 'kpi-icon-shell bg-teal-500/12 text-teal-700',
     value: 'text-teal-900',
   },
   blue: {
-    border: 'border-sky-100/80',
-    glow: 'from-sky-500/18 via-blue-400/10 to-transparent',
+    glow: 'from-slate-200/24 via-slate-100/14 to-transparent',
     icon: 'kpi-icon-shell bg-sky-500/12 text-sky-700',
     value: 'text-sky-900',
   },
   amber: {
-    border: 'border-amber-100/80',
-    glow: 'from-amber-500/18 via-orange-400/10 to-transparent',
+    glow: 'from-slate-200/24 via-slate-100/14 to-transparent',
     icon: 'kpi-icon-shell bg-amber-500/12 text-amber-700',
     value: 'text-amber-900',
   },
   red: {
-    border: 'border-rose-100/80',
-    glow: 'from-rose-500/18 via-red-400/10 to-transparent',
+    glow: 'from-slate-200/24 via-slate-100/14 to-transparent',
     icon: 'kpi-icon-shell bg-rose-500/12 text-rose-700',
     value: 'text-rose-900',
   },
   slate: {
-    border: 'border-slate-200/80',
     glow: 'from-slate-400/14 via-slate-200/12 to-transparent',
     icon: 'kpi-icon-shell bg-slate-900/6 text-slate-700',
     value: 'text-slate-900',
   },
   purple: {
-    border: 'border-fuchsia-100/80',
-    glow: 'from-fuchsia-500/16 via-violet-400/10 to-transparent',
+    glow: 'from-slate-200/24 via-slate-100/14 to-transparent',
     icon: 'kpi-icon-shell bg-fuchsia-500/12 text-fuchsia-700',
     value: 'text-fuchsia-900',
   },
@@ -60,7 +54,7 @@ export default function KPICard({
   const c = colorMap[color]
 
   return (
-    <div className={cn('surface-panel kpi-card kpi-shell relative overflow-hidden px-4 py-3', c.border)}>
+    <div className="surface-panel kpi-card kpi-shell relative overflow-hidden px-4 py-3">
       <div className={cn('kpi-glow pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-br', c.glow)} />
       <div className="relative flex items-center gap-3">
         <div

@@ -90,7 +90,7 @@ export default function ResponsablePage() {
         subtitle="Consulta la carga individual, el avance promedio y el backlog asignado por persona."
         icon={<User size={22} />}
         actions={
-          <button onClick={fetch} className="action-btn h-12 w-12 rounded-2xl p-0">
+          <button onClick={fetch} className="action-btn icon-action-btn h-12 w-12 rounded-2xl" aria-label="Actualizar responsables">
             <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
           </button>
         }

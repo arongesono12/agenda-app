@@ -476,7 +476,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                 </form>
 
                 {canReassign && (
-                  <div className="mt-5 rounded-[24px] border border-teal-100 bg-teal-50/60 p-4">
+                  <div className="mt-5 rounded-[24px] border border-slate-200 bg-white/70 p-4">
                     <div className="flex items-start gap-3">
                       <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl bg-white/80 text-teal-700">
                         <UserPlus size={18} />
@@ -573,7 +573,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                                   <button
                                     type="button"
                                     onClick={() => isEditing ? cancelEditHistory() : startEditHistory(row)}
-                                    className="action-btn h-9 w-9 rounded-2xl p-0"
+                                    className="action-btn icon-action-btn h-9 w-9 rounded-2xl"
                                     aria-label={isEditing ? 'Cancelar edicion de historial' : 'Editar historial'}
                                   >
                                     {isEditing ? <X size={14} /> : <Pencil size={14} />}
@@ -584,7 +584,7 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                                     type="button"
                                     onClick={() => void deleteHistory(row)}
                                     disabled={deletingHistoryId === row.id}
-                                    className="action-btn h-9 w-9 rounded-2xl p-0 text-rose-600 disabled:opacity-60"
+                                    className="action-btn icon-action-btn h-9 w-9 rounded-2xl text-rose-600 disabled:opacity-60"
                                     aria-label="Eliminar historial"
                                   >
                                     {deletingHistoryId === row.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}

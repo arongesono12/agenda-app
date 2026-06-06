@@ -62,7 +62,7 @@ function HistorialContent() {
         subtitle={taskId ? `Auditoria y trazabilidad de la tarea #${taskId}.` : 'Auditoria y trazabilidad de acciones registradas sobre tareas y avances.'}
         icon={<History size={22} />}
         actions={
-          <button onClick={fetch} className="action-btn h-12 w-12 rounded-2xl p-0">
+          <button onClick={fetch} className="action-btn icon-action-btn h-12 w-12 rounded-2xl" aria-label="Actualizar historial">
             <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
           </button>
         }
@@ -170,14 +170,14 @@ function HistorialContent() {
                   <button
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
-                    className="action-btn h-10 w-10 rounded-2xl p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="action-btn icon-action-btn h-10 w-10 rounded-2xl disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <ChevronLeft size={16} />
                   </button>
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
-                    className="action-btn h-10 w-10 rounded-2xl p-0 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="action-btn icon-action-btn h-10 w-10 rounded-2xl disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <ChevronRight size={16} />
                   </button>

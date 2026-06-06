@@ -230,7 +230,7 @@ export default function CatalogosPage() {
         subtitle="Gestiona listas maestras y referencias base del sistema para mantener consistencia operativa."
         icon={<Settings size={22} />}
         actions={
-          <button onClick={() => void fetch()} className="action-btn h-12 w-12 rounded-2xl p-0">
+          <button onClick={() => void fetch()} className="action-btn icon-action-btn h-12 w-12 rounded-2xl" aria-label="Actualizar catalogos">
             <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
           </button>
         }
@@ -277,7 +277,7 @@ export default function CatalogosPage() {
                         setDeleteError('')
                         setDeleteTarget({ type: 'depto', id: d.id, label: d.nombre })
                       }}
-                      className="action-btn h-10 w-10 rounded-2xl p-0 text-rose-600"
+                      className="action-btn icon-action-btn h-10 w-10 rounded-2xl text-rose-600"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -411,7 +411,7 @@ export default function CatalogosPage() {
                         setDeleteError('')
                         setDeleteTarget({ type: 'resp', id: r.id, label: r.nombre })
                       }}
-                      className="action-btn h-10 w-10 flex-shrink-0 rounded-2xl p-0 text-rose-600"
+                      className="action-btn icon-action-btn h-10 w-10 flex-shrink-0 rounded-2xl text-rose-600"
                     >
                       <Trash2 size={14} />
                     </button>

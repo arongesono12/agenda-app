@@ -81,7 +81,7 @@ export default function TaskDetailModal({
               <button
                 onClick={onPrev}
                 disabled={!canGoPrev}
-                className="action-btn h-11 min-w-11 rounded-2xl px-3 disabled:translate-y-0 disabled:opacity-45"
+                className="action-btn icon-action-btn h-11 w-11 rounded-2xl disabled:translate-y-0 disabled:opacity-45"
                 aria-label="Tarea anterior"
                 title="Tarea anterior"
               >
@@ -90,7 +90,7 @@ export default function TaskDetailModal({
               <button
                 onClick={onNext}
                 disabled={!canGoNext}
-                className="action-btn h-11 min-w-11 rounded-2xl px-3 disabled:translate-y-0 disabled:opacity-45"
+                className="action-btn icon-action-btn h-11 w-11 rounded-2xl disabled:translate-y-0 disabled:opacity-45"
                 aria-label="Tarea siguiente"
                 title="Tarea siguiente"
               >

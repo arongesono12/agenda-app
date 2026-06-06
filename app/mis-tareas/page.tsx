@@ -196,7 +196,7 @@ export default function MisTareasPage() {
         subtitle="Organiza tus pendientes personales sin mezclarlos con las tareas oficiales del organismo."
         icon={<CheckSquare size={22} />}
         actions={
-          <button onClick={() => void loadTasks()} className="action-btn h-12 w-12 rounded-2xl p-0" aria-label="Recargar mis tareas">
+          <button onClick={() => void loadTasks()} className="action-btn icon-action-btn h-12 w-12 rounded-2xl" aria-label="Recargar mis tareas">
             <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
           </button>
         }
@@ -249,7 +249,7 @@ export default function MisTareasPage() {
               {editingId ? 'Guardar' : 'Agregar'}
             </button>
             {editingId && (
-              <button type="button" onClick={resetForm} className="action-btn h-12 w-12 rounded-2xl p-0" aria-label="Cancelar edicion">
+              <button type="button" onClick={resetForm} className="action-btn icon-action-btn h-12 w-12 rounded-2xl" aria-label="Cancelar edicion">
                 <X size={16} />
               </button>
             )}

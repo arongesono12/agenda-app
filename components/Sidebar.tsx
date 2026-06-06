@@ -21,7 +21,6 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
-  Search,
   Settings,
   User,
   Users,
@@ -44,7 +43,6 @@ const navItems = [
   { href: '/alertas', label: 'Alertas', icon: Bell, badge: 'alert', group: 'work' },
   { href: '/cronograma', label: 'Cronograma', icon: GanttChartSquare, badge: null, group: 'work' },
   { href: '/estadisticas', label: 'Estadisticas', icon: BarChart3, badge: null, group: 'work' },
-  { href: '/busqueda', label: 'Busqueda', icon: Search, badge: null, group: 'tools' },
   { href: '/responsable', label: 'Responsables', icon: User, badge: null, group: 'tools' },
   { href: '/historial', label: 'Historial', icon: History, badge: null, group: 'tools' },
   { href: '/catalogos', label: 'Catalogos', icon: Settings, badge: null, group: 'tools' },
@@ -125,7 +123,7 @@ function NavGroup({
                   'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
                   collapsed ? 'justify-center px-2' : 'gap-3 px-3',
                   isActive
-                    ? 'nav-active border-teal-200/30'
+                    ? 'nav-active'
                     : 'border-transparent text-slate-600 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
                 )}
               >
@@ -133,7 +131,7 @@ function NavGroup({
                   className={cn(
                     'relative flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150',
                     isActive
-                      ? 'bg-white/80 text-teal-700 shadow-[0_4px_14px_rgba(20,184,166,0.18)]'
+                      ? 'bg-slate-50 text-teal-700'
                       : 'text-slate-400 group-hover:text-slate-700'
                   )}
                 >
@@ -332,14 +330,14 @@ function SidebarContent({
                         'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
                         collapsed ? 'justify-center px-2' : 'gap-3 px-3',
                         pathname.startsWith(`/organismos/${organismoActivo.slug}/miembros`)
-                          ? 'nav-active border-teal-200/30'
+                          ? 'nav-active'
                           : 'border-transparent text-slate-600 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
                       )}
                     >
                       <span className={cn(
                         'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150',
                         pathname.startsWith(`/organismos/${organismoActivo.slug}/miembros`)
-                          ? 'bg-white/80 text-teal-700 shadow-[0_4px_14px_rgba(20,184,166,0.18)]'
+                          ? 'bg-slate-50 text-teal-700'
                           : 'text-slate-400 group-hover:text-slate-700'
                       )}>
                         <Users size={16} />
@@ -360,14 +358,14 @@ function SidebarContent({
                           'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
                           collapsed ? 'justify-center px-2' : 'gap-3 px-3',
                           pathname.startsWith(`/organismos/${organismoActivo.slug}/facturacion`)
-                            ? 'nav-active border-teal-200/30'
+                            ? 'nav-active'
                             : 'border-transparent text-slate-600 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
                         )}
                       >
                         <span className={cn(
                           'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150',
                           pathname.startsWith(`/organismos/${organismoActivo.slug}/facturacion`)
-                            ? 'bg-white/80 text-teal-700 shadow-[0_4px_14px_rgba(20,184,166,0.18)]'
+                            ? 'bg-slate-50 text-teal-700'
                             : 'text-slate-400 group-hover:text-slate-700'
                         )}>
                           <CreditCard size={16} />
@@ -385,14 +383,14 @@ function SidebarContent({
                           'group relative flex items-center rounded-2xl border py-2.5 text-sm font-medium transition-all duration-150',
                           collapsed ? 'justify-center px-2' : 'gap-3 px-3',
                           pathname.startsWith(`/organismos/${organismoActivo.slug}/ajustes`)
-                            ? 'nav-active border-teal-200/30'
+                            ? 'nav-active'
                             : 'border-transparent text-slate-600 hover:border-white/70 hover:bg-white/60 hover:text-slate-900'
                         )}
                       >
                         <span className={cn(
                           'flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl transition-all duration-150',
                           pathname.startsWith(`/organismos/${organismoActivo.slug}/ajustes`)
-                            ? 'bg-white/80 text-teal-700 shadow-[0_4px_14px_rgba(20,184,166,0.18)]'
+                            ? 'bg-slate-50 text-teal-700'
                             : 'text-slate-400 group-hover:text-slate-700'
                         )}>
                           <Settings size={16} />

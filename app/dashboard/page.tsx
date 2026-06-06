@@ -117,7 +117,7 @@ export default function DashboardPage() {
         subtitle={capabilities.dashboardSubtitle}
         icon={<LayoutDashboard size={22} />}
         actions={
-          <button onClick={fetch} className="action-btn h-12 w-12 rounded-2xl p-0">
+          <button onClick={fetch} className="action-btn icon-action-btn h-12 w-12 rounded-2xl" aria-label="Actualizar dashboard">
             <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
           </button>
         }
