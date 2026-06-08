@@ -232,6 +232,39 @@ export interface MiembroConPerfil extends OrganismoMiembro {
   } | null
 }
 
+export type ReunionModalidad = 'virtual' | 'presencial' | 'hibrida'
+export type ReunionEstado = 'programada' | 'cancelada' | 'finalizada'
+export type ReunionRespuesta = 'pendiente' | 'confirmado' | 'rechazado' | 'tentativo'
+
+export interface ReunionInvitado {
+  id: number
+  reunion_id: string
+  usuario_id?: string | null
+  email?: string | null
+  nombre?: string | null
+  estado_respuesta: ReunionRespuesta
+  token_confirmacion?: string
+  respondido_at?: string | null
+  invitado_at?: string
+}
+
+export interface Reunion {
+  id: string
+  organismo_id: string
+  titulo: string
+  descripcion?: string | null
+  fecha_inicio: string
+  fecha_fin?: string | null
+  modalidad: ReunionModalidad
+  enlace_reunion?: string | null
+  ubicacion?: string | null
+  estado: ReunionEstado
+  creada_por_usuario_id?: string | null
+  created_at?: string
+  updated_at?: string
+  invitados?: ReunionInvitado[]
+}
+
 export const SEGESA_ORGANISMO_ID = '00000000-0000-0000-0000-000000000001'
 
 // ─── Colores / constantes ────────────────────────────────────────────────────

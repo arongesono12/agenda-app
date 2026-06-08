@@ -9,6 +9,7 @@ import {
   Bell,
   BarChart3,
   CalendarDays,
+  CalendarClock,
   CheckSquare,
   ChevronDown,
   ChevronLeft,
@@ -37,10 +38,11 @@ import { SEGESA_ORGANISMO_ID } from '@/lib/types'
 const SIDEBAR_COLLAPSED_KEY = 'agenda-sidebar-collapsed'
 
 const navItems = [
-  { href: '/', label: 'Agenda diaria', icon: CalendarDays, badge: null, group: 'work' },
+  { href: '/agenda', label: 'Agenda diaria', icon: CalendarDays, badge: null, group: 'work' },
   { href: '/mis-tareas', label: 'Mis tareas', icon: CheckSquare, badge: null, group: 'work' },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, badge: null, group: 'work' },
   { href: '/alertas', label: 'Alertas', icon: Bell, badge: 'alert', group: 'work' },
+  { href: '/reuniones', label: 'Reuniones', icon: CalendarClock, badge: null, group: 'work' },
   { href: '/cronograma', label: 'Cronograma', icon: GanttChartSquare, badge: null, group: 'work' },
   { href: '/estadisticas', label: 'Estadisticas', icon: BarChart3, badge: null, group: 'work' },
   { href: '/responsable', label: 'Responsables', icon: User, badge: null, group: 'tools' },
@@ -559,7 +561,7 @@ export default function Sidebar() {
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'no-print relative z-[120] hidden flex-shrink-0 p-4 transition-[width,padding] duration-300 lg:block',
+          'no-print relative z-[120] hidden flex-shrink-0 py-4 pl-4 pr-2 transition-[width,padding] duration-300 lg:block',
           collapsed ? 'w-[7.5rem]' : 'w-[var(--sidebar-width)]'
         )}
       >

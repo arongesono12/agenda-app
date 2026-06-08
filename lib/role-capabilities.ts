@@ -21,7 +21,7 @@ export type RoleCapabilitySet = {
   navItems: string[]
 }
 
-const NAV_ONLY = new Set(['/', '/mis-tareas', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos'])
+const NAV_ONLY = new Set(['/agenda', '/mis-tareas', '/dashboard', '/alertas', '/reuniones', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos'])
 
 function navItemsForRole(roleCode: string) {
   return getAllowedRoutesForRole(roleCode).filter((route) => NAV_ONLY.has(route))

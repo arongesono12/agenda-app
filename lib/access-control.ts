@@ -7,21 +7,21 @@ export const READER_ROLE_CODES = ['superusuario', 'administrador', 'administrado
 
 export type RoleCode = (typeof READER_ROLE_CODES)[number]
 
-const ADMIN_ROUTES = ['/', '/mis-tareas', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos']
-const SUPERVISOR_ROUTES = ['/', '/mis-tareas', '/dashboard', '/alertas', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial']
-const RESPONSABLE_ROUTES = ['/', '/mis-tareas', '/dashboard', '/alertas', '/cronograma', '/historial']
-const CONSULTA_ROUTES = ['/mis-tareas', '/dashboard', '/alertas', '/busqueda', '/cronograma', '/estadisticas']
+const ADMIN_ROUTES = ['/agenda', '/mis-tareas', '/dashboard', '/alertas', '/reuniones', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos']
+const SUPERVISOR_ROUTES = ['/agenda', '/mis-tareas', '/dashboard', '/alertas', '/reuniones', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial']
+const RESPONSABLE_ROUTES = ['/agenda', '/mis-tareas', '/dashboard', '/alertas', '/reuniones', '/cronograma', '/historial']
+const CONSULTA_ROUTES = ['/mis-tareas', '/dashboard', '/alertas', '/reuniones', '/busqueda', '/cronograma', '/estadisticas']
 const COMMON_AUTH_ROUTES = ['/perfil', '/configuracion', '/forbidden']
 
 // Rutas de organismos accesibles por cualquier usuario autenticado
 const ORGANISMO_ROUTES = ['/seleccionar-organismo', '/organismos']
 
 // Rutas públicas (sin auth)
-export const PUBLIC_ROUTES = ['/planes']
+export const PUBLIC_ROUTES = ['/', '/planes']
 
 export function getLandingPathForRole(roleCode: string) {
   const normalized = roleCode.trim().toLowerCase()
-  if (normalized === 'responsable') return '/'
+  if (normalized === 'responsable') return '/agenda'
   return '/dashboard'
 }
 

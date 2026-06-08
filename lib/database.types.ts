@@ -25,6 +25,8 @@ export type Database = {
           email_error: string | null
           alerta_key: string | null
           organismo_id: string | null
+          modulo: string
+          referencia_id: string | null
         }
         Insert: {
           id?: number
@@ -41,8 +43,70 @@ export type Database = {
           email_error?: string | null
           alerta_key?: string | null
           organismo_id?: string | null
+          modulo?: string
+          referencia_id?: string | null
         }
         Update: Partial<Database['public']['Tables']['alertas']['Insert']>
+        Relationships: []
+      }
+      reuniones: {
+        Row: {
+          id: string
+          organismo_id: string
+          titulo: string
+          descripcion: string | null
+          fecha_inicio: string
+          fecha_fin: string | null
+          modalidad: string
+          enlace_reunion: string | null
+          ubicacion: string | null
+          estado: string
+          creada_por_usuario_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organismo_id: string
+          titulo: string
+          descripcion?: string | null
+          fecha_inicio: string
+          fecha_fin?: string | null
+          modalidad?: string
+          enlace_reunion?: string | null
+          ubicacion?: string | null
+          estado?: string
+          creada_por_usuario_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['reuniones']['Insert']>
+        Relationships: []
+      }
+      reunion_invitados: {
+        Row: {
+          id: number
+          reunion_id: string
+          usuario_id: string | null
+          email: string | null
+          nombre: string | null
+          estado_respuesta: string
+          token_confirmacion: string
+          respondido_at: string | null
+          invitado_at: string
+        }
+        Insert: {
+          id?: number
+          reunion_id: string
+          usuario_id?: string | null
+          email?: string | null
+          nombre?: string | null
+          estado_respuesta?: string
+          token_confirmacion?: string
+          respondido_at?: string | null
+          invitado_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['reunion_invitados']['Insert']>
         Relationships: []
       }
       departamentos: {

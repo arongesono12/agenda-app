@@ -64,7 +64,7 @@ export async function GET(request: Request) {
     const isAdmin = ADMIN_ROLE_CODES.includes(activeRoleCode as (typeof ADMIN_ROLE_CODES)[number])
     let query = admin
       .from('alertas')
-      .select('id, tarea_id, tipo_alerta, titulo, mensaje, leida, created_at, destinatario_usuario_id')
+      .select('id, tarea_id, tipo_alerta, titulo, mensaje, leida, created_at, destinatario_usuario_id, modulo, referencia_id')
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -75,7 +75,9 @@ export async function GET(request: Request) {
     if (!isAdmin) {
       query = query.eq('destinatario_usuario_id', user.id)
       const assignedTaskIds = await loadAssignedTaskIds(admin, user.id, organismoId)
-      query = assignedTaskIds.length > 0 ? query.in('tarea_id', assignedTaskIds) : query.eq('id', -1)
+      query = assignedTaskIds.length > 0
+        ? query.or(`modulo.neq.tareas,tarea_id.in.(${assignedTaskIds.join(',')})`)
+        : query.neq('modulo', 'tareas')
     }
 
     if (onlyUnread) {

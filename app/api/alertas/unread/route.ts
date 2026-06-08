@@ -60,7 +60,9 @@ export async function GET(request: Request) {
     if (!isAdmin) {
       query = query.eq('destinatario_usuario_id', user.id)
       const assignedTaskIds = await loadAssignedTaskIds(admin, user.id, organismoId)
-      query = assignedTaskIds.length > 0 ? query.in('tarea_id', assignedTaskIds) : query.eq('id', -1)
+      query = assignedTaskIds.length > 0
+        ? query.or(`modulo.neq.tareas,tarea_id.in.(${assignedTaskIds.join(',')})`)
+        : query.neq('modulo', 'tareas')
     }
     if (organismoId) query = query.eq('organismo_id', organismoId)
     const { count, error } = await query
