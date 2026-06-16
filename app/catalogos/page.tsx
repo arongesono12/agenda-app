@@ -342,6 +342,7 @@ export default function CatalogosPage() {
                               value={editingDepto}
                               onChange={(e) => setEditingDepto(e.target.value)}
                               autoFocus
+                              aria-label="Departamento"
                               className="h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-teal-400 focus:outline-none"
                             >
                               <option value="">Sin departamento</option>
@@ -352,6 +353,7 @@ export default function CatalogosPage() {
                             <select
                               value={editingRoleCode}
                               onChange={(e) => setEditingRoleCode(e.target.value)}
+                              aria-label="Rol"
                               className="h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:border-teal-400 focus:outline-none"
                             >
                               {PUBLIC_REGISTRATION_ROLES.map((role) => (
@@ -456,6 +458,7 @@ export default function CatalogosPage() {
               <select
                 value={newResp.departamento}
                 onChange={(e) => setNewResp((r) => ({ ...r, departamento: e.target.value }))}
+                aria-label="Departamento del responsable"
                 className="input-shell"
               >
                 <option value="">Seleccionar departamento</option>
