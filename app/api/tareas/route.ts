@@ -638,11 +638,52 @@ async function loadScopedTaskIds(
       }
     }
 
+    if (scope.roleCode === 'supervisor') {
+      const assignedByResult = await admin
+        .from('tarea_asignaciones')
+        .select('tarea_id, estado, porcentaje_avance')
+        .eq('asignado_por_usuario_id', scope.userId)
+        .eq('activo', true)
+
+      if (assignedByResult.error) {
+        const missingOwnerColumns =
+          assignedByResult.error.code === 'PGRST204' ||
+          assignedByResult.error.code === '42703' ||
+          /asignado_por_usuario_id|schema cache|column .* does not exist/i.test(assignedByResult.error.message ?? '')
+
+        if (!isMissingTaskAssignmentsTable(assignedByResult.error) && !missingOwnerColumns) {
+          throw assignedByResult.error
+        }
+      } else {
+        const assignedByRows = (assignedByResult.data ?? []) as Array<{
+          tarea_id?: number | string | null
+          estado?: string | null
+          porcentaje_avance?: number | null
+        }>
+        for (const assignment of assignedByRows) {
+          const taskId = Number(assignment.tarea_id)
+          if (Number.isInteger(taskId) && taskId > 0 && (!options.onlyOpenAssignments || isOpenAssignment(assignment))) {
+            taskIds.add(taskId)
+          }
+        }
+      }
+    }
+
     const legacyResult = await admin.from('tareas').select('id').eq('responsable_usuario_id', scope.userId)
     if (!legacyResult.error) {
       for (const task of legacyResult.data ?? []) {
         const taskId = Number(task.id)
         if (!assignmentTaskIds.has(taskId)) taskIds.add(taskId)
+      }
+    }
+
+    if (scope.roleCode === 'supervisor') {
+      const legacyAssignedByResult = await admin.from('tareas').select('id').eq('asignado_por_usuario_id', scope.userId)
+      if (!legacyAssignedByResult.error) {
+        for (const task of legacyAssignedByResult.data ?? []) {
+          const taskId = Number(task.id)
+          if (Number.isInteger(taskId) && taskId > 0) taskIds.add(taskId)
+        }
       }
     }
   }
@@ -1015,9 +1056,12 @@ async function validateSupervisorAssignment({
   const wasAssignedToSupervisor =
     previous?.responsable_usuario_id === userId ||
     previousAssignments.some((assignment) => assignment.responsable_usuario_id === userId)
+  const wasAssignedBySupervisor =
+    previous?.asignado_por_usuario_id === userId ||
+    previousAssignments.some((assignment) => assignment.asignado_por_usuario_id === userId)
 
-  if (mode === 'update' && !wasAssignedToSupervisor) {
-    throw new Error('Solo puedes reasignar tareas que un administrador te haya asignado previamente.')
+  if (mode === 'update' && !wasAssignedToSupervisor && !wasAssignedBySupervisor) {
+    throw new Error('Solo puedes reasignar tareas asignadas a tu usuario o tareas que hayas delegado a tus responsables.')
   }
 }
 

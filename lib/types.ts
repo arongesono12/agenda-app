@@ -20,6 +20,8 @@ export interface Tarea {
   responsable_id?: number | null
   responsable_usuario_id?: string | null
   responsable?: string
+  asignado_por_usuario_id?: string | null
+  asignado_por_nombre?: string | null
   asignaciones?: TareaAsignacion[]
   fecha_inicio?: string
   fecha_fin?: string

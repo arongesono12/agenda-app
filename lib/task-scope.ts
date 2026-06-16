@@ -5,6 +5,7 @@ import type { PerfilUsuario } from '@/lib/types'
 export type TaskScope = {
   unrestricted: boolean
   userId: string | null
+  roleCode: string
   assignedNames: string[]
   organismoId?: string | null
 }
@@ -36,6 +37,7 @@ export function buildTaskScope(
     return {
       unrestricted: true,
       userId: user.id,
+      roleCode,
       assignedNames: [],
       organismoId: organismoId || null,
     }
@@ -47,6 +49,7 @@ export function buildTaskScope(
   return {
     unrestricted: false,
     userId: user.id,
+    roleCode,
     assignedNames: uniqueValues([profile?.nombre_completo, emailName]),
     organismoId: organismoId || null,
   }

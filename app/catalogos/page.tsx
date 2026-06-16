@@ -40,7 +40,7 @@ export default function CatalogosPage() {
   const [resps, setResps] = useState<Responsable[]>([])
   const [loading, setLoading] = useState(true)
   const [newDepto, setNewDepto] = useState('')
-  const [newResp, setNewResp] = useState({ nombre: '', email: '', departamento: '', cargo: '' })
+  const [newResp, setNewResp] = useState({ nombre: '', email: '', departamento: '', cargo: '', roleCode: 'responsable' })
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
   const [tab, setTab] = useState<'deptos' | 'resps' | 'estados'>('deptos')
@@ -127,6 +127,7 @@ export default function CatalogosPage() {
         email,
         departamento: newResp.departamento || null,
         cargo: newResp.cargo || null,
+        roleCode: newResp.roleCode || 'responsable',
       }),
     })
     const result = (await response.json()) as { ok?: boolean; error?: string }
@@ -137,7 +138,7 @@ export default function CatalogosPage() {
       return
     }
 
-    setNewResp({ nombre: '', email: '', departamento: '', cargo: '' })
+    setNewResp({ nombre: '', email: '', departamento: '', cargo: '', roleCode: 'responsable' })
     setSaving(false)
     void fetch()
   }
@@ -462,6 +463,21 @@ export default function CatalogosPage() {
                   <option key={d.id}>{d.nombre}</option>
                 ))}
               </select>
+              <select
+                value={newResp.roleCode}
+                onChange={(e) => setNewResp((r) => ({ ...r, roleCode: e.target.value }))}
+                className="input-shell"
+                aria-label="Rol dentro del organismo"
+              >
+                {PUBLIC_REGISTRATION_ROLES.map((role) => (
+                  <option key={role.codigo} value={role.codigo}>
+                    {role.nombre}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs leading-5 text-slate-500">
+                Si el correo ya pertenece a un usuario registrado, este rol se aplicara tambien dentro del organismo activo.
+              </p>
               <button onClick={addResp} disabled={saving || !newResp.nombre.trim() || !newResp.email.trim()} className="action-btn-primary w-full justify-center disabled:translate-y-0 disabled:opacity-50">
                 {saving ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
                 Agregar responsable

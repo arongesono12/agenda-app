@@ -49,9 +49,77 @@ type ProfileRoleRow = {
   tipo_usuario?: { codigo?: string | null } | Array<{ codigo?: string | null }> | null
 }
 
+type RoleRow = {
+  id: number
+  codigo: string
+}
+
 function readRoleCode(profile: ProfileRoleRow) {
   const role = Array.isArray(profile.tipo_usuario) ? profile.tipo_usuario[0] : profile.tipo_usuario
   return role?.codigo?.trim().toLowerCase() ?? ''
+}
+
+async function loadPublicRole(admin: ReturnType<typeof createAdminSupabaseClient>, roleCode?: string | null): Promise<RoleRow> {
+  const normalizedRoleCode = roleCode?.trim().toLowerCase() || 'responsable'
+
+  if (!PUBLIC_REGISTRATION_ROLE_CODES.includes(normalizedRoleCode)) {
+    throw new Error('Selecciona un rol valido para el responsable.')
+  }
+
+  const { data: role, error } = await admin
+    .from('tipos_usuario')
+    .select('id, codigo')
+    .eq('codigo', normalizedRoleCode)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!role) throw new Error('El rol seleccionado no existe en la base de datos.')
+
+  return role as RoleRow
+}
+
+async function linkUserByEmail(admin: ReturnType<typeof createAdminSupabaseClient>, email: string) {
+  const { data, error } = await admin
+    .from('perfiles_usuario')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle()
+
+  if (error) throw error
+  return data?.id ?? null
+}
+
+async function applyResponsableRole({
+  admin,
+  userId,
+  role,
+  organismoId,
+}: {
+  admin: ReturnType<typeof createAdminSupabaseClient>
+  userId: string
+  role: RoleRow
+  organismoId?: string | null
+}) {
+  const { error: profileUpdateError } = await admin
+    .from('perfiles_usuario')
+    .update({ tipo_usuario_id: role.id })
+    .eq('id', userId)
+
+  if (profileUpdateError) throw profileUpdateError
+
+  if (organismoId) {
+    const { error: memberError } = await admin.from('organismo_miembros').upsert(
+      {
+        organismo_id: organismoId,
+        usuario_id: userId,
+        rol_codigo: role.codigo,
+        activo: true,
+      },
+      { onConflict: 'organismo_id,usuario_id' }
+    )
+
+    if (memberError) throw memberError
+  }
 }
 
 async function ensureAssignableMembersAsResponsables(
@@ -275,6 +343,20 @@ export async function GET(request: Request) {
                 tipo_usuario?: { codigo?: string | null } | Array<{ codigo?: string | null }> | null
               }>).map((p) => [p.id, readRoleCode(p)])
             )
+            if (organismoId) {
+              const { data: miembros, error: miembrosError } = await admin
+                .from('organismo_miembros')
+                .select('usuario_id, rol_codigo')
+                .eq('organismo_id', organismoId)
+                .eq('activo', true)
+                .in('usuario_id', userIds)
+
+              if (miembrosError) throw miembrosError
+
+              for (const miembro of miembros ?? []) {
+                if (miembro.usuario_id) roleMap.set(miembro.usuario_id, miembro.rol_codigo?.trim().toLowerCase() ?? '')
+              }
+            }
 
             result.responsables = rows.map((r) => ({
               ...r,
@@ -333,6 +415,7 @@ export async function POST(request: Request) {
     if (payload.resource === 'responsables') {
       const nombre = payload.nombre?.trim()
       const email = normalizeEmail(payload.email)
+      const role = await loadPublicRole(admin, payload.roleCode)
 
       if (!nombre) {
         return NextResponse.json({ ok: false, error: 'El nombre del responsable es obligatorio.' }, { status: 400 })
@@ -342,11 +425,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: false, error: 'Introduce un correo valido para el responsable.' }, { status: 400 })
       }
 
+      const linkedUserId = await linkUserByEmail(admin, email)
       const { data, error } = await admin
         .from('responsables')
         .insert({
           nombre,
           email,
+          usuario_id: linkedUserId,
           departamento: payload.departamento || null,
           cargo: payload.cargo || null,
           activo: true,
@@ -356,6 +441,9 @@ export async function POST(request: Request) {
         .single()
 
       if (error) throw error
+      if (linkedUserId) {
+        await applyResponsableRole({ admin, userId: linkedUserId, role, organismoId })
+      }
       return NextResponse.json({ ok: true, item: data })
     }
 
@@ -408,22 +496,7 @@ export async function PATCH(request: Request) {
     }
 
     if (payload.roleCode !== undefined) {
-      const roleCode = payload.roleCode?.trim().toLowerCase()
-
-      if (!roleCode || !PUBLIC_REGISTRATION_ROLE_CODES.includes(roleCode)) {
-        return NextResponse.json({ ok: false, error: 'Selecciona un rol valido.' }, { status: 400 })
-      }
-
-      const { data: role, error: roleError } = await admin
-        .from('tipos_usuario')
-        .select('id')
-        .eq('codigo', roleCode)
-        .maybeSingle()
-
-      if (roleError) throw roleError
-      if (!role) {
-        return NextResponse.json({ ok: false, error: 'El rol seleccionado no existe en la base de datos.' }, { status: 400 })
-      }
+      const role = await loadPublicRole(admin, payload.roleCode)
 
       let responsableQuery = admin
         .from('responsables')
@@ -468,12 +541,7 @@ export async function PATCH(request: Request) {
         )
       }
 
-      const { error: profileUpdateError } = await admin
-        .from('perfiles_usuario')
-        .update({ tipo_usuario_id: role.id })
-        .eq('id', userId)
-
-      if (profileUpdateError) throw profileUpdateError
+      await applyResponsableRole({ admin, userId, role, organismoId })
     }
 
     return NextResponse.json({ ok: true })

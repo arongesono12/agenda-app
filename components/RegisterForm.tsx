@@ -19,7 +19,7 @@ import {
   UsersRound,
 } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
-import { PUBLIC_REGISTRATION_ROLES, REGISTRATION_DEPARTAMENTOS, REGISTRATION_ROLES } from '@/lib/registration-options'
+import { PUBLIC_REGISTRATION_ROLES, REGISTRATION_DEPARTAMENTOS } from '@/lib/registration-options'
 import { supabase } from '@/lib/supabase'
 
 type PublicRole = {
@@ -78,12 +78,8 @@ export default function RegisterForm({
     [organismos]
   )
   const selectableRoles = useMemo(() => {
-    if (!isSegesaEmail) return roles.filter((role) => role.codigo !== 'supervisor')
-    if (roles.some((role) => role.codigo === 'supervisor')) return roles
-
-    const supervisorRole = REGISTRATION_ROLES.find((role) => role.codigo === 'supervisor')
-    return supervisorRole ? [...roles, supervisorRole] : roles
-  }, [isSegesaEmail, roles])
+    return roles
+  }, [roles])
   const selectedRole = useMemo(
     () => selectableRoles.find(role => role.codigo === roleCode),
     [selectableRoles, roleCode]
