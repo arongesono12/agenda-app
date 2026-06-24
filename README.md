@@ -87,6 +87,7 @@ El usuario solicita recuperacion por correo y luego define una nueva contrasena 
 | Responsable | `/responsable` | Consulta de carga individual por responsable |
 | Historial | `/historial` | Auditoria y bitacora de cambios |
 | Catalogos | `/catalogos` | Gestion de departamentos, responsables y valores base |
+| Reuniones | `/reuniones` | Programacion de reuniones del organismo con invitaciones y enlaces Zoom |
 | Perfil | `/perfil` | Datos personales, avatar y contrasena |
 | Configuracion | `/configuracion` | Tema visual y preferencias personales |
 
@@ -366,6 +367,50 @@ Muestra los valores base usados por la aplicacion:
 - prioridades;
 - tipos de tarea.
 
+## Reuniones
+
+Ruta: `/reuniones`
+
+Permite programar reuniones del organismo, invitar miembros y registrar la confirmacion de participacion.
+
+Funciones principales:
+
+- crear reuniones virtuales, presenciales o hibridas;
+- invitar miembros activos del organismo;
+- enviar alertas internas y correos de invitacion;
+- confirmar, rechazar o responder como tentativo;
+- cancelar reuniones programadas;
+- abrir el enlace de acceso desde la tarjeta de reunion.
+
+Para reuniones virtuales o hibridas, el usuario puede:
+
+- escribir manualmente un enlace externo;
+- activar `Crear enlace automaticamente con Zoom`.
+
+Cuando se activa Zoom, la API `/api/reuniones` crea la reunion en Zoom mediante Server-to-Server OAuth y guarda el `join_url` como enlace visible para invitados, alertas y correos. Para esto deben configurarse `ZOOM_ACCOUNT_ID`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET` y opcionalmente `ZOOM_USER_ID`.
+
+### Sala integrada con Zoom Video SDK
+
+Las reuniones virtuales o hibridas tambien muestran el boton `Entrar en la app`. Ese boton abre una sala de video dentro de la propia agenda usando `@zoom/videosdk-ui-toolkit`.
+
+Funcionamiento:
+
+1. El usuario pulsa `Entrar en la app`.
+2. La app solicita a `/api/reuniones/videosdk-token` un JWT temporal de Video SDK.
+3. El servidor valida que el usuario sea gestor de reuniones o invitado de esa reunion.
+4. El cliente monta el UI Toolkit en un modal con audio, video, chat, participantes, compartir pantalla, pizarra colaborativa, preview y ajustes.
+5. Al salir o destruirse la sesion, el Toolkit se limpia para permitir entrar de nuevo.
+
+La pizarra de Zoom queda habilitada dentro de la sala integrada para presentar ideas, planificar reuniones, dibujar esquemas y colaborar en tiempo real. Tambien se activa la exportacion de la pizarra desde el propio Toolkit cuando la cuenta de Zoom y el plan lo permitan. Las APIs REST de Zoom Whiteboard sirven para listar, crear, administrar o exportar pizarras y sesiones archivadas; no son necesarias para mostrar la pizarra durante una reunion en vivo dentro de la agenda.
+
+Variables necesarias para Video SDK:
+
+- `ZOOM_VIDEO_SDK_KEY`
+- `ZOOM_VIDEO_SDK_SECRET`
+- `ZOOM_VIDEO_SDK_SESSION_PASSCODE`
+
+Si no se definen `ZOOM_VIDEO_SDK_KEY` y `ZOOM_VIDEO_SDK_SECRET`, el endpoint devuelve error y no permite abrir la sala integrada.
+
 ## Perfil
 
 Ruta: `/perfil`
@@ -403,7 +448,8 @@ Eventos que generan avisos:
 - tarea vencida;
 - tarea finalizada por responsable;
 - reasignacion de tarea;
-- cambio de responsables.
+- cambio de responsables;
+- invitacion a reunion y enlace de acceso cuando aplica.
 
 Las alertas internas viven en la tabla `alertas`. Algunas alertas pueden marcarse como leidas desde la pantalla `/alertas`.
 
@@ -588,4 +634,3 @@ npm run lint
 4. Revisar alertas y dashboard diariamente.
 5. Usar historial para auditar cambios y avances.
 6. Mantener este README actualizado cada vez que cambie un flujo.
-

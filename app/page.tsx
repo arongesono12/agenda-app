@@ -112,6 +112,47 @@ const plans = [
 
 const footerLinks = ['Agenda', 'Dashboard', 'Cronograma', 'Alertas', 'Historial']
 
+const socialLinks = [
+  {
+    label: 'Facebook',
+    href: '#',
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-current">
+        <path d="M14.2 8.1V6.7c0-.7.5-.9.8-.9h2V2.4l-2.8-.1c-3.1 0-3.8 2.3-3.8 3.8v2H7.9v3.8h2.5v9.8h3.8v-9.8h3.1l.4-3.8h-3.5Z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'Instagram',
+    href: '#',
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-[1.8]">
+        <rect x="4" y="4" width="16" height="16" rx="5" />
+        <circle cx="12" cy="12" r="3.4" />
+        <circle cx="16.8" cy="7.2" r="0.7" className="fill-current stroke-none" />
+      </svg>
+    ),
+  },
+  {
+    label: 'X',
+    href: '#',
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-current">
+        <path d="M14.1 10.4 21.3 2h-2.1l-6 7-4.8-7H2.7l7.6 11.1L2.7 22h2.1l6.4-7.4 5.1 7.4h5.7l-7.9-11.6Zm-2.3 2.7-.7-1L5 3.6h2.4l4.7 6.7.7 1 6.4 9.1h-2.4l-5-7.3Z" />
+      </svg>
+    ),
+  },
+  {
+    label: 'LinkedIn',
+    href: '#',
+    icon: (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-current">
+        <path d="M6.5 8.8H3V21h3.5V8.8ZM4.8 3C3.6 3 2.8 3.8 2.8 4.9c0 1 .8 1.9 2 1.9s2-.8 2-1.9C6.8 3.8 6 3 4.8 3ZM21.2 14c0-3.3-1.8-5.4-4.5-5.4-2 0-3 1.1-3.5 1.9V8.8H9.7V21h3.5v-6.8c0-1.7.9-2.7 2.3-2.7 1.3 0 2.1.9 2.1 2.7V21h3.5v-7Z" />
+      </svg>
+    ),
+  },
+]
+
 export default function LandingPage() {
   if (process.env.NODE_ENV === 'production') {
     redirect('/login')
@@ -180,16 +221,20 @@ export default function LandingPage() {
             </div>
             <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-4">
               {painPoints.map(({ title, text, icon: Icon }, index) => (
-                <article key={title} className="surface-panel p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-teal-700">
-                      <Icon size={21} />
+                <div key={title} className="relative">
+                  <article className="surface-panel h-full p-5 text-center">
+                    <div className="flex min-h-20 items-center justify-center">
+                      <Icon size={62} strokeWidth={1.65} className="text-teal-700" />
                     </div>
-                    {index < painPoints.length - 1 && <span className="hidden text-sm font-semibold text-slate-400 md:inline">VS</span>}
-                  </div>
-                  <h3 className="mt-5 text-base font-semibold uppercase leading-6 text-slate-900">{title}</h3>
-                  <p className="section-copy mt-2">{text}</p>
-                </article>
+                    <h3 className="mt-5 text-base font-semibold uppercase leading-6 text-slate-900">{title}</h3>
+                    <p className="section-copy mt-2">{text}</p>
+                  </article>
+                  {index < painPoints.length - 1 && (
+                    <span className="pointer-events-none absolute left-full top-1/2 z-10 hidden -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/80 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-400 shadow-[0_8px_18px_rgba(15,23,42,0.08)] md:inline-flex">
+                      VS
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           </section>
@@ -208,9 +253,9 @@ export default function LandingPage() {
               </div>
               <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {powerModules.map(({ title, text, icon: Icon }) => (
-                  <article key={title} className="surface-panel p-5">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 text-teal-700">
-                      <Icon size={21} />
+                  <article key={title} className="surface-panel p-5 text-center">
+                    <div className="flex min-h-20 items-center justify-center">
+                      <Icon size={64} strokeWidth={1.65} className="text-teal-700" />
                     </div>
                     <h3 className="mt-5 text-base font-semibold text-slate-900">{title}</h3>
                     <p className="section-copy mt-2">{text}</p>
@@ -247,7 +292,7 @@ export default function LandingPage() {
               <span className="section-label">Planes adaptados</span>
               <h2 className="section-title mt-4">Elige el nivel de control que necesita tu empresa.</h2>
             </div>
-            <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="mx-auto mt-6 grid max-w-5xl grid-cols-1 gap-4 md:grid-cols-3">
               {plans.map((plan) => (
                 <article
                   key={plan.name}
@@ -280,42 +325,78 @@ export default function LandingPage() {
                 Solicita acceso o agenda una demo para presentar el flujo completo de agenda, alertas, dashboard, historial y gestion por roles.
               </p>
               <div className="mt-6 space-y-3">
-                <div className="surface-panel flex items-center gap-3 p-4">
+                <div className="surface-panel flex items-center gap-3 rounded-2xl border-transparent p-3">
                   <Mail size={18} className="text-teal-700" />
                   <span className="text-sm font-semibold text-slate-700">correo corporativo</span>
                 </div>
-                <div className="surface-panel flex items-center gap-3 p-4">
+                <div className="surface-panel flex items-center gap-3 rounded-2xl border-transparent p-3">
                   <Phone size={18} className="text-teal-700" />
                   <span className="text-sm font-semibold text-slate-700">telefono institucional</span>
                 </div>
-                <div className="surface-panel flex items-center gap-3 p-4">
+                <div className="surface-panel flex items-center gap-3 rounded-2xl border-transparent p-3">
                   <Building2 size={18} className="text-teal-700" />
                   <span className="text-sm font-semibold text-slate-700">organismo o departamento</span>
                 </div>
               </div>
             </div>
 
-            <div className="surface-panel-dark p-4 text-white sm:p-5">
+            <form className="surface-panel-dark p-4 text-white sm:p-5" action="/registro" method="get">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {['Nombre', 'Correo corporativo', 'Telefono', 'Organismo'].map((label) => (
-                  <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-slate-300">
-                    {label}
-                  </div>
-                ))}
+                <label className="block">
+                  <span className="sr-only">Nombre</span>
+                  <input
+                    name="nombre"
+                    type="text"
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-white outline-none transition-colors placeholder:text-slate-300 focus:border-teal-200/70 focus:bg-white/[0.10]"
+                    placeholder="Nombre"
+                  />
+                </label>
+                <label className="block">
+                  <span className="sr-only">Correo corporativo</span>
+                  <input
+                    name="email"
+                    type="email"
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-white outline-none transition-colors placeholder:text-slate-300 focus:border-teal-200/70 focus:bg-white/[0.10]"
+                    placeholder="Correo corporativo"
+                  />
+                </label>
+                <label className="block">
+                  <span className="sr-only">Telefono</span>
+                  <input
+                    name="telefono"
+                    type="tel"
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-white outline-none transition-colors placeholder:text-slate-300 focus:border-teal-200/70 focus:bg-white/[0.10]"
+                    placeholder="Telefono"
+                  />
+                </label>
+                <label className="block">
+                  <span className="sr-only">Organismo</span>
+                  <input
+                    name="organismo"
+                    type="text"
+                    className="w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-white outline-none transition-colors placeholder:text-slate-300 focus:border-teal-200/70 focus:bg-white/[0.10]"
+                    placeholder="Organismo"
+                  />
+                </label>
               </div>
-              <div className="mt-3 min-h-32 rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-slate-300">
-                Mensaje
-              </div>
-              <Link href="/registro" className="action-btn-primary mt-4 w-full justify-center">
+              <label className="mt-3 block">
+                <span className="sr-only">Mensaje</span>
+                <textarea
+                  name="mensaje"
+                  className="min-h-32 w-full resize-y rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm font-semibold text-white outline-none transition-colors placeholder:text-slate-300 focus:border-teal-200/70 focus:bg-white/[0.10]"
+                  placeholder="Mensaje"
+                />
+              </label>
+              <button type="submit" className="action-btn-primary mt-4 w-full justify-center">
                 Registrarse
                 <ArrowRight size={15} />
-              </Link>
-            </div>
+              </button>
+            </form>
           </section>
         </main>
 
-        <footer className="surface-panel-strong mt-5 overflow-hidden p-5 sm:p-6">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
+        <footer className="surface-panel-strong relative left-1/2 mt-5 w-screen -translate-x-1/2 overflow-hidden rounded-none border-x-0 border-b-0 p-5 sm:p-6">
+          <div className="mx-auto grid max-w-[1560px] grid-cols-1 gap-6 px-0 lg:grid-cols-[1.2fr_0.8fr_0.8fr] lg:px-8">
             <div className="flex items-start gap-4">
               <span className="logo-panel relative h-11 w-11 flex-shrink-0 overflow-hidden rounded-2xl border shadow-[0_14px_34px_rgba(15,23,42,0.12)]">
                 <Image src="/logo/Icon-S.png" alt="Logo de SEGESA" fill sizes="44px" className="object-contain p-1.5" />
@@ -348,9 +429,21 @@ export default function LandingPage() {
                 <span>Mensaje</span>
                 <span>Soporte</span>
               </div>
+              <div className="mt-4 flex items-center gap-2">
+                {socialLinks.map((social) => (
+                  <Link
+                    key={social.label}
+                    href={social.href}
+                    aria-label={social.label}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-colors hover:bg-teal-50 hover:text-teal-700"
+                  >
+                    {social.icon}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="mt-5 border-t border-white/70 pt-4">
+          <div className="mx-auto mt-5 max-w-[1560px] border-t border-white/70 pt-4 text-center lg:px-8">
             <p className="text-xs text-slate-500">Copyright 2026 SEGESA. Plataforma interna de control operativo.</p>
           </div>
         </footer>

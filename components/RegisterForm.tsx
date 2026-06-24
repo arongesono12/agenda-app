@@ -42,16 +42,22 @@ type PublicOrganismo = {
 export default function RegisterForm({
   nextPath = '/organismos/nuevo',
   invitacionToken,
+  initialFullName,
+  initialEmail,
+  initialOrganismoName,
 }: {
   nextPath?: string
   invitacionToken?: string
+  initialFullName?: string
+  initialEmail?: string
+  initialOrganismoName?: string
 }) {
   const router = useRouter()
   const [roles, setRoles] = useState<PublicRole[]>(PUBLIC_REGISTRATION_ROLES)
   const [departamentos, setDepartamentos] = useState<PublicDepartamento[]>(REGISTRATION_DEPARTAMENTOS)
   const [organismos, setOrganismos] = useState<PublicOrganismo[]>([])
-  const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
+  const [fullName, setFullName] = useState(initialFullName?.trim() ?? '')
+  const [email, setEmail] = useState(initialEmail?.trim() ?? '')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -137,6 +143,17 @@ export default function RegisterForm({
       setOrganismoId(segesaOrganismo.id)
     }
   }, [isSegesaEmail, segesaOrganismo])
+
+  useEffect(() => {
+    const target = initialOrganismoName?.trim().toLowerCase()
+    if (!target || organismoId) return
+
+    const match = organismos.find((organismo) =>
+      organismo.nombre.trim().toLowerCase() === target ||
+      organismo.slug?.trim().toLowerCase() === target
+    )
+    if (match) setOrganismoId(match.id)
+  }, [initialOrganismoName, organismoId, organismos])
 
   const passwordRules = [
     { label: 'Minimo 8 caracteres', valid: password.length >= 8 },

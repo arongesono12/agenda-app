@@ -1,9 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarClock, CheckCircle2, Link as LinkIcon, Loader2, MapPin, Plus, RefreshCw, Send, Users, XCircle } from 'lucide-react'
+import { CalendarClock, CheckCircle2, Link as LinkIcon, Loader2, MapPin, Plus, RefreshCw, Send, Users, Video, XCircle } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import UserAvatar from '@/components/ui/UserAvatar'
+import ZoomVideoSdkMeeting from '@/components/ZoomVideoSdkMeeting'
 import { useToast } from '@/components/ToastProvider'
 import { useUserSession } from '@/components/UserSessionProvider'
 import { MANAGER_ROLE_CODES } from '@/lib/access-control'
@@ -17,6 +18,7 @@ type MeetingForm = {
   modalidad: ReunionModalidad
   enlace_reunion: string
   ubicacion: string
+  crear_zoom: boolean
 }
 
 const EMPTY_FORM: MeetingForm = {
@@ -27,6 +29,7 @@ const EMPTY_FORM: MeetingForm = {
   modalidad: 'virtual',
   enlace_reunion: '',
   ubicacion: '',
+  crear_zoom: true,
 }
 
 const RESPONSE_LABELS: Record<ReunionRespuesta, string> = {
@@ -74,6 +77,7 @@ export default function ReunionesPage() {
   const [saving, setSaving] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [error, setError] = useState('')
+  const [videoMeeting, setVideoMeeting] = useState<Reunion | null>(null)
 
   const canManageMeetings = !!rolEnOrganismo && MANAGER_ROLE_CODES.includes(rolEnOrganismo as (typeof MANAGER_ROLE_CODES)[number])
 
@@ -144,6 +148,7 @@ export default function ReunionesPage() {
           ...form,
           fecha_inicio: new Date(form.fecha_inicio).toISOString(),
           fecha_fin: form.fecha_fin ? new Date(form.fecha_fin).toISOString() : null,
+          enlace_reunion: form.crear_zoom ? null : form.enlace_reunion,
           invitado_usuario_ids: selectedInvites,
         }),
       })
@@ -197,6 +202,7 @@ export default function ReunionesPage() {
     const invitados = reunion.invitados ?? []
     const myInvitation = invitados.find((invitado) => invitado.usuario_id === profile?.id)
     const confirmados = invitados.filter((invitado) => invitado.estado_respuesta === 'confirmado').length
+    const canOpenVideoSdk = reunion.estado === 'programada' && (reunion.modalidad === 'virtual' || reunion.modalidad === 'hibrida')
 
     return (
       <article className="surface-panel overflow-hidden p-5">
@@ -207,6 +213,11 @@ export default function ReunionesPage() {
                 {reunion.estado}
               </span>
               <span className="badge border-slate-200 bg-slate-100 text-slate-600">{reunion.modalidad}</span>
+              {reunion.proveedor_reunion === 'zoom' && (
+                <span className="badge border-sky-200 bg-sky-50 text-sky-700">
+                  Zoom
+                </span>
+              )}
             </div>
             <h3 className="mt-3 text-lg font-semibold text-slate-900">{reunion.titulo}</h3>
             {reunion.descripcion && <p className="mt-2 text-sm leading-6 text-slate-500">{reunion.descripcion}</p>}
@@ -223,16 +234,28 @@ export default function ReunionesPage() {
             </div>
           </div>
 
-          {canManageMeetings && reunion.estado === 'programada' && (
-            <button
-              type="button"
-              onClick={() => void actualizarEstado(reunion.id, 'cancelada')}
-              className="action-btn-ghost justify-center text-rose-600 hover:text-rose-700"
-            >
-              <XCircle size={15} />
-              Cancelar
-            </button>
-          )}
+          <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+            {canOpenVideoSdk && (
+              <button
+                type="button"
+                onClick={() => setVideoMeeting(reunion)}
+                className="action-btn-primary justify-center"
+              >
+                <Video size={15} />
+                Entrar en la app
+              </button>
+            )}
+            {canManageMeetings && reunion.estado === 'programada' && (
+              <button
+                type="button"
+                onClick={() => void actualizarEstado(reunion.id, 'cancelada')}
+                className="action-btn-ghost justify-center text-rose-600 hover:text-rose-700"
+              >
+                <XCircle size={15} />
+                Cancelar
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mt-5 border-t border-white/70 pt-4">
@@ -337,7 +360,13 @@ export default function ReunionesPage() {
               </div>
               <div>
                 <label className="label-field">Enlace</label>
-                <input value={form.enlace_reunion} onChange={(event) => setForm((current) => ({ ...current, enlace_reunion: event.target.value }))} className="input-shell" placeholder="https://meet.google.com/..." />
+                <input
+                  value={form.enlace_reunion}
+                  onChange={(event) => setForm((current) => ({ ...current, enlace_reunion: event.target.value }))}
+                  className="input-shell"
+                  placeholder={form.crear_zoom ? 'Se generara automaticamente con Zoom' : 'https://zoom.us/j/...'}
+                  disabled={form.crear_zoom && (form.modalidad === 'virtual' || form.modalidad === 'hibrida')}
+                />
               </div>
               <div>
                 <label className="label-field">Ubicacion</label>
@@ -346,6 +375,26 @@ export default function ReunionesPage() {
             </div>
 
             <div>
+              {(form.modalidad === 'virtual' || form.modalidad === 'hibrida') && (
+                <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-[22px] border border-white/80 bg-white/60 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={form.crear_zoom}
+                    onChange={(event) => setForm((current) => ({ ...current, crear_zoom: event.target.checked }))}
+                    className="mt-1 h-4 w-4 rounded border-slate-300 accent-teal-600"
+                  />
+                  <span>
+                    <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <Video size={15} className="text-teal-700" />
+                      Crear enlace automaticamente con Zoom
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-500">
+                      La agenda programara la reunion en Zoom y usara el enlace generado para invitados, alertas y correos.
+                    </span>
+                  </span>
+                </label>
+              )}
+
               <label className="label-field">Descripcion</label>
               <textarea value={form.descripcion} onChange={(event) => setForm((current) => ({ ...current, descripcion: event.target.value }))} className="input-shell min-h-24 resize-y py-3" placeholder="Objetivo y puntos a tratar" />
             </div>
@@ -401,6 +450,10 @@ export default function ReunionesPage() {
         <div className="space-y-4">
           {reuniones.map((reunion) => <MeetingCard key={reunion.id} reunion={reunion} />)}
         </div>
+      )}
+
+      {videoMeeting && (
+        <ZoomVideoSdkMeeting reunion={videoMeeting} onClose={() => setVideoMeeting(null)} />
       )}
     </div>
   )

@@ -4,6 +4,7 @@ import { MANAGER_ROLE_CODES } from '@/lib/access-control'
 import { getOrganismoIdFromRequest, getRoleCodeFromRequest, getServerSessionProfile } from '@/lib/server-access'
 import { sendAgendaEmail, escapeHtml } from '@/lib/email/resend'
 import type { ReunionModalidad, ReunionRespuesta } from '@/lib/types'
+import { createZoomMeeting, type CreatedZoomMeeting } from '@/lib/zoom'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,7 @@ type CreateMeetingBody = {
   enlace_reunion?: string | null
   ubicacion?: string | null
   invitado_usuario_ids?: string[]
+  crear_zoom?: boolean
 }
 
 type UpdateMeetingBody = {
@@ -46,6 +48,20 @@ function formatMeetingDate(value: string) {
     timeStyle: 'short',
     timeZone: 'Africa/Malabo',
   })
+}
+
+function minutesBetween(start: Date, end: Date | null) {
+  if (!end || end <= start) return 60
+  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 60_000))
+}
+
+function isMissingZoomColumnsError(error: { code?: string; message?: string } | null | undefined) {
+  const message = error?.message ?? ''
+  return (
+    error?.code === '42703' ||
+    error?.code === 'PGRST204' ||
+    /proveedor_reunion|zoom_(meeting_id|meeting_uuid|start_url|password|host_id)|column .* does not exist|schema cache/i.test(message)
+  )
 }
 
 function meetingEmailHtml(params: {
@@ -160,6 +176,7 @@ export async function POST(request: Request) {
     const fechaFin = body.fecha_fin ? new Date(body.fecha_fin) : null
     const modalidad = body.modalidad ?? 'virtual'
     const invitadoIds = Array.from(new Set((body.invitado_usuario_ids ?? []).filter(Boolean)))
+    const shouldCreateZoom = !!body.crear_zoom && (modalidad === 'virtual' || modalidad === 'hibrida')
 
     if (!titulo) return NextResponse.json({ ok: false, error: 'El titulo es obligatorio.' }, { status: 400 })
     if (!fechaInicio || Number.isNaN(fechaInicio.getTime())) {
@@ -168,8 +185,8 @@ export async function POST(request: Request) {
     if (fechaFin && fechaFin <= fechaInicio) {
       return NextResponse.json({ ok: false, error: 'La fecha de fin debe ser posterior al inicio.' }, { status: 400 })
     }
-    if (modalidad === 'virtual' && !body.enlace_reunion?.trim()) {
-      return NextResponse.json({ ok: false, error: 'El enlace es obligatorio en reuniones virtuales.' }, { status: 400 })
+    if ((modalidad === 'virtual' || modalidad === 'hibrida') && !body.enlace_reunion?.trim() && !shouldCreateZoom) {
+      return NextResponse.json({ ok: false, error: 'Escribe un enlace o activa la creacion automatica con Zoom.' }, { status: 400 })
     }
     if (invitadoIds.length === 0) {
       return NextResponse.json({ ok: false, error: 'Selecciona al menos un invitado.' }, { status: 400 })
@@ -200,21 +217,51 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'No se encontraron miembros validos para invitar.' }, { status: 400 })
     }
 
-    const { data: reunion, error: reunionError } = await admin
-      .from('reuniones')
-      .insert({
-        organismo_id: organismoId,
-        titulo,
-        descripcion: body.descripcion?.trim() || null,
-        fecha_inicio: fechaInicio.toISOString(),
-        fecha_fin: fechaFin?.toISOString() ?? null,
-        modalidad,
-        enlace_reunion: body.enlace_reunion?.trim() || null,
-        ubicacion: body.ubicacion?.trim() || null,
-        creada_por_usuario_id: user.id,
+    let zoomMeeting: CreatedZoomMeeting | null = null
+    if (shouldCreateZoom) {
+      zoomMeeting = await createZoomMeeting({
+        topic: titulo,
+        agenda: body.descripcion?.trim() || null,
+        startTime: fechaInicio.toISOString(),
+        durationMinutes: minutesBetween(fechaInicio, fechaFin),
       })
+    }
+
+    const meetingLink = zoomMeeting?.joinUrl ?? body.enlace_reunion?.trim() ?? null
+    const baseMeetingInsert = {
+      organismo_id: organismoId,
+      titulo,
+      descripcion: body.descripcion?.trim() || null,
+      fecha_inicio: fechaInicio.toISOString(),
+      fecha_fin: fechaFin?.toISOString() ?? null,
+      modalidad,
+      enlace_reunion: meetingLink,
+      ubicacion: body.ubicacion?.trim() || null,
+      creada_por_usuario_id: user.id,
+    }
+    const zoomMeetingInsert = {
+      ...baseMeetingInsert,
+      proveedor_reunion: zoomMeeting ? 'zoom' : meetingLink ? 'manual' : null,
+      zoom_meeting_id: zoomMeeting?.id ?? null,
+      zoom_meeting_uuid: zoomMeeting?.uuid ?? null,
+      zoom_start_url: zoomMeeting?.startUrl ?? null,
+      zoom_password: zoomMeeting?.password ?? null,
+      zoom_host_id: zoomMeeting?.hostId ?? null,
+    }
+
+    const insertResult = await admin
+      .from('reuniones')
+      .insert(zoomMeetingInsert as never)
       .select('id, titulo, descripcion, fecha_inicio, fecha_fin, modalidad, enlace_reunion, ubicacion')
       .single()
+    const fallbackInsert = insertResult.error && isMissingZoomColumnsError(insertResult.error)
+      ? await admin
+          .from('reuniones')
+          .insert(baseMeetingInsert)
+          .select('id, titulo, descripcion, fecha_inicio, fecha_fin, modalidad, enlace_reunion, ubicacion')
+          .single()
+      : insertResult
+    const { data: reunion, error: reunionError } = fallbackInsert
 
     if (reunionError) throw reunionError
 
@@ -240,7 +287,7 @@ export async function POST(request: Request) {
       fechaInicio: fechaInicio.toISOString(),
       fechaFin: fechaFin?.toISOString() ?? null,
       modalidad,
-      enlace: body.enlace_reunion,
+      enlace: meetingLink,
       ubicacion: body.ubicacion,
       appUrl,
     })
@@ -252,7 +299,7 @@ export async function POST(request: Request) {
             to: email,
             subject: `Reunion: ${titulo}`,
             html: emailHtml,
-            text: `${inviterName} te invita a la reunion "${titulo}" de ${organismo.nombre}. Confirma tu participacion en ${appUrl}/reuniones. Enlace: ${body.enlace_reunion ?? 'sin enlace'}`,
+            text: `${inviterName} te invita a la reunion "${titulo}" de ${organismo.nombre}. Confirma tu participacion en ${appUrl}/reuniones. Enlace: ${meetingLink ?? 'sin enlace'}`,
           })
         : { ok: false as const, error: 'El invitado no tiene email.' }
 
@@ -263,8 +310,8 @@ export async function POST(request: Request) {
         tarea_id: null,
         tipo_alerta: 'Reunion',
         titulo: `Invitacion a reunion: ${titulo}`,
-        mensaje: body.enlace_reunion
-          ? `Confirma tu participacion. Enlace: ${body.enlace_reunion}`
+        mensaje: meetingLink
+          ? `Confirma tu participacion. Enlace: ${meetingLink}`
           : 'Confirma tu participacion en el modulo de reuniones.',
         destinatario_usuario_id: invitado.usuario_id,
         destinatario_email: email || null,
