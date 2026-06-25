@@ -117,7 +117,10 @@ export default function ReunionesPage() {
   }, [toast])
 
   const loadMiembros = useCallback(async () => {
-    if (!organismoActivo?.slug || !canManageMeetings) return
+    if (!organismoActivo?.slug || !canManageMeetings) {
+      setMiembros([])
+      return
+    }
     const response = await fetch(`/api/organismos/${organismoActivo.slug}/miembros`, { cache: 'no-store' })
     const result = (await response.json()) as { ok?: boolean; miembros?: MiembroConPerfil[] }
     if (response.ok && result.ok) setMiembros(result.miembros ?? [])
@@ -131,6 +134,16 @@ export default function ReunionesPage() {
     void loadMiembros()
   }, [loadMiembros])
 
+  useEffect(() => {
+    setSelectedInvites([])
+    setSelectedInviteEmails([])
+    setCreateInviteQuery('')
+    setCreateInviteOpen(false)
+    setSelectedInviteMembers([])
+    setSelectedExistingInviteEmails([])
+    setExistingInviteQuery('')
+  }, [organismoActivo?.id])
+
   const myInvitations = useMemo(
     () => reuniones.flatMap((reunion) => (reunion.invitados ?? [])
       .filter((invitado) => invitado.usuario_id === profile?.id)
@@ -140,13 +153,20 @@ export default function ReunionesPage() {
   )
 
   const selectedCreateMembers = useMemo(
-    () => miembros.filter((miembro) => selectedInvites.includes(miembro.usuario_id)),
-    [miembros, selectedInvites]
+    () => miembros
+      .filter((miembro) => miembro.activo && miembro.organismo_id === organismoActivo?.id)
+      .filter((miembro) => selectedInvites.includes(miembro.usuario_id)),
+    [miembros, organismoActivo?.id, selectedInvites]
+  )
+
+  const miembrosOrganismoActivo = useMemo(
+    () => miembros.filter((miembro) => miembro.activo && miembro.organismo_id === organismoActivo?.id),
+    [miembros, organismoActivo?.id]
   )
 
   const createInviteMatches = useMemo(() => {
     const query = createInviteQuery.trim().toLowerCase()
-    return miembros
+    return miembrosOrganismoActivo
       .filter((miembro) => !selectedInvites.includes(miembro.usuario_id))
       .filter((miembro) => {
         if (!query) return true
@@ -155,18 +175,18 @@ export default function ReunionesPage() {
         return nombre.includes(query) || email.includes(query)
       })
       .slice(0, 8)
-  }, [createInviteQuery, miembros, selectedInvites])
+  }, [createInviteQuery, miembrosOrganismoActivo, selectedInvites])
 
   const selectedExistingMembers = useMemo(
-    () => miembros.filter((miembro) => selectedInviteMembers.includes(miembro.usuario_id)),
-    [miembros, selectedInviteMembers]
+    () => miembrosOrganismoActivo.filter((miembro) => selectedInviteMembers.includes(miembro.usuario_id)),
+    [miembrosOrganismoActivo, selectedInviteMembers]
   )
 
   const existingInviteMatches = useMemo(() => {
     const query = existingInviteQuery.trim().toLowerCase()
     if (!query) return []
     const alreadyInvitedIds = new Set((inviteMeeting?.invitados ?? []).map((invitado) => invitado.usuario_id).filter(Boolean))
-    return miembros
+    return miembrosOrganismoActivo
       .filter((miembro) => !selectedInviteMembers.includes(miembro.usuario_id) && !alreadyInvitedIds.has(miembro.usuario_id))
       .filter((miembro) => {
         const nombre = getMemberName(miembro).toLowerCase()
@@ -174,7 +194,7 @@ export default function ReunionesPage() {
         return nombre.includes(query) || email.includes(query)
       })
       .slice(0, 8)
-  }, [existingInviteQuery, inviteMeeting?.invitados, miembros, selectedInviteMembers])
+  }, [existingInviteQuery, inviteMeeting?.invitados, miembrosOrganismoActivo, selectedInviteMembers])
 
   const toggleInvite = (usuarioId: string) => {
     setSelectedInvites((current) => current.includes(usuarioId)
@@ -197,7 +217,7 @@ export default function ReunionesPage() {
       toast.error('Escribe un correo valido para invitar.')
       return
     }
-    const matchingMember = miembros.find((miembro) => getMemberEmail(miembro) === email)
+    const matchingMember = miembrosOrganismoActivo.find((miembro) => getMemberEmail(miembro) === email)
     if (matchingMember) {
       selectCreateMemberInvite(matchingMember)
       return
@@ -225,7 +245,7 @@ export default function ReunionesPage() {
       toast.error('Ese correo ya esta invitado a la reunion.')
       return
     }
-    const matchingMember = miembros.find((miembro) => getMemberEmail(miembro) === email)
+    const matchingMember = miembrosOrganismoActivo.find((miembro) => getMemberEmail(miembro) === email)
     if (matchingMember) {
       selectExistingMeetingMemberInvite(matchingMember)
       return
@@ -574,7 +594,7 @@ export default function ReunionesPage() {
             <div>
               <label className="label-field">Invitados</label>
               <div className="relative">
-                <div className="flex items-center gap-2 rounded-[22px] border border-white/80 bg-white/65 px-3 py-2 shadow-sm">
+                <div className="input-shell flex items-center gap-2 py-2">
                   <Mail size={16} className="text-teal-700" />
                   <input
                     value={createInviteQuery}
@@ -588,7 +608,7 @@ export default function ReunionesPage() {
                         setCreateInviteOpen(false)
                       }
                     }}
-                    className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                     placeholder="Buscar miembro o escribir correo"
                   />
                   <button type="button" onClick={() => setCreateInviteOpen((current) => !current)} className="action-btn h-9 rounded-2xl px-3 text-xs">
@@ -600,7 +620,7 @@ export default function ReunionesPage() {
                 </div>
 
                 {createInviteOpen && (
-                  <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-[22px] border border-white/80 bg-white/95 p-2 shadow-xl backdrop-blur-xl">
+                  <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-2xl border p-2 shadow-xl" style={{ background: 'var(--input-bg)', borderColor: 'var(--input-border)', color: 'var(--input-text)' }}>
                     <p className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Miembros del organismo</p>
                     {createInviteMatches.map((miembro) => {
                       const nombre = getMemberName(miembro)
@@ -611,7 +631,7 @@ export default function ReunionesPage() {
                           type="button"
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => selectCreateMemberInvite(miembro)}
-                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-slate-700 transition-colors hover:bg-teal-50"
+                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition-colors hover:bg-teal-50 dark:hover:bg-white/5"
                         >
                           <UserAvatar name={nombre} avatarUrl={miembro.perfil?.avatar_url} size="sm" className="h-9 w-9" />
                           <span className="min-w-0 flex-1">
@@ -626,7 +646,7 @@ export default function ReunionesPage() {
                         type="button"
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={addCreateEmailInvite}
-                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-teal-800 transition-colors hover:bg-teal-50"
+                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-teal-700 transition-colors hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-white/5"
                       >
                         <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
                           <Mail size={15} />
@@ -640,7 +660,7 @@ export default function ReunionesPage() {
                     {createInviteMatches.length === 0 && !normalizeEmail(createInviteQuery) && miembros.length > 0 && (
                       <p className="px-3 py-4 text-sm text-slate-500">No hay coincidencias. Escribe un correo valido para invitar.</p>
                     )}
-                    {miembros.length === 0 && (
+                    {miembrosOrganismoActivo.length === 0 && (
                       <p className="px-3 py-4 text-sm text-slate-500">No hay miembros cargados en este organismo. Tambien puedes escribir un correo para invitar.</p>
                     )}
                   </div>
@@ -744,7 +764,7 @@ export default function ReunionesPage() {
                 </div>
 
                 <div className="relative mt-4">
-                  <div className="flex items-center gap-2 rounded-[22px] border border-white/80 bg-white/75 px-3 py-2 shadow-sm">
+                  <div className="input-shell flex items-center gap-2 py-2">
                     <Mail size={16} className="text-teal-700" />
                     <input
                       value={existingInviteQuery}
@@ -755,7 +775,7 @@ export default function ReunionesPage() {
                           addExistingMeetingEmailInvite()
                         }
                       }}
-                      className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                      className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                       placeholder="Buscar miembro o escribir correo"
                     />
                     <button type="button" onClick={addExistingMeetingEmailInvite} className="action-btn h-9 rounded-2xl px-3 text-xs">
@@ -764,7 +784,7 @@ export default function ReunionesPage() {
                   </div>
 
                   {existingInviteQuery.trim() && (
-                    <div className="absolute left-0 right-0 top-full z-40 mt-2 max-h-72 overflow-y-auto rounded-[22px] border border-white/80 bg-white/95 p-2 shadow-xl backdrop-blur-xl">
+                    <div className="absolute left-0 right-0 top-full z-40 mt-2 max-h-72 overflow-y-auto rounded-2xl border p-2 shadow-xl" style={{ background: 'var(--input-bg)', borderColor: 'var(--input-border)', color: 'var(--input-text)' }}>
                       {existingInviteMatches.map((miembro) => {
                         const nombre = getMemberName(miembro)
                         const email = getMemberEmail(miembro)
@@ -773,7 +793,7 @@ export default function ReunionesPage() {
                             key={miembro.usuario_id}
                             type="button"
                             onClick={() => selectExistingMeetingMemberInvite(miembro)}
-                            className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-slate-700 transition-colors hover:bg-teal-50"
+                            className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition-colors hover:bg-teal-50 dark:hover:bg-white/5"
                           >
                             <UserAvatar name={nombre} avatarUrl={miembro.perfil?.avatar_url} size="sm" className="h-9 w-9" />
                             <span className="min-w-0 flex-1">
@@ -787,7 +807,7 @@ export default function ReunionesPage() {
                         <button
                           type="button"
                           onClick={addExistingMeetingEmailInvite}
-                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-teal-800 transition-colors hover:bg-teal-50"
+                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-teal-700 transition-colors hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-white/5"
                         >
                           <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
                             <Mail size={15} />
