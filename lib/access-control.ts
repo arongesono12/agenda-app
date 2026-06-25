@@ -7,10 +7,10 @@ export const READER_ROLE_CODES = ['superusuario', 'administrador', 'administrado
 
 export type RoleCode = (typeof READER_ROLE_CODES)[number]
 
-const ADMIN_ROUTES = ['/agenda', '/mis-tareas', '/dashboard', '/alertas', '/reuniones', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos']
-const SUPERVISOR_ROUTES = ['/agenda', '/mis-tareas', '/dashboard', '/alertas', '/reuniones', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial']
-const RESPONSABLE_ROUTES = ['/agenda', '/mis-tareas', '/dashboard', '/alertas', '/reuniones', '/cronograma', '/historial']
-const CONSULTA_ROUTES = ['/mis-tareas', '/dashboard', '/alertas', '/reuniones', '/busqueda', '/cronograma', '/estadisticas']
+const ADMIN_ROUTES = ['/agenda', '/mis-tareas', '/dashboard', '/alertas', '/calendario', '/reuniones', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial', '/catalogos']
+const SUPERVISOR_ROUTES = ['/agenda', '/mis-tareas', '/dashboard', '/alertas', '/calendario', '/reuniones', '/cronograma', '/estadisticas', '/busqueda', '/responsable', '/historial']
+const RESPONSABLE_ROUTES = ['/agenda', '/mis-tareas', '/dashboard', '/alertas', '/calendario', '/reuniones', '/cronograma', '/historial']
+const CONSULTA_ROUTES = ['/mis-tareas', '/dashboard', '/alertas', '/calendario', '/reuniones', '/busqueda', '/cronograma', '/estadisticas']
 const COMMON_AUTH_ROUTES = ['/perfil', '/configuracion', '/forbidden']
 
 // Rutas de organismos accesibles por cualquier usuario autenticado

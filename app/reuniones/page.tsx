@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarClock, CheckCircle2, Link as LinkIcon, Loader2, MapPin, Plus, RefreshCw, Send, Users, Video, XCircle } from 'lucide-react'
+import { CalendarClock, CheckCircle2, Link as LinkIcon, Loader2, Mail, MapPin, Plus, RefreshCw, Send, Users, Video, XCircle } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import UserAvatar from '@/components/ui/UserAvatar'
 import ZoomVideoSdkMeeting from '@/components/ZoomVideoSdkMeeting'
@@ -60,12 +60,28 @@ function responseClass(value: string) {
   return 'border-slate-200 bg-slate-100 text-slate-600'
 }
 
+function normalizeEmail(value: string) {
+  const email = value.trim().toLowerCase()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
+}
+
+function getMemberName(miembro: MiembroConPerfil) {
+  return miembro.perfil?.nombre_completo?.trim() || miembro.perfil?.email?.split('@')[0] || 'Usuario'
+}
+
+function getMemberEmail(miembro: MiembroConPerfil) {
+  return miembro.perfil?.email?.trim().toLowerCase() ?? ''
+}
+
 export default function ReunionesPage() {
   const toast = useToast()
   const { profile, organismoActivo, rolEnOrganismo } = useUserSession()
   const [reuniones, setReuniones] = useState<Reunion[]>([])
   const [miembros, setMiembros] = useState<MiembroConPerfil[]>([])
   const [selectedInvites, setSelectedInvites] = useState<string[]>([])
+  const [selectedInviteEmails, setSelectedInviteEmails] = useState<string[]>([])
+  const [createInviteQuery, setCreateInviteQuery] = useState('')
+  const [createInviteOpen, setCreateInviteOpen] = useState(false)
   const [form, setForm] = useState<MeetingForm>(() => {
     const start = new Date()
     start.setHours(start.getHours() + 1, 0, 0, 0)
@@ -75,9 +91,14 @@ export default function ReunionesPage() {
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [inviteSaving, setInviteSaving] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [error, setError] = useState('')
   const [videoMeeting, setVideoMeeting] = useState<Reunion | null>(null)
+  const [inviteMeeting, setInviteMeeting] = useState<Reunion | null>(null)
+  const [selectedInviteMembers, setSelectedInviteMembers] = useState<string[]>([])
+  const [selectedExistingInviteEmails, setSelectedExistingInviteEmails] = useState<string[]>([])
+  const [existingInviteQuery, setExistingInviteQuery] = useState('')
 
   const canManageMeetings = !!rolEnOrganismo && MANAGER_ROLE_CODES.includes(rolEnOrganismo as (typeof MANAGER_ROLE_CODES)[number])
 
@@ -118,8 +139,112 @@ export default function ReunionesPage() {
     [profile?.id, reuniones]
   )
 
+  const selectedCreateMembers = useMemo(
+    () => miembros.filter((miembro) => selectedInvites.includes(miembro.usuario_id)),
+    [miembros, selectedInvites]
+  )
+
+  const createInviteMatches = useMemo(() => {
+    const query = createInviteQuery.trim().toLowerCase()
+    return miembros
+      .filter((miembro) => !selectedInvites.includes(miembro.usuario_id))
+      .filter((miembro) => {
+        if (!query) return true
+        const nombre = getMemberName(miembro).toLowerCase()
+        const email = getMemberEmail(miembro)
+        return nombre.includes(query) || email.includes(query)
+      })
+      .slice(0, 8)
+  }, [createInviteQuery, miembros, selectedInvites])
+
+  const selectedExistingMembers = useMemo(
+    () => miembros.filter((miembro) => selectedInviteMembers.includes(miembro.usuario_id)),
+    [miembros, selectedInviteMembers]
+  )
+
+  const existingInviteMatches = useMemo(() => {
+    const query = existingInviteQuery.trim().toLowerCase()
+    if (!query) return []
+    const alreadyInvitedIds = new Set((inviteMeeting?.invitados ?? []).map((invitado) => invitado.usuario_id).filter(Boolean))
+    return miembros
+      .filter((miembro) => !selectedInviteMembers.includes(miembro.usuario_id) && !alreadyInvitedIds.has(miembro.usuario_id))
+      .filter((miembro) => {
+        const nombre = getMemberName(miembro).toLowerCase()
+        const email = getMemberEmail(miembro)
+        return nombre.includes(query) || email.includes(query)
+      })
+      .slice(0, 8)
+  }, [existingInviteQuery, inviteMeeting?.invitados, miembros, selectedInviteMembers])
+
   const toggleInvite = (usuarioId: string) => {
     setSelectedInvites((current) => current.includes(usuarioId)
+      ? current.filter((id) => id !== usuarioId)
+      : [...current, usuarioId]
+    )
+  }
+
+  const selectCreateMemberInvite = (miembro: MiembroConPerfil) => {
+    setSelectedInvites((current) => current.includes(miembro.usuario_id) ? current : [...current, miembro.usuario_id])
+    const email = getMemberEmail(miembro)
+    if (email) setSelectedInviteEmails((current) => current.filter((item) => item !== email))
+    setCreateInviteQuery('')
+    setCreateInviteOpen(false)
+  }
+
+  const addCreateEmailInvite = () => {
+    const email = normalizeEmail(createInviteQuery)
+    if (!email) {
+      toast.error('Escribe un correo valido para invitar.')
+      return
+    }
+    const matchingMember = miembros.find((miembro) => getMemberEmail(miembro) === email)
+    if (matchingMember) {
+      selectCreateMemberInvite(matchingMember)
+      return
+    }
+    setSelectedInviteEmails((current) => current.includes(email) ? current : [...current, email])
+    setCreateInviteQuery('')
+    setCreateInviteOpen(false)
+  }
+
+  const selectExistingMeetingMemberInvite = (miembro: MiembroConPerfil) => {
+    setSelectedInviteMembers((current) => current.includes(miembro.usuario_id) ? current : [...current, miembro.usuario_id])
+    const email = getMemberEmail(miembro)
+    if (email) setSelectedExistingInviteEmails((current) => current.filter((item) => item !== email))
+    setExistingInviteQuery('')
+  }
+
+  const addExistingMeetingEmailInvite = () => {
+    const email = normalizeEmail(existingInviteQuery)
+    if (!email) {
+      toast.error('Escribe un correo valido para invitar.')
+      return
+    }
+    const alreadyInvited = inviteMeeting?.invitados?.some((invitado) => normalizeEmail(invitado.email ?? '') === email)
+    if (alreadyInvited) {
+      toast.error('Ese correo ya esta invitado a la reunion.')
+      return
+    }
+    const matchingMember = miembros.find((miembro) => getMemberEmail(miembro) === email)
+    if (matchingMember) {
+      selectExistingMeetingMemberInvite(matchingMember)
+      return
+    }
+    setSelectedExistingInviteEmails((current) => current.includes(email) ? current : [...current, email])
+    setExistingInviteQuery('')
+  }
+
+  const openInviteManager = (reunion: Reunion) => {
+    setInviteMeeting(reunion)
+    setSelectedInviteMembers([])
+    setSelectedExistingInviteEmails([])
+    setExistingInviteQuery('')
+    setError('')
+    if (miembros.length === 0) void loadMiembros()
+  }
+
+  const toggleExistingMeetingInvite = (usuarioId: string) => {
+    setSelectedInviteMembers((current) => current.includes(usuarioId)
       ? current.filter((id) => id !== usuarioId)
       : [...current, usuarioId]
     )
@@ -132,6 +257,9 @@ export default function ReunionesPage() {
     end.setHours(end.getHours() + 1)
     setForm({ ...EMPTY_FORM, fecha_inicio: toDateTimeLocal(start), fecha_fin: toDateTimeLocal(end) })
     setSelectedInvites([])
+    setSelectedInviteEmails([])
+    setCreateInviteQuery('')
+    setCreateInviteOpen(false)
     setError('')
   }
 
@@ -150,6 +278,7 @@ export default function ReunionesPage() {
           fecha_fin: form.fecha_fin ? new Date(form.fecha_fin).toISOString() : null,
           enlace_reunion: form.crear_zoom ? null : form.enlace_reunion,
           invitado_usuario_ids: selectedInvites,
+          invitado_emails: selectedInviteEmails,
         }),
       })
       const result = (await response.json()) as { ok?: boolean; error?: string }
@@ -195,6 +324,39 @@ export default function ReunionesPage() {
       await loadReuniones()
     } catch (updateError: unknown) {
       toast.error(updateError instanceof Error ? updateError.message : 'No se pudo actualizar la reunion.')
+    }
+  }
+
+  const addParticipantsToMeeting = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!inviteMeeting) return
+    setInviteSaving(true)
+    setError('')
+
+    try {
+      const response = await fetch('/api/reuniones', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reunionId: inviteMeeting.id,
+          action: 'add_invites',
+          invitado_usuario_ids: selectedInviteMembers,
+          invitado_emails: selectedExistingInviteEmails,
+        }),
+      })
+      const result = (await response.json()) as { ok?: boolean; added?: number; error?: string }
+      if (!response.ok || !result.ok) throw new Error(result.error ?? 'No se pudieron agregar participantes.')
+
+      toast.success(`${result.added ?? selectedInviteMembers.length + selectedExistingInviteEmails.length} participante(s) agregado(s) a la convocatoria.`)
+      setInviteMeeting(null)
+      setSelectedInviteMembers([])
+      setSelectedExistingInviteEmails([])
+      setExistingInviteQuery('')
+      await loadReuniones()
+    } catch (submitError: unknown) {
+      setError(submitError instanceof Error ? submitError.message : 'No se pudieron agregar participantes.')
+    } finally {
+      setInviteSaving(false)
     }
   }
 
@@ -246,14 +408,24 @@ export default function ReunionesPage() {
               </button>
             )}
             {canManageMeetings && reunion.estado === 'programada' && (
-              <button
-                type="button"
-                onClick={() => void actualizarEstado(reunion.id, 'cancelada')}
-                className="action-btn-ghost justify-center text-rose-600 hover:text-rose-700"
-              >
-                <XCircle size={15} />
-                Cancelar
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => openInviteManager(reunion)}
+                  className="action-btn justify-center"
+                >
+                  <Users size={15} />
+                  Participantes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void actualizarEstado(reunion.id, 'cancelada')}
+                  className="action-btn-ghost justify-center text-rose-600 hover:text-rose-700"
+                >
+                  <XCircle size={15} />
+                  Cancelar
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -401,26 +573,115 @@ export default function ReunionesPage() {
 
             <div>
               <label className="label-field">Invitados</label>
-              <div className="grid max-h-72 grid-cols-1 gap-2 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
-                {miembros.map((miembro) => {
-                  const nombre = miembro.perfil?.nombre_completo?.trim() || miembro.perfil?.email?.split('@')[0] || 'Usuario'
-                  const email = miembro.perfil?.email ?? ''
-                  const selected = selectedInvites.includes(miembro.usuario_id)
+              <div className="relative">
+                <div className="flex items-center gap-2 rounded-[22px] border border-white/80 bg-white/65 px-3 py-2 shadow-sm">
+                  <Mail size={16} className="text-teal-700" />
+                  <input
+                    value={createInviteQuery}
+                    onChange={(event) => setCreateInviteQuery(event.target.value)}
+                    onFocus={() => setCreateInviteOpen(true)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        addCreateEmailInvite()
+                      } else if (event.key === 'Escape') {
+                        setCreateInviteOpen(false)
+                      }
+                    }}
+                    className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                    placeholder="Buscar miembro o escribir correo"
+                  />
+                  <button type="button" onClick={() => setCreateInviteOpen((current) => !current)} className="action-btn h-9 rounded-2xl px-3 text-xs">
+                    Miembros
+                  </button>
+                  <button type="button" onClick={addCreateEmailInvite} className="action-btn h-9 rounded-2xl px-3 text-xs">
+                    Agregar
+                  </button>
+                </div>
+
+                {createInviteOpen && (
+                  <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-[22px] border border-white/80 bg-white/95 p-2 shadow-xl backdrop-blur-xl">
+                    <p className="px-3 pb-2 pt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Miembros del organismo</p>
+                    {createInviteMatches.map((miembro) => {
+                      const nombre = getMemberName(miembro)
+                      const email = getMemberEmail(miembro)
+                      return (
+                        <button
+                          key={miembro.usuario_id}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectCreateMemberInvite(miembro)}
+                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-slate-700 transition-colors hover:bg-teal-50"
+                        >
+                          <UserAvatar name={nombre} avatarUrl={miembro.perfil?.avatar_url} size="sm" className="h-9 w-9" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">{nombre}</span>
+                            <span className="block truncate text-xs text-slate-500">{email || 'Sin correo'}</span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                    {normalizeEmail(createInviteQuery) && (
+                      <button
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={addCreateEmailInvite}
+                        className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-teal-800 transition-colors hover:bg-teal-50"
+                      >
+                        <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
+                          <Mail size={15} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold">Invitar correo</span>
+                          <span className="block truncate text-xs">{normalizeEmail(createInviteQuery)}</span>
+                        </span>
+                      </button>
+                    )}
+                    {createInviteMatches.length === 0 && !normalizeEmail(createInviteQuery) && miembros.length > 0 && (
+                      <p className="px-3 py-4 text-sm text-slate-500">No hay coincidencias. Escribe un correo valido para invitar.</p>
+                    )}
+                    {miembros.length === 0 && (
+                      <p className="px-3 py-4 text-sm text-slate-500">No hay miembros cargados en este organismo. Tambien puedes escribir un correo para invitar.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedCreateMembers.map((miembro) => {
+                  const nombre = getMemberName(miembro)
+                  const email = getMemberEmail(miembro)
                   return (
                     <button
                       key={miembro.usuario_id}
                       type="button"
                       onClick={() => toggleInvite(miembro.usuario_id)}
-                      className={`flex items-center gap-3 rounded-2xl border px-3 py-2 text-left transition-colors ${selected ? 'border-teal-200 bg-teal-50 text-teal-800' : 'border-white/80 bg-white/55 text-slate-700 hover:bg-white/80'}`}
+                      className="flex max-w-full items-center gap-2 rounded-2xl border border-teal-100 bg-teal-50 px-3 py-2 text-left text-teal-800"
                     >
                       <UserAvatar name={nombre} avatarUrl={miembro.perfil?.avatar_url} size="sm" className="h-9 w-9" />
-                      <span className="min-w-0 flex-1">
+                      <span className="min-w-0">
                         <span className="block truncate text-sm font-semibold">{nombre}</span>
-                        <span className="block truncate text-xs opacity-70">{email}</span>
+                        <span className="block truncate text-xs opacity-75">{email || 'Sin correo'}</span>
                       </span>
+                      <XCircle size={15} className="flex-shrink-0" />
                     </button>
                   )
                 })}
+                {selectedInviteEmails.map((email) => (
+                  <button
+                    key={email}
+                    type="button"
+                    onClick={() => setSelectedInviteEmails((current) => current.filter((item) => item !== email))}
+                    className="flex max-w-full items-center gap-2 rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2 text-left text-sky-800"
+                  >
+                    <Mail size={15} className="flex-shrink-0" />
+                    <span className="truncate text-sm font-semibold">{email}</span>
+                    <XCircle size={15} className="flex-shrink-0" />
+                  </button>
+                ))}
+                {selectedCreateMembers.length === 0 && selectedInviteEmails.length === 0 && (
+                  <p className="text-sm text-slate-500">Selecciona miembros del organismo o escribe un correo y pulsa Enter.</p>
+                )}
               </div>
             </div>
 
@@ -454,6 +715,150 @@ export default function ReunionesPage() {
 
       {videoMeeting && (
         <ZoomVideoSdkMeeting reunion={videoMeeting} onClose={() => setVideoMeeting(null)} />
+      )}
+
+      {inviteMeeting && canManageMeetings && (
+        <div className="agenda-modal-overlay">
+          <div className="agenda-modal-shell max-w-4xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">Convocatoria de reunion</p>
+                <h2 className="mt-1 truncate text-xl font-semibold text-slate-900">Participantes</h2>
+                <p className="mt-1 text-sm text-slate-500">{inviteMeeting.titulo}</p>
+              </div>
+              <button type="button" onClick={() => { setInviteMeeting(null); setSelectedInviteMembers([]); setSelectedExistingInviteEmails([]); setExistingInviteQuery(''); setError('') }} className="agenda-modal-close" aria-label="Cerrar participantes">
+                <XCircle size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={addParticipantsToMeeting} className="space-y-5">
+              {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+
+              <div className="rounded-[24px] border border-white/80 bg-white/60 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Invitar participantes</p>
+                    <p className="mt-1 text-xs text-slate-500">Busca miembros del organismo o escribe correos nuevos para agregarlos.</p>
+                  </div>
+                  <span className="section-label self-start sm:self-auto">{selectedInviteMembers.length + selectedExistingInviteEmails.length} nuevos</span>
+                </div>
+
+                <div className="relative mt-4">
+                  <div className="flex items-center gap-2 rounded-[22px] border border-white/80 bg-white/75 px-3 py-2 shadow-sm">
+                    <Mail size={16} className="text-teal-700" />
+                    <input
+                      value={existingInviteQuery}
+                      onChange={(event) => setExistingInviteQuery(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          addExistingMeetingEmailInvite()
+                        }
+                      }}
+                      className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                      placeholder="Buscar miembro o escribir correo"
+                    />
+                    <button type="button" onClick={addExistingMeetingEmailInvite} className="action-btn h-9 rounded-2xl px-3 text-xs">
+                      Agregar
+                    </button>
+                  </div>
+
+                  {existingInviteQuery.trim() && (
+                    <div className="absolute left-0 right-0 top-full z-40 mt-2 max-h-72 overflow-y-auto rounded-[22px] border border-white/80 bg-white/95 p-2 shadow-xl backdrop-blur-xl">
+                      {existingInviteMatches.map((miembro) => {
+                        const nombre = getMemberName(miembro)
+                        const email = getMemberEmail(miembro)
+                        return (
+                          <button
+                            key={miembro.usuario_id}
+                            type="button"
+                            onClick={() => selectExistingMeetingMemberInvite(miembro)}
+                            className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-slate-700 transition-colors hover:bg-teal-50"
+                          >
+                            <UserAvatar name={nombre} avatarUrl={miembro.perfil?.avatar_url} size="sm" className="h-9 w-9" />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold">{nombre}</span>
+                              <span className="block truncate text-xs text-slate-500">{email || 'Sin correo'}</span>
+                            </span>
+                          </button>
+                        )
+                      })}
+                      {normalizeEmail(existingInviteQuery) && (
+                        <button
+                          type="button"
+                          onClick={addExistingMeetingEmailInvite}
+                          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left text-teal-800 transition-colors hover:bg-teal-50"
+                        >
+                          <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
+                            <Mail size={15} />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">Invitar correo</span>
+                            <span className="block truncate text-xs">{normalizeEmail(existingInviteQuery)}</span>
+                          </span>
+                        </button>
+                      )}
+                      {existingInviteMatches.length === 0 && !normalizeEmail(existingInviteQuery) && (
+                        <p className="px-3 py-4 text-sm text-slate-500">No hay coincidencias. Escribe un correo valido para invitar.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {selectedExistingMembers.map((miembro) => {
+                    const nombre = getMemberName(miembro)
+                    const email = getMemberEmail(miembro)
+                    return (
+                      <button
+                        key={miembro.usuario_id}
+                        type="button"
+                        onClick={() => toggleExistingMeetingInvite(miembro.usuario_id)}
+                        className="flex max-w-full items-center gap-2 rounded-2xl border border-teal-100 bg-teal-50 px-3 py-2 text-left text-teal-800"
+                      >
+                        <UserAvatar name={nombre} avatarUrl={miembro.perfil?.avatar_url} size="sm" className="h-9 w-9" />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold">{nombre}</span>
+                          <span className="block truncate text-xs opacity-75">{email || 'Sin correo'}</span>
+                        </span>
+                        <XCircle size={15} className="flex-shrink-0" />
+                      </button>
+                    )
+                  })}
+                  {selectedExistingInviteEmails.map((email) => (
+                    <button
+                      key={email}
+                      type="button"
+                      onClick={() => setSelectedExistingInviteEmails((current) => current.filter((item) => item !== email))}
+                      className="flex max-w-full items-center gap-2 rounded-2xl border border-sky-100 bg-sky-50 px-3 py-2 text-left text-sky-800"
+                    >
+                      <Mail size={15} className="flex-shrink-0" />
+                      <span className="truncate text-sm font-semibold">{email}</span>
+                      <XCircle size={15} className="flex-shrink-0" />
+                    </button>
+                  ))}
+                  {selectedExistingMembers.length === 0 && selectedExistingInviteEmails.length === 0 && (
+                    <p className="text-sm text-slate-500">Los participantes ya invitados se omiten automaticamente.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => { setInviteMeeting(null); setSelectedInviteMembers([]); setSelectedExistingInviteEmails([]); setExistingInviteQuery(''); setError('') }}
+                  className="action-btn-ghost flex-1 justify-center"
+                >
+                  Cancelar
+                </button>
+                <button type="submit" disabled={inviteSaving || (selectedInviteMembers.length === 0 && selectedExistingInviteEmails.length === 0)} className="action-btn-primary flex-1 justify-center disabled:opacity-60">
+                  {inviteSaving ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  {inviteSaving ? 'Agregando...' : 'Agregar participantes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   )

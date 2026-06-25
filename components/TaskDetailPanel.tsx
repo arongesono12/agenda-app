@@ -66,6 +66,15 @@ function getAssignmentSummary(task: Tarea) {
   return { completed, total: assignments.length, assignments }
 }
 
+function getAssignmentOwnerLabel(task: Tarea) {
+  const assignmentOwners = task.asignaciones
+    ?.map((assignment) => assignment.asignado_por_nombre?.trim())
+    .filter((value): value is string => !!value)
+
+  if (assignmentOwners?.length) return Array.from(new Set(assignmentOwners)).join(', ')
+  return task.asignado_por_nombre?.trim() || 'Sin dato de asignador'
+}
+
 function DetailItem({ icon, label, value }: DetailItemProps) {
   return (
     <div className="rounded-[22px] border border-white/80 bg-white/70 p-4 shadow-[0_14px_34px_rgba(15,23,42,0.05)]">
@@ -243,6 +252,19 @@ export default function TaskDetailPanel({
             <p className="whitespace-pre-line text-sm leading-7 text-slate-700">{task.tarea}</p>
           </InfoBlock>
 
+          <InfoBlock icon={<UserRound size={14} />} label="Auditoria de asignacion">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-[20px] border border-slate-100 bg-slate-50/80 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Asignada a</p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-slate-800">{getResponsablesLabel(task)}</p>
+              </div>
+              <div className="rounded-[20px] border border-slate-100 bg-slate-50/80 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Asignada por</p>
+                <p className="mt-2 text-sm font-semibold leading-6 text-slate-800">{getAssignmentOwnerLabel(task)}</p>
+              </div>
+            </div>
+          </InfoBlock>
+
           {assignmentSummary && (
             <InfoBlock icon={<UserRound size={14} />} label="Avance por responsable">
               <div className="space-y-3">
@@ -259,6 +281,9 @@ export default function TaskDetailPanel({
                         {assignment.estado ?? 'Pendiente'}
                       </span>
                     </div>
+                    <p className="mb-2 text-xs text-slate-500">
+                      Asignado por: {assignment.asignado_por_nombre ?? 'Sin dato de asignador'}
+                    </p>
                     <ProgressBar value={Number(assignment.porcentaje_avance ?? 0)} showLabel size="sm" />
                   </div>
                 ))}

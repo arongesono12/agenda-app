@@ -17,6 +17,7 @@ type CreateMeetingBody = {
   enlace_reunion?: string | null
   ubicacion?: string | null
   invitado_usuario_ids?: string[]
+  invitado_emails?: string[]
   crear_zoom?: boolean
 }
 
@@ -25,6 +26,9 @@ type UpdateMeetingBody = {
   invitadoId?: number
   respuesta?: ReunionRespuesta
   estado?: 'programada' | 'cancelada' | 'finalizada'
+  action?: 'add_invites'
+  invitado_usuario_ids?: string[]
+  invitado_emails?: string[]
 }
 
 type MemberRow = {
@@ -32,8 +36,19 @@ type MemberRow = {
   perfil?: { nombre_completo?: string | null; email?: string | null } | Array<{ nombre_completo?: string | null; email?: string | null }> | null
 }
 
+type MeetingInviteTarget = {
+  usuario_id?: string | null
+  email: string | null
+  nombre: string
+}
+
 function normalizeProfile(value: MemberRow['perfil']) {
   return Array.isArray(value) ? (value[0] ?? null) : value
+}
+
+function normalizeEmail(value?: string | null) {
+  const email = value?.trim().toLowerCase() ?? ''
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
 }
 
 function getBaseUrl(request: Request) {
@@ -115,6 +130,119 @@ async function loadOrganismo(admin: ReturnType<typeof createAdminSupabaseClient>
   return organismo
 }
 
+async function loadInvitedMembers(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  organismoId: string,
+  invitadoIds: string[]
+) {
+  if (invitadoIds.length === 0) return []
+
+  const { data: members, error } = await admin
+    .from('organismo_miembros')
+    .select('usuario_id, perfil:perfiles_usuario(nombre_completo, email)')
+    .eq('organismo_id', organismoId)
+    .eq('activo', true)
+    .in('usuario_id', invitadoIds)
+
+  if (error) throw error
+
+  return ((members ?? []) as MemberRow[]).map((member) => {
+    const memberProfile = normalizeProfile(member.perfil)
+    return {
+      usuario_id: member.usuario_id,
+      email: memberProfile?.email?.trim().toLowerCase() ?? null,
+      nombre: memberProfile?.nombre_completo?.trim() || memberProfile?.email?.split('@')[0] || 'Usuario',
+    }
+  }).filter((member) => member.email)
+}
+
+async function resolveInviteTargets(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  organismoId: string,
+  invitadoIds: string[],
+  invitadoEmails: string[]
+): Promise<MeetingInviteTarget[]> {
+  const members = await loadInvitedMembers(admin, organismoId, invitadoIds)
+  const memberEmails = new Set(members.map((member) => normalizeEmail(member.email)).filter(Boolean))
+  const externalEmails = Array.from(new Set(invitadoEmails.map(normalizeEmail).filter(Boolean)))
+    .filter((email) => !memberEmails.has(email))
+    .map((email) => ({
+      usuario_id: null,
+      email,
+      nombre: email.split('@')[0] || 'Invitado',
+    }))
+
+  return [...members, ...externalEmails]
+}
+
+async function notifyMeetingInvites(params: {
+  admin: ReturnType<typeof createAdminSupabaseClient>
+  organismoId: string
+  reunion: {
+    id: string
+    titulo: string
+    descripcion?: string | null
+    fecha_inicio: string
+    fecha_fin?: string | null
+    modalidad: string
+    enlace_reunion?: string | null
+    ubicacion?: string | null
+  }
+  organismoNombre: string
+  inviterName: string
+  appUrl: string
+  invitados: MeetingInviteTarget[]
+}) {
+  const emailHtml = meetingEmailHtml({
+    organismoNombre: params.organismoNombre,
+    inviterName: params.inviterName,
+    titulo: params.reunion.titulo,
+    descripcion: params.reunion.descripcion,
+    fechaInicio: params.reunion.fecha_inicio,
+    fechaFin: params.reunion.fecha_fin ?? null,
+    modalidad: params.reunion.modalidad,
+    enlace: params.reunion.enlace_reunion,
+    ubicacion: params.reunion.ubicacion,
+    appUrl: params.appUrl,
+  })
+
+  for (const invitado of params.invitados) {
+    const email = invitado.email ?? ''
+    const recipientKey = invitado.usuario_id ?? email
+    if (!recipientKey) continue
+
+    const emailResult = email
+      ? await sendAgendaEmail({
+          to: email,
+          subject: `Reunion: ${params.reunion.titulo}`,
+          html: emailHtml,
+          text: `${params.inviterName} te invita a la reunion "${params.reunion.titulo}" de ${params.organismoNombre}. Confirma tu participacion en ${params.appUrl}/reuniones. Enlace: ${params.reunion.enlace_reunion ?? 'sin enlace'}`,
+        })
+      : { ok: false as const, error: 'El invitado no tiene email.' }
+
+    await params.admin.from('alertas').upsert(
+      {
+        organismo_id: params.organismoId,
+        modulo: 'reuniones',
+        referencia_id: params.reunion.id,
+        tarea_id: null,
+        tipo_alerta: 'Reunion',
+        titulo: `Invitacion a reunion: ${params.reunion.titulo}`,
+        mensaje: params.reunion.enlace_reunion
+          ? `Confirma tu participacion. Enlace: ${params.reunion.enlace_reunion}`
+          : 'Confirma tu participacion en el modulo de reuniones.',
+        destinatario_usuario_id: invitado.usuario_id ?? null,
+        destinatario_email: email || null,
+        alerta_key: `reunion:${params.reunion.id}:${recipientKey}`,
+        enviada_email_at: emailResult.ok ? new Date().toISOString() : null,
+        email_error: emailResult.ok ? null : emailResult.error,
+        leida: false,
+      },
+      { onConflict: 'alerta_key' }
+    )
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
@@ -176,6 +304,7 @@ export async function POST(request: Request) {
     const fechaFin = body.fecha_fin ? new Date(body.fecha_fin) : null
     const modalidad = body.modalidad ?? 'virtual'
     const invitadoIds = Array.from(new Set((body.invitado_usuario_ids ?? []).filter(Boolean)))
+    const invitadoEmails = Array.from(new Set((body.invitado_emails ?? []).map(normalizeEmail).filter(Boolean)))
     const shouldCreateZoom = !!body.crear_zoom && (modalidad === 'virtual' || modalidad === 'hibrida')
 
     if (!titulo) return NextResponse.json({ ok: false, error: 'El titulo es obligatorio.' }, { status: 400 })
@@ -188,33 +317,17 @@ export async function POST(request: Request) {
     if ((modalidad === 'virtual' || modalidad === 'hibrida') && !body.enlace_reunion?.trim() && !shouldCreateZoom) {
       return NextResponse.json({ ok: false, error: 'Escribe un enlace o activa la creacion automatica con Zoom.' }, { status: 400 })
     }
-    if (invitadoIds.length === 0) {
+    if (invitadoIds.length === 0 && invitadoEmails.length === 0) {
       return NextResponse.json({ ok: false, error: 'Selecciona al menos un invitado.' }, { status: 400 })
     }
 
     const organismo = await loadOrganismo(admin, organismoId)
     if (!organismo) return NextResponse.json({ ok: false, error: 'Organismo no encontrado.' }, { status: 404 })
 
-    const { data: members, error: membersError } = await admin
-      .from('organismo_miembros')
-      .select('usuario_id, perfil:perfiles_usuario(nombre_completo, email)')
-      .eq('organismo_id', organismoId)
-      .eq('activo', true)
-      .in('usuario_id', invitadoIds)
+    const invitedTargets = await resolveInviteTargets(admin, organismoId, invitadoIds, invitadoEmails)
 
-    if (membersError) throw membersError
-
-    const invitedMembers = ((members ?? []) as MemberRow[]).map((member) => {
-      const memberProfile = normalizeProfile(member.perfil)
-      return {
-        usuario_id: member.usuario_id,
-        email: memberProfile?.email?.trim().toLowerCase() ?? null,
-        nombre: memberProfile?.nombre_completo?.trim() || memberProfile?.email?.split('@')[0] || 'Usuario',
-      }
-    }).filter((member) => member.email)
-
-    if (invitedMembers.length === 0) {
-      return NextResponse.json({ ok: false, error: 'No se encontraron miembros validos para invitar.' }, { status: 400 })
+    if (invitedTargets.length === 0) {
+      return NextResponse.json({ ok: false, error: 'No se encontraron invitados validos.' }, { status: 400 })
     }
 
     let zoomMeeting: CreatedZoomMeeting | null = null
@@ -267,9 +380,9 @@ export async function POST(request: Request) {
 
     const { data: invitados, error: invitadosError } = await admin
       .from('reunion_invitados')
-      .insert(invitedMembers.map((member) => ({
+      .insert(invitedTargets.map((member) => ({
         reunion_id: reunion.id,
-        usuario_id: member.usuario_id,
+        usuario_id: member.usuario_id ?? null,
         email: member.email,
         nombre: member.nombre,
       })))
@@ -279,48 +392,28 @@ export async function POST(request: Request) {
 
     const appUrl = getBaseUrl(request)
     const inviterName = profile?.nombre_completo?.trim() || profile?.email || user.email || 'Un usuario'
-    const emailHtml = meetingEmailHtml({
+    await notifyMeetingInvites({
+      admin,
+      organismoId,
+      reunion: {
+        id: reunion.id,
+        titulo,
+        descripcion: body.descripcion?.trim() || null,
+        fecha_inicio: fechaInicio.toISOString(),
+        fecha_fin: fechaFin?.toISOString() ?? null,
+        modalidad,
+        enlace_reunion: meetingLink,
+        ubicacion: body.ubicacion?.trim() || null,
+      },
       organismoNombre: organismo.nombre,
       inviterName,
-      titulo,
-      descripcion: body.descripcion,
-      fechaInicio: fechaInicio.toISOString(),
-      fechaFin: fechaFin?.toISOString() ?? null,
-      modalidad,
-      enlace: meetingLink,
-      ubicacion: body.ubicacion,
       appUrl,
+      invitados: (invitados ?? []).map((invitado) => ({
+        usuario_id: invitado.usuario_id as string | null,
+        email: invitado.email ?? null,
+        nombre: invitado.nombre ?? 'Usuario',
+      })),
     })
-
-    for (const invitado of invitados ?? []) {
-      const email = invitado.email ?? ''
-      const emailResult = email
-        ? await sendAgendaEmail({
-            to: email,
-            subject: `Reunion: ${titulo}`,
-            html: emailHtml,
-            text: `${inviterName} te invita a la reunion "${titulo}" de ${organismo.nombre}. Confirma tu participacion en ${appUrl}/reuniones. Enlace: ${meetingLink ?? 'sin enlace'}`,
-          })
-        : { ok: false as const, error: 'El invitado no tiene email.' }
-
-      await admin.from('alertas').insert({
-        organismo_id: organismoId,
-        modulo: 'reuniones',
-        referencia_id: reunion.id,
-        tarea_id: null,
-        tipo_alerta: 'Reunion',
-        titulo: `Invitacion a reunion: ${titulo}`,
-        mensaje: meetingLink
-          ? `Confirma tu participacion. Enlace: ${meetingLink}`
-          : 'Confirma tu participacion en el modulo de reuniones.',
-        destinatario_usuario_id: invitado.usuario_id,
-        destinatario_email: email || null,
-        alerta_key: `reunion:${reunion.id}:${invitado.usuario_id ?? email}`,
-        enviada_email_at: emailResult.ok ? new Date().toISOString() : null,
-        email_error: emailResult.ok ? null : emailResult.error,
-        leida: false,
-      })
-    }
 
     return NextResponse.json({ ok: true, reunionId: reunion.id })
   } catch (error: unknown) {
@@ -358,6 +451,87 @@ export async function PATCH(request: Request) {
 
       if (error) throw error
       return NextResponse.json({ ok: true })
+    }
+
+    if (body.reunionId && body.action === 'add_invites') {
+      if (!MANAGER_ROLE_CODES.includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number])) {
+        return NextResponse.json({ ok: false, error: 'Sin permiso para modificar participantes de la reunion.' }, { status: 403 })
+      }
+
+      const invitadoIds = Array.from(new Set((body.invitado_usuario_ids ?? []).filter(Boolean)))
+      const invitadoEmails = Array.from(new Set((body.invitado_emails ?? []).map(normalizeEmail).filter(Boolean)))
+      if (invitadoIds.length === 0 && invitadoEmails.length === 0) {
+        return NextResponse.json({ ok: false, error: 'Selecciona al menos un participante nuevo.' }, { status: 400 })
+      }
+
+      const { data: reunion, error: reunionError } = await admin
+        .from('reuniones')
+        .select('id, titulo, descripcion, fecha_inicio, fecha_fin, modalidad, enlace_reunion, ubicacion, estado')
+        .eq('id', body.reunionId)
+        .eq('organismo_id', organismoId)
+        .maybeSingle()
+
+      if (reunionError) throw reunionError
+      if (!reunion) return NextResponse.json({ ok: false, error: 'Reunion no encontrada.' }, { status: 404 })
+      if (reunion.estado !== 'programada') {
+        return NextResponse.json({ ok: false, error: 'Solo se pueden agregar participantes a reuniones programadas.' }, { status: 409 })
+      }
+
+      const { data: existing, error: existingError } = await admin
+        .from('reunion_invitados')
+        .select('usuario_id, email')
+        .eq('reunion_id', reunion.id)
+
+      if (existingError) throw existingError
+
+      const existingIds = new Set((existing ?? []).map((row) => row.usuario_id).filter(Boolean))
+      const existingEmails = new Set((existing ?? []).map((row) => normalizeEmail(row.email)).filter(Boolean))
+      const newIds = invitadoIds.filter((id) => !existingIds.has(id))
+      const newEmails = invitadoEmails.filter((email) => !existingEmails.has(email))
+
+      const invitedTargets = await resolveInviteTargets(admin, organismoId, newIds, newEmails)
+      if (invitedTargets.length === 0) {
+        return NextResponse.json({ ok: false, error: 'Los participantes seleccionados ya estan invitados o no son validos.' }, { status: 400 })
+      }
+
+      const { data: nuevosInvitados, error: insertError } = await admin
+        .from('reunion_invitados')
+        .insert(invitedTargets.map((member) => ({
+          reunion_id: reunion.id,
+          usuario_id: member.usuario_id ?? null,
+          email: member.email,
+          nombre: member.nombre,
+        })))
+        .select('id, usuario_id, email, nombre')
+
+      if (insertError) throw insertError
+
+      const organismo = await loadOrganismo(admin, organismoId)
+      const inviterName = profile?.nombre_completo?.trim() || profile?.email || user.email || 'Un usuario'
+      await notifyMeetingInvites({
+        admin,
+        organismoId,
+        reunion: {
+          id: reunion.id,
+          titulo: reunion.titulo,
+          descripcion: reunion.descripcion,
+          fecha_inicio: reunion.fecha_inicio,
+          fecha_fin: reunion.fecha_fin,
+          modalidad: reunion.modalidad,
+          enlace_reunion: reunion.enlace_reunion,
+          ubicacion: reunion.ubicacion,
+        },
+        organismoNombre: organismo?.nombre ?? 'el organismo',
+        inviterName,
+        appUrl: getBaseUrl(request),
+        invitados: (nuevosInvitados ?? []).map((invitado) => ({
+          usuario_id: invitado.usuario_id as string | null,
+          email: invitado.email ?? null,
+          nombre: invitado.nombre ?? 'Usuario',
+        })),
+      })
+
+      return NextResponse.json({ ok: true, added: nuevosInvitados?.length ?? 0 })
     }
 
     if (body.reunionId && body.estado) {

@@ -49,6 +49,42 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['alertas']['Insert']>
         Relationships: []
       }
+      calendario_eventos: {
+        Row: {
+          id: string
+          organismo_id: string
+          titulo: string
+          descripcion: string | null
+          tipo_evento: string
+          fecha_inicio: string
+          fecha_fin: string | null
+          es_festivo: boolean
+          color: string
+          origen: string | null
+          codigo_origen: string | null
+          creado_por_usuario_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          organismo_id: string
+          titulo: string
+          descripcion?: string | null
+          tipo_evento?: string
+          fecha_inicio: string
+          fecha_fin?: string | null
+          es_festivo?: boolean
+          color?: string
+          origen?: string | null
+          codigo_origen?: string | null
+          creado_por_usuario_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Database['public']['Tables']['calendario_eventos']['Insert']>
+        Relationships: []
+      }
       reuniones: {
         Row: {
           id: string

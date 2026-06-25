@@ -237,6 +237,8 @@ export interface MiembroConPerfil extends OrganismoMiembro {
 export type ReunionModalidad = 'virtual' | 'presencial' | 'hibrida'
 export type ReunionEstado = 'programada' | 'cancelada' | 'finalizada'
 export type ReunionRespuesta = 'pendiente' | 'confirmado' | 'rechazado' | 'tentativo'
+export type CalendarioTipoEvento = 'festivo' | 'evento' | 'actividad' | 'aviso' | 'fecha_limite'
+export type CalendarioColor = 'teal' | 'sky' | 'amber' | 'rose' | 'violet' | 'slate'
 
 export interface ReunionInvitado {
   id: number
@@ -271,6 +273,23 @@ export interface Reunion {
   created_at?: string
   updated_at?: string
   invitados?: ReunionInvitado[]
+}
+
+export interface CalendarioEvento {
+  id: string
+  organismo_id: string
+  titulo: string
+  descripcion?: string | null
+  tipo_evento: CalendarioTipoEvento
+  fecha_inicio: string
+  fecha_fin?: string | null
+  es_festivo: boolean
+  color: CalendarioColor
+  origen?: string | null
+  codigo_origen?: string | null
+  creado_por_usuario_id?: string | null
+  created_at?: string
+  updated_at?: string
 }
 
 export const SEGESA_ORGANISMO_ID = '00000000-0000-0000-0000-000000000001'

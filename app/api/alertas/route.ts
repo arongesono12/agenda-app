@@ -47,6 +47,77 @@ async function loadAssignedTaskIds(
   return Array.from(taskIds)
 }
 
+async function enrichAssignmentAlerts(
+  admin: ReturnType<typeof createAdminSupabaseClient>,
+  alertas: Array<Record<string, unknown>>
+) {
+  const assignmentAlerts = alertas.filter((alerta) => alerta.tipo_alerta === 'Asignada' && alerta.tarea_id)
+  const taskIds = Array.from(new Set(assignmentAlerts.map((alerta) => Number(alerta.tarea_id)).filter(Number.isInteger)))
+  const assignmentMap = new Map<string, { asignado_a?: string | null; asignado_a_email?: string | null; asignado_por?: string | null }>()
+
+  if (taskIds.length === 0) return alertas
+
+  const { data: assignments } = await admin
+    .from('tarea_asignaciones')
+    .select('tarea_id, responsable_usuario_id, responsable_nombre, responsable_email, asignado_por_nombre')
+    .in('tarea_id', taskIds)
+
+  for (const assignment of assignments ?? []) {
+    const row = assignment as {
+      tarea_id?: number | null
+      responsable_usuario_id?: string | null
+      responsable_nombre?: string | null
+      responsable_email?: string | null
+      asignado_por_nombre?: string | null
+    }
+    if (!row.tarea_id || !row.responsable_usuario_id) continue
+    assignmentMap.set(`${row.tarea_id}:${row.responsable_usuario_id}`, {
+      asignado_a: row.responsable_nombre ?? null,
+      asignado_a_email: row.responsable_email ?? null,
+      asignado_por: row.asignado_por_nombre ?? null,
+    })
+  }
+
+  const missingTaskIds = assignmentAlerts
+    .filter((alerta) => !assignmentMap.has(`${alerta.tarea_id}:${alerta.destinatario_usuario_id}`))
+    .map((alerta) => Number(alerta.tarea_id))
+    .filter(Number.isInteger)
+
+  if (missingTaskIds.length > 0) {
+    const { data: tasks } = await admin
+      .from('tareas')
+      .select('id, responsable, responsable_usuario_id, asignado_por_nombre')
+      .in('id', Array.from(new Set(missingTaskIds)))
+
+    for (const task of tasks ?? []) {
+      const row = task as {
+        id?: number | null
+        responsable?: string | null
+        responsable_usuario_id?: string | null
+        asignado_por_nombre?: string | null
+      }
+      if (!row.id || !row.responsable_usuario_id) continue
+      assignmentMap.set(`${row.id}:${row.responsable_usuario_id}`, {
+        asignado_a: row.responsable ?? null,
+        asignado_a_email: null,
+        asignado_por: row.asignado_por_nombre ?? null,
+      })
+    }
+  }
+
+  return alertas.map((alerta) => {
+    const info = alerta.tarea_id && alerta.destinatario_usuario_id
+      ? assignmentMap.get(`${alerta.tarea_id}:${alerta.destinatario_usuario_id}`)
+      : null
+    return {
+      ...alerta,
+      asignado_a: info?.asignado_a ?? alerta.destinatario_email ?? null,
+      asignado_a_email: info?.asignado_a_email ?? alerta.destinatario_email ?? null,
+      asignado_por: info?.asignado_por ?? null,
+    }
+  })
+}
+
 export async function GET(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
@@ -64,7 +135,7 @@ export async function GET(request: Request) {
     const isAdmin = ADMIN_ROLE_CODES.includes(activeRoleCode as (typeof ADMIN_ROLE_CODES)[number])
     let query = admin
       .from('alertas')
-      .select('id, tarea_id, tipo_alerta, titulo, mensaje, leida, created_at, destinatario_usuario_id, modulo, referencia_id')
+      .select('id, tarea_id, tipo_alerta, titulo, mensaje, leida, created_at, destinatario_usuario_id, destinatario_email, modulo, referencia_id')
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -88,7 +159,8 @@ export async function GET(request: Request) {
 
     if (error) throw error
 
-    return NextResponse.json({ ok: true, alertas: data ?? [] })
+    const alertas = await enrichAssignmentAlerts(admin, (data ?? []) as Array<Record<string, unknown>>)
+    return NextResponse.json({ ok: true, alertas })
   } catch (error: unknown) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : 'No se pudieron consultar las alertas.' },

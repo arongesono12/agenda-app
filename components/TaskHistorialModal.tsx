@@ -342,6 +342,10 @@ export default function TaskHistorialModal({ task, onClose, onUpdate }: TaskHist
                     <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Responsable</p>
                     <p className="mt-2 text-sm font-semibold text-slate-100">{task.responsable ?? 'Sin asignar'}</p>
                   </div>
+                  <div className="rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Asignada por</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-100">{task.asignado_por_nombre ?? 'Sin dato'}</p>
+                  </div>
                 </div>
 
                 <div className="hidden rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-4 sm:block">

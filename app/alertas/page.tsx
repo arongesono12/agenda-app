@@ -26,6 +26,9 @@ type AlertaInterna = {
   mensaje?: string | null
   leida: boolean
   created_at?: string | null
+  asignado_a?: string | null
+  asignado_a_email?: string | null
+  asignado_por?: string | null
 }
 
 export default function AlertasPage() {
@@ -231,7 +234,21 @@ export default function AlertasPage() {
                       </span>
                     </div>
                     <p className="mt-2 text-sm font-semibold text-slate-900">{alert.titulo ?? 'Alerta de agenda'}</p>
-                    {alert.mensaje && <p className="mt-1 text-xs text-slate-500">{alert.mensaje}</p>}
+                    {alert.tipo_alerta === 'Asignada' && (
+                      <div className="mt-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-2">
+                        <p className="text-xs font-semibold text-slate-700">
+                          Asignada a: {alert.asignado_a ?? alert.asignado_a_email ?? 'Responsable no identificado'}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Asigno: {alert.asignado_por ?? 'Sin dato de asignador'}
+                        </p>
+                      </div>
+                    )}
+                    {alert.mensaje && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        {alert.tipo_alerta === 'Asignada' ? alert.mensaje.replace(/^Se te asigno/i, 'Se asigno') : alert.mensaje}
+                      </p>
+                    )}
                   </Link>
 
                   {!alert.leida && (

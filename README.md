@@ -81,6 +81,7 @@ El usuario solicita recuperacion por correo y luego define una nueva contrasena 
 | Agenda diaria | `/` | Gestion y seguimiento principal de tareas |
 | Dashboard | `/dashboard` | KPIs, graficos y resumen ejecutivo |
 | Alertas | `/alertas` | Riesgos por vencimiento y alertas personales |
+| Calendario | `/calendario` | Festivos y eventos institucionales del organismo |
 | Cronograma | `/cronograma` | Vista mensual tipo Gantt por fecha de inicio y fin |
 | Estadisticas | `/estadisticas` | Analisis por prioridad, tipo y departamento |
 | Busqueda | `/busqueda` | Filtros avanzados sobre tareas |
@@ -213,17 +214,28 @@ Ruta: `/dashboard`
 Presenta una lectura ejecutiva del trabajo:
 
 - total de tareas;
+- tareas activas;
 - completadas;
 - en proceso;
 - pendientes;
 - alta prioridad;
 - vencidas;
+- urgentes;
+- proximas;
 - avance promedio;
+- alertas sin leer;
+- reuniones proximas;
+- eventos del calendario del dia;
 - tareas por departamento;
 - distribucion por estado;
 - carga por responsable;
 - distribucion por prioridad;
 - tareas recientes;
+- alertas recientes;
+- proximas reuniones;
+- proximos eventos del calendario;
+- movimientos recientes del historial;
+- trazabilidad de asignaciones, mostrando a quien se asigno una tarea y quien la asigno;
 - resumen ejecutivo de avance global.
 
 El titulo y subtitulo cambian segun el rol: dashboard ejecutivo, dashboard de seguimiento, mis indicadores o panel de consulta.
@@ -377,6 +389,7 @@ Funciones principales:
 
 - crear reuniones virtuales, presenciales o hibridas;
 - invitar miembros activos del organismo;
+- agregar nuevos participantes a una reunion programada desde la accion `Participantes`;
 - enviar alertas internas y correos de invitacion;
 - confirmar, rechazar o responder como tentativo;
 - cancelar reuniones programadas;
@@ -453,6 +466,53 @@ Eventos que generan avisos:
 
 Las alertas internas viven en la tabla `alertas`. Algunas alertas pueden marcarse como leidas desde la pantalla `/alertas`.
 
+Cuando una alerta corresponde a una tarea asignada, los administradores ven la trazabilidad de asignacion enriquecida: `Asignada a` y `Asignada por`. Esto evita leer una alerta global como si hubiera sido asignada al propio administrador.
+
+## Calendario
+
+Ruta: `/calendario`
+
+Muestra los dias festivos y eventos institucionales del organismo activo.
+
+Funciones:
+
+- vista mensual con eventos por dia;
+- seleccion de un dia para ver sus eventos;
+- resumen de festivos del mes;
+- eventos de uno o varios dias;
+- colores por tipo de evento.
+
+Permisos:
+
+- administradores y administradoras pueden crear, editar y eliminar eventos;
+- supervisor, responsable y consulta solo pueden visualizar el calendario;
+- todos los datos se filtran por `organismo_id`.
+
+Tipos disponibles:
+
+- Festivo;
+- Evento;
+- Actividad;
+- Aviso;
+- Fecha limite.
+
+Festivos base de Guinea Ecuatorial:
+
+- 1 de enero: Dia de Ano Nuevo;
+- Viernes Santo: fecha movil calculada por Pascua;
+- 1 de mayo: Dia del Trabajo;
+- 5 de junio: Dia del Presidente;
+- Corpus Christi: fecha movil calculada como Pascua + 60 dias;
+- 3 de agosto: Dia de la Libertad / Fuerzas Armadas;
+- 15 de agosto: Dia de la Constitucion;
+- 12 de octubre: Dia de la Independencia;
+- 1 de noviembre: Dia de Todos los Santos;
+- 17 de noviembre: Santa Isabel de Hungria, evento local de referencia en Malabo;
+- 8 de diciembre: Inmaculada Concepcion;
+- 25 de diciembre: Navidad.
+
+La migracion de festivos oficiales carga automaticamente el ano actual y los cuatro anos siguientes para todos los organismos activos. Los nuevos organismos tambien reciben esos festivos al crearse.
+
 ## Datos principales de una tarea
 
 La entidad `tareas` contiene:
@@ -511,6 +571,10 @@ Ejecutar en Supabase SQL Editor en este orden recomendado:
 11. `supabase/migration_role_key_improvements.sql`
 12. `supabase/migration_historial_index.sql`
 13. `supabase/migration_auth_policies.sql`
+14. `supabase/migration_reuniones.sql`
+15. `supabase/migration_reuniones_zoom.sql`
+16. `supabase/migration_calendario_eventos.sql`
+17. `supabase/migration_calendario_festivos_gq.sql`
 
 Scripts auxiliares disponibles:
 
@@ -583,6 +647,7 @@ npm run lint
 | `/api/catalogos` | Departamentos y responsables |
 | `/api/register` | Registro de usuarios |
 | `/api/alertas` | Alertas personales |
+| `/api/calendario` | Festivos y eventos institucionales por organismo |
 | `/api/alertas/unread` | Conteo de alertas no leidas |
 | `/api/alertas/marcar-leida` | Marcar alertas como leidas |
 | `/api/alertas/vencimientos` | Generar alertas por vencimientos |

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { READER_ROLE_CODES } from '@/lib/access-control'
+import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, READER_ROLE_CODES } from '@/lib/access-control'
 import { getServerSessionProfile, getOrganismoIdFromRequest, getRoleCodeFromRequest } from '@/lib/server-access'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { createServerSupabaseClient } from '@/lib/supabase-server'
@@ -72,6 +72,48 @@ type TaskDepartmentRow = {
   departamento: string
 }
 
+type DashboardAlert = {
+  id: number
+  tarea_id?: number | null
+  tipo_alerta?: string | null
+  titulo: string | null
+  mensaje: string | null
+  modulo: string
+  leida: boolean | null
+  created_at: string | null
+  asignado_a?: string | null
+  asignado_a_email?: string | null
+  asignado_por?: string | null
+}
+
+type DashboardMeeting = {
+  id: string
+  titulo: string
+  fecha_inicio: string
+  modalidad: string
+  estado: string
+}
+
+type DashboardCalendarEvent = {
+  id: string
+  titulo: string
+  fecha_inicio: string
+  fecha_fin: string | null
+  tipo_evento: string
+  es_festivo: boolean
+  color: string
+}
+
+type DashboardHistory = {
+  id: number
+  fecha: string | null
+  usuario: string | null
+  tarea_id: number | null
+  tarea_nombre: string | null
+  tipo_cambio: string
+  observaciones: string | null
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -140,6 +182,218 @@ function shouldUseDashboardRpc() {
   return false
 }
 
+function toDateOnly(date: Date) {
+  return date.toISOString().slice(0, 10)
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+async function loadAlertSummary(params: {
+  organismoId: string
+  userId: string
+  email: string
+  isAdmin: boolean
+}) {
+  const admin = createAdminSupabaseClient()
+  let query = admin
+    .from('alertas')
+    .select('id, tarea_id, tipo_alerta, titulo, mensaje, modulo, leida, created_at, destinatario_usuario_id, destinatario_email')
+    .eq('organismo_id', params.organismoId)
+    .order('created_at', { ascending: false })
+    .limit(8)
+
+  if (!params.isAdmin) {
+    const email = params.email.replace(/'/g, "''")
+    query = query.or(`destinatario_usuario_id.eq.${params.userId},destinatario_email.eq.${email}`)
+  }
+
+  const { data, error } = await query
+  if (error) return { total: 0, noLeidas: 0, recientes: [] as DashboardAlert[] }
+
+  const rows = (data ?? []) as Array<DashboardAlert & { destinatario_usuario_id?: string | null; destinatario_email?: string | null }>
+  const assignmentAlerts = rows.filter((alerta) => alerta.tipo_alerta === 'Asignada' && alerta.tarea_id)
+  const taskIds = Array.from(new Set(assignmentAlerts.map((alerta) => Number(alerta.tarea_id)).filter(Number.isInteger)))
+  const assignmentMap = new Map<string, { asignado_a?: string | null; asignado_a_email?: string | null; asignado_por?: string | null }>()
+
+  if (taskIds.length > 0) {
+    const { data: assignments } = await admin
+      .from('tarea_asignaciones')
+      .select('tarea_id, responsable_usuario_id, responsable_nombre, responsable_email, asignado_por_nombre')
+      .in('tarea_id', taskIds)
+
+    for (const assignment of assignments ?? []) {
+      const row = assignment as {
+        tarea_id?: number | null
+        responsable_usuario_id?: string | null
+        responsable_nombre?: string | null
+        responsable_email?: string | null
+        asignado_por_nombre?: string | null
+      }
+      if (!row.tarea_id || !row.responsable_usuario_id) continue
+      assignmentMap.set(`${row.tarea_id}:${row.responsable_usuario_id}`, {
+        asignado_a: row.responsable_nombre ?? null,
+        asignado_a_email: row.responsable_email ?? null,
+        asignado_por: row.asignado_por_nombre ?? null,
+      })
+    }
+
+    const missingTaskIds = assignmentAlerts
+      .filter((alerta) => !assignmentMap.has(`${alerta.tarea_id}:${alerta.destinatario_usuario_id}`))
+      .map((alerta) => Number(alerta.tarea_id))
+      .filter(Number.isInteger)
+
+    if (missingTaskIds.length > 0) {
+      const { data: tasks } = await admin
+        .from('tareas')
+        .select('id, responsable, responsable_usuario_id, asignado_por_nombre')
+        .in('id', Array.from(new Set(missingTaskIds)))
+
+      for (const task of tasks ?? []) {
+        const row = task as {
+          id?: number | null
+          responsable?: string | null
+          responsable_usuario_id?: string | null
+          asignado_por_nombre?: string | null
+        }
+        if (!row.id || !row.responsable_usuario_id) continue
+        assignmentMap.set(`${row.id}:${row.responsable_usuario_id}`, {
+          asignado_a: row.responsable ?? null,
+          asignado_a_email: null,
+          asignado_por: row.asignado_por_nombre ?? null,
+        })
+      }
+    }
+  }
+
+  return {
+    total: rows.length,
+    noLeidas: rows.filter((alerta) => !alerta.leida).length,
+    recientes: rows.map(({ id, tarea_id, tipo_alerta, titulo, mensaje, modulo, leida, created_at, destinatario_usuario_id, destinatario_email }) => {
+      const assignmentInfo = tarea_id && destinatario_usuario_id ? assignmentMap.get(`${tarea_id}:${destinatario_usuario_id}`) : null
+      return {
+        id,
+        tarea_id,
+        tipo_alerta,
+        titulo,
+        mensaje,
+        modulo,
+        leida,
+        created_at,
+        asignado_a: assignmentInfo?.asignado_a ?? destinatario_email ?? null,
+        asignado_a_email: assignmentInfo?.asignado_a_email ?? destinatario_email ?? null,
+        asignado_por: assignmentInfo?.asignado_por ?? null,
+      }
+    }),
+  }
+}
+
+async function loadMeetingSummary(params: {
+  organismoId: string
+  userId: string
+  isManager: boolean
+}) {
+  const admin = createAdminSupabaseClient()
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const to = addDays(today, 30).toISOString()
+
+  let query = admin
+    .from('reuniones')
+    .select('id, titulo, fecha_inicio, modalidad, estado, invitados:reunion_invitados(id, usuario_id, estado_respuesta)')
+    .eq('organismo_id', params.organismoId)
+    .gte('fecha_inicio', today.toISOString())
+    .lte('fecha_inicio', to)
+    .order('fecha_inicio', { ascending: true })
+    .limit(12)
+
+  const { data, error } = await query
+  if (error) return { proximas: 0, programadas: 0, pendientesRespuesta: 0, recientes: [] as DashboardMeeting[] }
+
+  const rows = ((data ?? []) as Array<Record<string, unknown>>).filter((reunion) => {
+    if (params.isManager) return true
+    const invitados = Array.isArray(reunion.invitados) ? reunion.invitados as Array<{ usuario_id?: string | null }> : []
+    return invitados.some((invitado) => invitado.usuario_id === params.userId)
+  })
+
+  return {
+    proximas: rows.length,
+    programadas: rows.filter((reunion) => reunion.estado === 'programada').length,
+    pendientesRespuesta: rows.reduce((total, reunion) => {
+      const invitados = Array.isArray(reunion.invitados) ? reunion.invitados as Array<{ usuario_id?: string | null; estado_respuesta?: string | null }> : []
+      return total + invitados.filter((invitado) => {
+        if (params.isManager) return invitado.estado_respuesta === 'pendiente'
+        return invitado.usuario_id === params.userId && invitado.estado_respuesta === 'pendiente'
+      }).length
+    }, 0),
+    recientes: rows.slice(0, 5).map((reunion) => ({
+      id: reunion.id as string,
+      titulo: reunion.titulo as string,
+      fecha_inicio: reunion.fecha_inicio as string,
+      modalidad: reunion.modalidad as string,
+      estado: reunion.estado as string,
+    })),
+  }
+}
+
+async function loadCalendarSummary(organismoId: string) {
+  const admin = createAdminSupabaseClient()
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+  const next30 = addDays(today, 30)
+
+  const { data, error } = await admin
+    .from('calendario_eventos')
+    .select('id, titulo, fecha_inicio, fecha_fin, tipo_evento, es_festivo, color')
+    .eq('organismo_id', organismoId)
+    .lte('fecha_inicio', toDateOnly(next30))
+    .or(`fecha_fin.is.null,fecha_fin.gte.${toDateOnly(today)}`)
+    .order('fecha_inicio', { ascending: true })
+    .limit(20)
+
+  if (error) return { eventosMes: 0, festivosMes: 0, eventosHoy: 0, proximos: [] as DashboardCalendarEvent[] }
+
+  const rows = (data ?? []) as DashboardCalendarEvent[]
+  return {
+    eventosMes: rows.filter((evento) => evento.fecha_inicio <= toDateOnly(monthEnd) && (evento.fecha_fin ?? evento.fecha_inicio) >= toDateOnly(monthStart)).length,
+    festivosMes: rows.filter((evento) => (evento.es_festivo || evento.tipo_evento === 'festivo') && evento.fecha_inicio <= toDateOnly(monthEnd) && (evento.fecha_fin ?? evento.fecha_inicio) >= toDateOnly(monthStart)).length,
+    eventosHoy: rows.filter((evento) => evento.fecha_inicio <= toDateOnly(today) && (evento.fecha_fin ?? evento.fecha_inicio) >= toDateOnly(today)).length,
+    proximos: rows.slice(0, 6),
+  }
+}
+
+async function loadHistorySummary(params: {
+  organismoId: string
+  visibleTaskIds: number[]
+  isAdmin: boolean
+}) {
+  const admin = createAdminSupabaseClient()
+  let query = admin
+    .from('historial')
+    .select('id, fecha, usuario, tarea_id, tarea_nombre, tipo_cambio, observaciones')
+    .eq('organismo_id', params.organismoId)
+    .is('eliminado_at', null)
+    .order('fecha', { ascending: false })
+    .limit(8)
+
+  if (!params.isAdmin) {
+    if (params.visibleTaskIds.length === 0) return { recientes: [] as DashboardHistory[], totalReciente: 0 }
+    query = query.in('tarea_id', params.visibleTaskIds)
+  }
+
+  const { data, error } = await query
+  if (error) return { recientes: [] as DashboardHistory[], totalReciente: 0 }
+  return {
+    recientes: (data ?? []) as DashboardHistory[],
+    totalReciente: data?.length ?? 0,
+  }
+}
+
 export async function GET(request: Request) {
   try {
     const { user, profile } = await getServerSessionProfile()
@@ -189,14 +443,20 @@ export async function GET(request: Request) {
       ...task,
       semaforo: calcularSemaforo(task.fecha_fin),
     }))
+    const nonFinalTasks = withSemaforo.filter((task) => task.estado !== 'Completado' && task.estado !== 'Cancelado')
 
     const kpis = {
       total: withSemaforo.length,
       completadas: withSemaforo.filter((task) => task.estado === 'Completado').length,
       enProceso: withSemaforo.filter((task) => task.estado === 'En Proceso').length,
       pendientes: withSemaforo.filter((task) => task.estado === 'Pendiente').length,
+      canceladas: withSemaforo.filter((task) => task.estado === 'Cancelado').length,
+      activas: nonFinalTasks.length,
       alta: withSemaforo.filter((task) => task.prioridad === 'Alta').length,
-      vencidas: withSemaforo.filter((task) => task.semaforo === SEMAFORO_VENCIDA).length,
+      vencidas: nonFinalTasks.filter((task) => task.semaforo === SEMAFORO_VENCIDA).length,
+      urgentes: nonFinalTasks.filter((task) => task.semaforo === SEMAFORO_URGENTE).length,
+      proximas: nonFinalTasks.filter((task) => task.semaforo === SEMAFORO_PROXIMA).length,
+      sinResponsable: withSemaforo.filter((task) => !task.responsable?.trim()).length,
       avance: withSemaforo.length
         ? Math.round(withSemaforo.reduce((acc, task) => acc + Number(task.porcentaje_avance ?? 0), 0) / withSemaforo.length)
         : 0,
@@ -265,6 +525,35 @@ export async function GET(request: Request) {
       )
       .slice(0, 5)
 
+    const isAdmin = ADMIN_ROLE_CODES.includes(activeRoleCode as (typeof ADMIN_ROLE_CODES)[number])
+    const isManager = MANAGER_ROLE_CODES.includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number])
+    const [alertSummary, meetingSummary, calendarSummary, historySummary] = organismoId
+      ? await Promise.all([
+          loadAlertSummary({
+            organismoId,
+            userId: user.id,
+            email: profile?.email ?? user.email ?? '',
+            isAdmin,
+          }),
+          loadMeetingSummary({
+            organismoId,
+            userId: user.id,
+            isManager,
+          }),
+          loadCalendarSummary(organismoId),
+          loadHistorySummary({
+            organismoId,
+            visibleTaskIds: withSemaforo.map((task) => task.id),
+            isAdmin,
+          }),
+        ])
+      : [
+          { total: 0, noLeidas: 0, recientes: [] },
+          { proximas: 0, programadas: 0, pendientesRespuesta: 0, recientes: [] },
+          { eventosMes: 0, festivosMes: 0, eventosHoy: 0, proximos: [] },
+          { recientes: [], totalReciente: 0 },
+        ]
+
     return NextResponse.json({
       ok: true,
       kpis,
@@ -273,6 +562,10 @@ export async function GET(request: Request) {
       pieData,
       priData,
       recientes,
+      alertSummary,
+      meetingSummary,
+      calendarSummary,
+      historySummary,
     })
   } catch (error: unknown) {
     return NextResponse.json(
