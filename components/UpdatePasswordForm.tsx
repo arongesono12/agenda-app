@@ -22,23 +22,15 @@ export default function UpdatePasswordForm() {
 
   useEffect(() => {
     const prepareRecoverySession = async () => {
-      const code = searchParams.get('code')
-
-      if (code) {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-
-        if (exchangeError) {
-          setError('El enlace de recuperacion no es valido o ya expiro. Solicita uno nuevo.')
-          setVerifying(false)
-          return
-        }
+      if (searchParams.get('error')) {
+        setError('El enlace de recuperacion no es valido o ya expiro. Solicita uno nuevo.')
+        setVerifying(false)
+        return
       }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
+      const { data, error: userError } = await supabase.auth.getUser()
 
-      if (!session) {
+      if (userError || !data.user) {
         setError('Abre esta pagina desde el enlace de recuperacion enviado a tu correo.')
       }
 
@@ -71,9 +63,16 @@ export default function UpdatePasswordForm() {
     }
 
     try {
-      const { error: updateError } = await supabase.auth.updateUser({ password })
+      const response = await fetch('/api/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, confirmPassword }),
+      })
+      const result = (await response.json()) as { ok?: boolean; error?: string }
 
-      if (updateError) throw updateError
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'No se pudo actualizar la contrasena.')
+      }
 
       setSuccess('Contrasena actualizada correctamente. Te enviaremos al login para iniciar sesion de nuevo.')
       setPassword('')

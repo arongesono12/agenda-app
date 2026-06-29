@@ -5,7 +5,6 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle2, Loader2, Mail, ShieldCheck } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
-import { supabase } from '@/lib/supabase'
 
 export default function ForgotPasswordForm() {
   const [email, setEmail] = useState('')
@@ -20,11 +19,16 @@ export default function ForgotPasswordForm() {
     setSuccess('')
 
     try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo: `${window.location.origin}/actualizar-password`,
+      const response = await fetch('/api/auth/recovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       })
+      const result = (await response.json()) as { ok?: boolean; error?: string }
 
-      if (resetError) throw resetError
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || 'No se pudo enviar el enlace de recuperacion.')
+      }
 
       setSuccess('Si el correo existe en el sistema, recibira un enlace seguro para crear una nueva contrasena.')
       setEmail('')

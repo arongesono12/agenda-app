@@ -72,7 +72,13 @@ Ruta: `/registro`
 
 Rutas: `/recuperar-password` y `/actualizar-password`
 
-El usuario solicita recuperacion por correo y luego define una nueva contrasena desde el enlace recibido.
+1. El usuario solicita la recuperacion con su correo en `/recuperar-password`.
+2. El backend genera el correo con el callback publico `/auth/callback?next=/actualizar-password`.
+3. El callback intercambia el codigo temporal de Supabase por una sesion segura en cookies y abre el formulario de dos campos.
+4. El formulario envia la nueva contrasena al backend, que valida la sesion temporal y actualiza Supabase Auth.
+5. Al terminar, la sesion de recuperacion se cierra y el usuario vuelve al login.
+
+En produccion, `NEXT_PUBLIC_APP_URL` debe contener el origen HTTPS publico, sin rutas. En Supabase, dentro de **Authentication > URL Configuration**, la **Site URL** debe ser ese mismo origen y **Redirect URLs** debe incluir exactamente `https://dominio-publico/auth/callback` (o un patron autorizado que lo cubra). Si falta, Supabase ignora `redirectTo` y utiliza la Site URL configurada, que no debe apuntar a localhost.
 
 ## Modulos de la aplicacion
 
