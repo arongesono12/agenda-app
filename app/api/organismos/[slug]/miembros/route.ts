@@ -3,6 +3,7 @@ import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getServerSessionProfile } from '@/lib/server-access'
 import { resolverRolActivo } from '@/lib/organismo-access'
 import { ADMIN_ROLE_CODES } from '@/lib/access-control'
+import { loadActiveOrganismoDirectory } from '@/lib/organismo-member-directory'
 import type { RolCodigo } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -29,21 +30,9 @@ export async function GET(
     const rol = await resolverRolActivo(admin, user.id, organismo.id)
     if (!rol) return NextResponse.json({ ok: false, error: 'Sin acceso a este organismo.' }, { status: 403 })
 
-    const { data: miembros, error } = await admin
-      .from('organismo_miembros')
-      .select('id, organismo_id, usuario_id, rol_codigo, activo, invitado_por, created_at, perfil:perfiles_usuario(nombre_completo, email, avatar_url)')
-      .eq('organismo_id', organismo.id)
-      .eq('activo', true)
-      .order('created_at', { ascending: true })
+    const miembros = await loadActiveOrganismoDirectory(admin, organismo.id)
 
-    if (error) throw error
-
-    const miembrosNormalized = (miembros ?? []).map((m) => ({
-      ...m,
-      perfil: Array.isArray(m.perfil) ? (m.perfil[0] ?? null) : m.perfil,
-    }))
-
-    return NextResponse.json({ ok: true, miembros: miembrosNormalized })
+    return NextResponse.json({ ok: true, miembros })
   } catch (error: unknown) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message : 'Error al obtener miembros.' },

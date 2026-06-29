@@ -8,7 +8,7 @@ import ZoomVideoSdkMeeting from '@/components/ZoomVideoSdkMeeting'
 import { useToast } from '@/components/ToastProvider'
 import { useUserSession } from '@/components/UserSessionProvider'
 import { MANAGER_ROLE_CODES } from '@/lib/access-control'
-import type { MiembroConPerfil, Reunion, ReunionInvitado, ReunionModalidad, ReunionRespuesta } from '@/lib/types'
+import type { MiembroConPerfil, Reunion, ReunionModalidad, ReunionRespuesta } from '@/lib/types'
 
 type MeetingForm = {
   titulo: string
@@ -121,10 +121,16 @@ export default function ReunionesPage() {
       setMiembros([])
       return
     }
-    const response = await fetch(`/api/organismos/${organismoActivo.slug}/miembros`, { cache: 'no-store' })
-    const result = (await response.json()) as { ok?: boolean; miembros?: MiembroConPerfil[] }
-    if (response.ok && result.ok) setMiembros(result.miembros ?? [])
-  }, [canManageMeetings, organismoActivo?.slug])
+    try {
+      const response = await fetch(`/api/organismos/${organismoActivo.slug}/miembros`, { cache: 'no-store' })
+      const result = (await response.json()) as { ok?: boolean; miembros?: MiembroConPerfil[]; error?: string }
+      if (!response.ok || !result.ok) throw new Error(result.error ?? 'No se pudieron cargar los miembros.')
+      setMiembros(result.miembros ?? [])
+    } catch (loadError: unknown) {
+      setMiembros([])
+      toast.error(loadError instanceof Error ? loadError.message : 'No se pudieron cargar los miembros.')
+    }
+  }, [canManageMeetings, organismoActivo?.slug, toast])
 
   useEffect(() => {
     void loadReuniones()
@@ -154,14 +160,25 @@ export default function ReunionesPage() {
 
   const selectedCreateMembers = useMemo(
     () => miembros
-      .filter((miembro) => miembro.activo && miembro.organismo_id === organismoActivo?.id)
+      .filter((miembro) => miembro.activo && miembro.organismo_id === organismoActivo?.id && normalizeEmail(getMemberEmail(miembro)))
       .filter((miembro) => selectedInvites.includes(miembro.usuario_id)),
     [miembros, organismoActivo?.id, selectedInvites]
   )
 
   const miembrosOrganismoActivo = useMemo(
-    () => miembros.filter((miembro) => miembro.activo && miembro.organismo_id === organismoActivo?.id),
+    () => miembros
+      .filter((miembro) => miembro.activo && miembro.organismo_id === organismoActivo?.id)
+      .filter((miembro) => normalizeEmail(getMemberEmail(miembro)))
+      .sort((left, right) => getMemberName(left).localeCompare(getMemberName(right), 'es')),
     [miembros, organismoActivo?.id]
+  )
+
+  const selectedCreateInviteEmails = useMemo(
+    () => Array.from(new Set([
+      ...selectedCreateMembers.map(getMemberEmail).filter(Boolean),
+      ...selectedInviteEmails,
+    ])),
+    [selectedCreateMembers, selectedInviteEmails]
   )
 
   const createInviteMatches = useMemo(() => {
@@ -174,7 +191,6 @@ export default function ReunionesPage() {
         const email = getMemberEmail(miembro)
         return nombre.includes(query) || email.includes(query)
       })
-      .slice(0, 8)
   }, [createInviteQuery, miembrosOrganismoActivo, selectedInvites])
 
   const selectedExistingMembers = useMemo(
@@ -298,7 +314,7 @@ export default function ReunionesPage() {
           fecha_fin: form.fecha_fin ? new Date(form.fecha_fin).toISOString() : null,
           enlace_reunion: form.crear_zoom ? null : form.enlace_reunion,
           invitado_usuario_ids: selectedInvites,
-          invitado_emails: selectedInviteEmails,
+          invitado_emails: selectedCreateInviteEmails,
         }),
       })
       const result = (await response.json()) as { ok?: boolean; error?: string }

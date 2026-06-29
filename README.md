@@ -394,7 +394,8 @@ Permite programar reuniones del organismo, invitar miembros y registrar la confi
 Funciones principales:
 
 - crear reuniones virtuales, presenciales o hibridas;
-- invitar miembros activos del organismo;
+- cargar desde el backend los miembros activos del organismo seleccionado y sus correos;
+- buscar y seleccionar invitados por nombre o correo, conservando su usuario interno para alertas y confirmaciones;
 - agregar nuevos participantes a una reunion programada desde la accion `Participantes`;
 - enviar alertas internas y correos de invitacion;
 - confirmar, rechazar o responder como tentativo;

@@ -229,7 +229,7 @@ export interface OrganismoInvitacion {
 export interface MiembroConPerfil extends OrganismoMiembro {
   perfil?: {
     nombre_completo?: string | null
-    email?: string
+    email: string
     avatar_url?: string | null
   } | null
 }

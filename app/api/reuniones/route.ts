@@ -5,6 +5,7 @@ import { getOrganismoIdFromRequest, getRoleCodeFromRequest, getServerSessionProf
 import { sendAgendaEmail, escapeHtml } from '@/lib/email/resend'
 import type { ReunionModalidad, ReunionRespuesta } from '@/lib/types'
 import { createZoomMeeting, type CreatedZoomMeeting } from '@/lib/zoom'
+import { loadActiveOrganismoDirectory } from '@/lib/organismo-member-directory'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,19 +32,10 @@ type UpdateMeetingBody = {
   invitado_emails?: string[]
 }
 
-type MemberRow = {
-  usuario_id: string
-  perfil?: { nombre_completo?: string | null; email?: string | null } | Array<{ nombre_completo?: string | null; email?: string | null }> | null
-}
-
 type MeetingInviteTarget = {
   usuario_id?: string | null
   email: string | null
   nombre: string
-}
-
-function normalizeProfile(value: MemberRow['perfil']) {
-  return Array.isArray(value) ? (value[0] ?? null) : value
 }
 
 function normalizeEmail(value?: string | null) {
@@ -137,21 +129,13 @@ async function loadInvitedMembers(
 ) {
   if (invitadoIds.length === 0) return []
 
-  const { data: members, error } = await admin
-    .from('organismo_miembros')
-    .select('usuario_id, perfil:perfiles_usuario(nombre_completo, email)')
-    .eq('organismo_id', organismoId)
-    .eq('activo', true)
-    .in('usuario_id', invitadoIds)
+  const members = await loadActiveOrganismoDirectory(admin, organismoId, invitadoIds)
 
-  if (error) throw error
-
-  return ((members ?? []) as MemberRow[]).map((member) => {
-    const memberProfile = normalizeProfile(member.perfil)
+  return members.map((member) => {
     return {
       usuario_id: member.usuario_id,
-      email: memberProfile?.email?.trim().toLowerCase() ?? null,
-      nombre: memberProfile?.nombre_completo?.trim() || memberProfile?.email?.split('@')[0] || 'Usuario',
+      email: member.perfil.email || null,
+      nombre: member.perfil.nombre_completo?.trim() || member.perfil.email.split('@')[0] || 'Usuario',
     }
   }).filter((member) => member.email)
 }
@@ -257,7 +241,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: false, error: 'Falta el organismo activo.' }, { status: 400 })
     }
 
-    let query = admin
+    const query = admin
       .from('reuniones')
       .select('*, invitados:reunion_invitados(id, reunion_id, usuario_id, email, nombre, estado_respuesta, respondido_at, invitado_at)')
       .eq('organismo_id', organismoId)
