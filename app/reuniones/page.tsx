@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarClock, CheckCircle2, Link as LinkIcon, Loader2, Mail, MapPin, Plus, RefreshCw, Send, Users, Video, XCircle } from 'lucide-react'
 import PageHeader from '@/components/ui/PageHeader'
 import UserAvatar from '@/components/ui/UserAvatar'
-import ZoomVideoSdkMeeting from '@/components/ZoomVideoSdkMeeting'
 import { useToast } from '@/components/ToastProvider'
 import { useUserSession } from '@/components/UserSessionProvider'
 import { MANAGER_ROLE_CODES } from '@/lib/access-control'
@@ -18,7 +17,7 @@ type MeetingForm = {
   modalidad: ReunionModalidad
   enlace_reunion: string
   ubicacion: string
-  crear_zoom: boolean
+  crear_google_meet: boolean
 }
 
 const EMPTY_FORM: MeetingForm = {
@@ -29,7 +28,7 @@ const EMPTY_FORM: MeetingForm = {
   modalidad: 'virtual',
   enlace_reunion: '',
   ubicacion: '',
-  crear_zoom: true,
+  crear_google_meet: true,
 }
 
 const RESPONSE_LABELS: Record<ReunionRespuesta, string> = {
@@ -94,7 +93,6 @@ export default function ReunionesPage() {
   const [inviteSaving, setInviteSaving] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [error, setError] = useState('')
-  const [videoMeeting, setVideoMeeting] = useState<Reunion | null>(null)
   const [inviteMeeting, setInviteMeeting] = useState<Reunion | null>(null)
   const [selectedInviteMembers, setSelectedInviteMembers] = useState<string[]>([])
   const [selectedExistingInviteEmails, setSelectedExistingInviteEmails] = useState<string[]>([])
@@ -102,8 +100,8 @@ export default function ReunionesPage() {
 
   const canManageMeetings = !!rolEnOrganismo && MANAGER_ROLE_CODES.includes(rolEnOrganismo as (typeof MANAGER_ROLE_CODES)[number])
 
-  const loadReuniones = useCallback(async () => {
-    setLoading(true)
+  const loadReuniones = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     try {
       const response = await fetch('/api/reuniones', { cache: 'no-store' })
       const result = (await response.json()) as { ok?: boolean; reuniones?: Reunion[]; error?: string }
@@ -112,7 +110,7 @@ export default function ReunionesPage() {
     } catch (loadError: unknown) {
       toast.error(loadError instanceof Error ? loadError.message : 'No se pudieron cargar las reuniones.')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [toast])
 
@@ -134,6 +132,21 @@ export default function ReunionesPage() {
 
   useEffect(() => {
     void loadReuniones()
+  }, [loadReuniones])
+
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') void loadReuniones(true)
+    }
+    const intervalId = window.setInterval(refreshIfVisible, 30_000)
+    window.addEventListener('focus', refreshIfVisible)
+    document.addEventListener('visibilitychange', refreshIfVisible)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', refreshIfVisible)
+      document.removeEventListener('visibilitychange', refreshIfVisible)
+    }
   }, [loadReuniones])
 
   useEffect(() => {
@@ -312,7 +325,7 @@ export default function ReunionesPage() {
           ...form,
           fecha_inicio: new Date(form.fecha_inicio).toISOString(),
           fecha_fin: form.fecha_fin ? new Date(form.fecha_fin).toISOString() : null,
-          enlace_reunion: form.crear_zoom ? null : form.enlace_reunion,
+          enlace_reunion: form.crear_google_meet ? null : form.enlace_reunion,
           invitado_usuario_ids: selectedInvites,
           invitado_emails: selectedCreateInviteEmails,
         }),
@@ -363,6 +376,21 @@ export default function ReunionesPage() {
     }
   }
 
+  const resendMeetingInvites = async (reunionId: string) => {
+    try {
+      const response = await fetch('/api/reuniones', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reunionId, action: 'resend_invites' }),
+      })
+      const result = (await response.json()) as { ok?: boolean; error?: string; sent?: number }
+      if (!response.ok || !result.ok) throw new Error(result.error ?? 'No se pudieron reenviar las invitaciones.')
+      toast.success(`Invitaciones reenviadas: ${result.sent ?? 0}.`)
+    } catch (resendError) {
+      toast.error(resendError instanceof Error ? resendError.message : 'No se pudieron reenviar las invitaciones.')
+    }
+  }
+
   const addParticipantsToMeeting = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!inviteMeeting) return
@@ -400,7 +428,7 @@ export default function ReunionesPage() {
     const invitados = reunion.invitados ?? []
     const myInvitation = invitados.find((invitado) => invitado.usuario_id === profile?.id)
     const confirmados = invitados.filter((invitado) => invitado.estado_respuesta === 'confirmado').length
-    const canOpenVideoSdk = reunion.estado === 'programada' && (reunion.modalidad === 'virtual' || reunion.modalidad === 'hibrida')
+    const canOpenGoogleMeet = reunion.estado === 'programada' && !!reunion.enlace_reunion && (reunion.modalidad === 'virtual' || reunion.modalidad === 'hibrida')
 
     return (
       <article className="surface-panel overflow-hidden p-5">
@@ -411,9 +439,9 @@ export default function ReunionesPage() {
                 {reunion.estado}
               </span>
               <span className="badge border-slate-200 bg-slate-100 text-slate-600">{reunion.modalidad}</span>
-              {reunion.proveedor_reunion === 'zoom' && (
+              {reunion.proveedor_reunion === 'google_meet' && (
                 <span className="badge border-sky-200 bg-sky-50 text-sky-700">
-                  Zoom
+                  Google Meet
                 </span>
               )}
             </div>
@@ -433,15 +461,16 @@ export default function ReunionesPage() {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-            {canOpenVideoSdk && (
-              <button
-                type="button"
-                onClick={() => setVideoMeeting(reunion)}
+            {canOpenGoogleMeet && (
+              <a
+                href={reunion.enlace_reunion ?? '#'}
+                target="_blank"
+                rel="noreferrer"
                 className="action-btn-primary justify-center"
               >
                 <Video size={15} />
-                Entrar en la app
-              </button>
+                Entrar en Google Meet
+              </a>
             )}
             {canManageMeetings && reunion.estado === 'programada' && (
               <>
@@ -452,6 +481,14 @@ export default function ReunionesPage() {
                 >
                   <Users size={15} />
                   Participantes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void resendMeetingInvites(reunion.id)}
+                  className="action-btn justify-center"
+                >
+                  <Mail size={15} />
+                  Reenviar invitaciones
                 </button>
                 <button
                   type="button"
@@ -572,8 +609,8 @@ export default function ReunionesPage() {
                   value={form.enlace_reunion}
                   onChange={(event) => setForm((current) => ({ ...current, enlace_reunion: event.target.value }))}
                   className="input-shell"
-                  placeholder={form.crear_zoom ? 'Se generara automaticamente con Zoom' : 'https://zoom.us/j/...'}
-                  disabled={form.crear_zoom && (form.modalidad === 'virtual' || form.modalidad === 'hibrida')}
+                  placeholder={form.crear_google_meet ? 'Se generara automaticamente con Google Meet' : 'https://meet.google.com/...'}
+                  disabled={form.crear_google_meet && (form.modalidad === 'virtual' || form.modalidad === 'hibrida')}
                 />
               </div>
               <div>
@@ -587,17 +624,17 @@ export default function ReunionesPage() {
                 <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-[22px] border border-white/80 bg-white/60 px-4 py-3">
                   <input
                     type="checkbox"
-                    checked={form.crear_zoom}
-                    onChange={(event) => setForm((current) => ({ ...current, crear_zoom: event.target.checked }))}
+                    checked={form.crear_google_meet}
+                    onChange={(event) => setForm((current) => ({ ...current, crear_google_meet: event.target.checked }))}
                     className="mt-1 h-4 w-4 rounded border-slate-300 accent-teal-600"
                   />
                   <span>
                     <span className="flex items-center gap-2 text-sm font-semibold text-slate-900">
                       <Video size={15} className="text-teal-700" />
-                      Crear enlace automaticamente con Zoom
+                      Crear enlace automaticamente con Google Meet
                     </span>
                     <span className="mt-1 block text-xs leading-5 text-slate-500">
-                      La agenda programara la reunion en Zoom y usara el enlace generado para invitados, alertas y correos.
+                      La agenda creara un espacio en Google Meet y usara el enlace generado para invitados, alertas y correos.
                     </span>
                   </span>
                 </label>
@@ -747,10 +784,6 @@ export default function ReunionesPage() {
         <div className="space-y-4">
           {reuniones.map((reunion) => <MeetingCard key={reunion.id} reunion={reunion} />)}
         </div>
-      )}
-
-      {videoMeeting && (
-        <ZoomVideoSdkMeeting reunion={videoMeeting} onClose={() => setVideoMeeting(null)} />
       )}
 
       {inviteMeeting && canManageMeetings && (

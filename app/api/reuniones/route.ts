@@ -4,8 +4,9 @@ import { MANAGER_ROLE_CODES } from '@/lib/access-control'
 import { getOrganismoIdFromRequest, getRoleCodeFromRequest, getServerSessionProfile } from '@/lib/server-access'
 import { sendAgendaEmail, escapeHtml } from '@/lib/email/resend'
 import type { ReunionModalidad, ReunionRespuesta } from '@/lib/types'
-import { createZoomMeeting, type CreatedZoomMeeting } from '@/lib/zoom'
+import { createGoogleMeetSpace, endActiveGoogleMeetConference, GoogleMeetIntegrationError, type CreatedGoogleMeetSpace } from '@/lib/google-meet'
 import { loadActiveOrganismoDirectory } from '@/lib/organismo-member-directory'
+import { getPublicAppOrigin } from '@/lib/app-url'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,7 @@ type CreateMeetingBody = {
   ubicacion?: string | null
   invitado_usuario_ids?: string[]
   invitado_emails?: string[]
-  crear_zoom?: boolean
+  crear_google_meet?: boolean
 }
 
 type UpdateMeetingBody = {
@@ -27,7 +28,7 @@ type UpdateMeetingBody = {
   invitadoId?: number
   respuesta?: ReunionRespuesta
   estado?: 'programada' | 'cancelada' | 'finalizada'
-  action?: 'add_invites'
+  action?: 'add_invites' | 'resend_invites'
   invitado_usuario_ids?: string[]
   invitado_emails?: string[]
 }
@@ -38,15 +39,13 @@ type MeetingInviteTarget = {
   nombre: string
 }
 
+type MeetingNotificationTarget = MeetingInviteTarget & {
+  token_confirmacion: string
+}
+
 function normalizeEmail(value?: string | null) {
   const email = value?.trim().toLowerCase() ?? ''
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
-}
-
-function getBaseUrl(request: Request) {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim()
-  if (configured) return configured.replace(/\/$/, '')
-  return `${new URL(request.url).protocol}//${request.headers.get('host')}`
 }
 
 function formatMeetingDate(value: string) {
@@ -57,17 +56,12 @@ function formatMeetingDate(value: string) {
   })
 }
 
-function minutesBetween(start: Date, end: Date | null) {
-  if (!end || end <= start) return 60
-  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 60_000))
-}
-
-function isMissingZoomColumnsError(error: { code?: string; message?: string } | null | undefined) {
+function isMissingGoogleMeetColumnsError(error: { code?: string; message?: string } | null | undefined) {
   const message = error?.message ?? ''
   return (
     error?.code === '42703' ||
     error?.code === 'PGRST204' ||
-    /proveedor_reunion|zoom_(meeting_id|meeting_uuid|start_url|password|host_id)|column .* does not exist|schema cache/i.test(message)
+    /proveedor_reunion|google_meet_(space_name|code)|column .* does not exist|schema cache/i.test(message)
   )
 }
 
@@ -81,13 +75,13 @@ function meetingEmailHtml(params: {
   modalidad: string
   enlace?: string | null
   ubicacion?: string | null
-  appUrl: string
+  confirmationUrl: string
 }) {
   const locationLine = params.modalidad === 'virtual'
-    ? params.enlace
+    ? 'El enlace de acceso estara disponible despues de confirmar.'
     : params.modalidad === 'presencial'
       ? params.ubicacion
-      : [params.enlace, params.ubicacion].filter(Boolean).join(' | ')
+      : [params.ubicacion, 'El enlace virtual estara disponible despues de confirmar.'].filter(Boolean).join(' | ')
 
   return `
     <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6">
@@ -102,11 +96,10 @@ function meetingEmailHtml(params: {
         ${locationLine ? `<p style="margin:4px 0 0"><strong>Acceso:</strong> ${escapeHtml(locationLine)}</p>` : ''}
       </div>
       <div style="margin:24px 0">
-        <a href="${params.appUrl}/reuniones" style="background:#0d9488;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">
+        <a href="${escapeHtml(params.confirmationUrl)}" style="background:#0d9488;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600">
           Confirmar participacion
         </a>
       </div>
-      ${params.enlace ? `<p style="font-size:13px;color:#64748b">Enlace de reunion: ${escapeHtml(params.enlace)}</p>` : ''}
     </div>
   `
 }
@@ -175,32 +168,34 @@ async function notifyMeetingInvites(params: {
   organismoNombre: string
   inviterName: string
   appUrl: string
-  invitados: MeetingInviteTarget[]
+  invitados: MeetingNotificationTarget[]
 }) {
-  const emailHtml = meetingEmailHtml({
-    organismoNombre: params.organismoNombre,
-    inviterName: params.inviterName,
-    titulo: params.reunion.titulo,
-    descripcion: params.reunion.descripcion,
-    fechaInicio: params.reunion.fecha_inicio,
-    fechaFin: params.reunion.fecha_fin ?? null,
-    modalidad: params.reunion.modalidad,
-    enlace: params.reunion.enlace_reunion,
-    ubicacion: params.reunion.ubicacion,
-    appUrl: params.appUrl,
-  })
-
   for (const invitado of params.invitados) {
     const email = invitado.email ?? ''
     const recipientKey = invitado.usuario_id ?? email
     if (!recipientKey) continue
+
+    const confirmationUrl = new URL('/reuniones/confirmar', params.appUrl)
+    confirmationUrl.searchParams.set('token', invitado.token_confirmacion)
+    const emailHtml = meetingEmailHtml({
+      organismoNombre: params.organismoNombre,
+      inviterName: params.inviterName,
+      titulo: params.reunion.titulo,
+      descripcion: params.reunion.descripcion,
+      fechaInicio: params.reunion.fecha_inicio,
+      fechaFin: params.reunion.fecha_fin ?? null,
+      modalidad: params.reunion.modalidad,
+      enlace: params.reunion.enlace_reunion,
+      ubicacion: params.reunion.ubicacion,
+      confirmationUrl: confirmationUrl.toString(),
+    })
 
     const emailResult = email
       ? await sendAgendaEmail({
           to: email,
           subject: `Reunion: ${params.reunion.titulo}`,
           html: emailHtml,
-          text: `${params.inviterName} te invita a la reunion "${params.reunion.titulo}" de ${params.organismoNombre}. Confirma tu participacion en ${params.appUrl}/reuniones. Enlace: ${params.reunion.enlace_reunion ?? 'sin enlace'}`,
+          text: `${params.inviterName} te invita a la reunion "${params.reunion.titulo}" de ${params.organismoNombre}. Confirma tu participacion en ${confirmationUrl.toString()}.`,
         })
       : { ok: false as const, error: 'El invitado no tiene email.' }
 
@@ -289,7 +284,7 @@ export async function POST(request: Request) {
     const modalidad = body.modalidad ?? 'virtual'
     const invitadoIds = Array.from(new Set((body.invitado_usuario_ids ?? []).filter(Boolean)))
     const invitadoEmails = Array.from(new Set((body.invitado_emails ?? []).map(normalizeEmail).filter(Boolean)))
-    const shouldCreateZoom = !!body.crear_zoom && (modalidad === 'virtual' || modalidad === 'hibrida')
+    const shouldCreateGoogleMeet = !!body.crear_google_meet && (modalidad === 'virtual' || modalidad === 'hibrida')
 
     if (!titulo) return NextResponse.json({ ok: false, error: 'El titulo es obligatorio.' }, { status: 400 })
     if (!fechaInicio || Number.isNaN(fechaInicio.getTime())) {
@@ -298,8 +293,8 @@ export async function POST(request: Request) {
     if (fechaFin && fechaFin <= fechaInicio) {
       return NextResponse.json({ ok: false, error: 'La fecha de fin debe ser posterior al inicio.' }, { status: 400 })
     }
-    if ((modalidad === 'virtual' || modalidad === 'hibrida') && !body.enlace_reunion?.trim() && !shouldCreateZoom) {
-      return NextResponse.json({ ok: false, error: 'Escribe un enlace o activa la creacion automatica con Zoom.' }, { status: 400 })
+    if ((modalidad === 'virtual' || modalidad === 'hibrida') && !body.enlace_reunion?.trim() && !shouldCreateGoogleMeet) {
+      return NextResponse.json({ ok: false, error: 'Escribe un enlace o activa la creacion automatica con Google Meet.' }, { status: 400 })
     }
     if (invitadoIds.length === 0 && invitadoEmails.length === 0) {
       return NextResponse.json({ ok: false, error: 'Selecciona al menos un invitado.' }, { status: 400 })
@@ -314,17 +309,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'No se encontraron invitados validos.' }, { status: 400 })
     }
 
-    let zoomMeeting: CreatedZoomMeeting | null = null
-    if (shouldCreateZoom) {
-      zoomMeeting = await createZoomMeeting({
-        topic: titulo,
-        agenda: body.descripcion?.trim() || null,
-        startTime: fechaInicio.toISOString(),
-        durationMinutes: minutesBetween(fechaInicio, fechaFin),
-      })
+    let googleMeetSpace: CreatedGoogleMeetSpace | null = null
+    if (shouldCreateGoogleMeet) {
+      googleMeetSpace = await createGoogleMeetSpace()
     }
 
-    const meetingLink = zoomMeeting?.joinUrl ?? body.enlace_reunion?.trim() ?? null
+    const meetingLink = googleMeetSpace?.meetingUri ?? body.enlace_reunion?.trim() ?? null
     const baseMeetingInsert = {
       organismo_id: organismoId,
       titulo,
@@ -336,22 +326,19 @@ export async function POST(request: Request) {
       ubicacion: body.ubicacion?.trim() || null,
       creada_por_usuario_id: user.id,
     }
-    const zoomMeetingInsert = {
+    const googleMeetInsert = {
       ...baseMeetingInsert,
-      proveedor_reunion: zoomMeeting ? 'zoom' : meetingLink ? 'manual' : null,
-      zoom_meeting_id: zoomMeeting?.id ?? null,
-      zoom_meeting_uuid: zoomMeeting?.uuid ?? null,
-      zoom_start_url: zoomMeeting?.startUrl ?? null,
-      zoom_password: zoomMeeting?.password ?? null,
-      zoom_host_id: zoomMeeting?.hostId ?? null,
+      proveedor_reunion: googleMeetSpace ? 'google_meet' : meetingLink ? 'manual' : null,
+      google_meet_space_name: googleMeetSpace?.name ?? null,
+      google_meet_code: googleMeetSpace?.meetingCode ?? null,
     }
 
     const insertResult = await admin
       .from('reuniones')
-      .insert(zoomMeetingInsert as never)
+      .insert(googleMeetInsert as never)
       .select('id, titulo, descripcion, fecha_inicio, fecha_fin, modalidad, enlace_reunion, ubicacion')
       .single()
-    const fallbackInsert = insertResult.error && isMissingZoomColumnsError(insertResult.error)
+    const fallbackInsert = insertResult.error && isMissingGoogleMeetColumnsError(insertResult.error)
       ? await admin
           .from('reuniones')
           .insert(baseMeetingInsert)
@@ -370,11 +357,11 @@ export async function POST(request: Request) {
         email: member.email,
         nombre: member.nombre,
       })))
-      .select('id, usuario_id, email, nombre')
+      .select('id, usuario_id, email, nombre, token_confirmacion')
 
     if (invitadosError) throw invitadosError
 
-    const appUrl = getBaseUrl(request)
+    const appUrl = getPublicAppOrigin(request)
     const inviterName = profile?.nombre_completo?.trim() || profile?.email || user.email || 'Un usuario'
     await notifyMeetingInvites({
       admin,
@@ -396,13 +383,23 @@ export async function POST(request: Request) {
         usuario_id: invitado.usuario_id as string | null,
         email: invitado.email ?? null,
         nombre: invitado.nombre ?? 'Usuario',
+        token_confirmacion: invitado.token_confirmacion,
       })),
     })
 
     return NextResponse.json({ ok: true, reunionId: reunion.id })
   } catch (error: unknown) {
+    if (error instanceof GoogleMeetIntegrationError) {
+      console.error(`[${error.code}] ${error.message}`)
+      return NextResponse.json(
+        { ok: false, error: error.message, code: error.code },
+        { status: error.status }
+      )
+    }
+
+    console.error('Meeting creation failed:', error)
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : 'No se pudo crear la reunion.' },
+      { ok: false, error: 'No se pudo crear la reunion.' },
       { status: 500 }
     )
   }
@@ -427,14 +424,91 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ ok: false, error: 'Respuesta invalida.' }, { status: 400 })
       }
 
-      const { error } = await admin
+      const { data: invitation, error: invitationError } = await admin
+        .from('reunion_invitados')
+        .select('id, reunion_id')
+        .eq('id', body.invitadoId)
+        .eq('usuario_id', user.id)
+        .maybeSingle()
+
+      if (invitationError) throw invitationError
+      if (!invitation) {
+        return NextResponse.json({ ok: false, error: 'La invitacion no pertenece a este usuario.' }, { status: 404 })
+      }
+
+      const { data: invitationMeeting, error: invitationMeetingError } = await admin
+        .from('reuniones')
+        .select('id, estado')
+        .eq('id', invitation.reunion_id)
+        .eq('organismo_id', organismoId)
+        .maybeSingle()
+
+      if (invitationMeetingError) throw invitationMeetingError
+      if (!invitationMeeting) {
+        return NextResponse.json({ ok: false, error: 'La invitacion no pertenece al organismo activo.' }, { status: 403 })
+      }
+      if (invitationMeeting.estado !== 'programada') {
+        return NextResponse.json({ ok: false, error: 'Esta reunion ya no admite confirmaciones.' }, { status: 409 })
+      }
+
+      const { data: updated, error } = await admin
         .from('reunion_invitados')
         .update({ estado_respuesta: body.respuesta, respondido_at: new Date().toISOString() })
         .eq('id', body.invitadoId)
         .eq('usuario_id', user.id)
+        .select('id')
+        .maybeSingle()
 
       if (error) throw error
+      if (!updated) return NextResponse.json({ ok: false, error: 'No se pudo actualizar la invitacion.' }, { status: 409 })
       return NextResponse.json({ ok: true })
+    }
+
+    if (body.reunionId && body.action === 'resend_invites') {
+      if (!MANAGER_ROLE_CODES.includes(activeRoleCode as (typeof MANAGER_ROLE_CODES)[number])) {
+        return NextResponse.json({ ok: false, error: 'Sin permiso para reenviar invitaciones.' }, { status: 403 })
+      }
+
+      const { data: reunion, error: reunionError } = await admin
+        .from('reuniones')
+        .select('id, titulo, descripcion, fecha_inicio, fecha_fin, modalidad, enlace_reunion, ubicacion, estado')
+        .eq('id', body.reunionId)
+        .eq('organismo_id', organismoId)
+        .maybeSingle()
+
+      if (reunionError) throw reunionError
+      if (!reunion) return NextResponse.json({ ok: false, error: 'Reunion no encontrada.' }, { status: 404 })
+      if (reunion.estado !== 'programada') {
+        return NextResponse.json({ ok: false, error: 'Solo se pueden reenviar invitaciones de reuniones programadas.' }, { status: 409 })
+      }
+
+      const { data: invitados, error: invitadosError } = await admin
+        .from('reunion_invitados')
+        .select('usuario_id, email, nombre, token_confirmacion')
+        .eq('reunion_id', reunion.id)
+
+      if (invitadosError) throw invitadosError
+      if (!invitados?.length) {
+        return NextResponse.json({ ok: false, error: 'La reunion no tiene invitados.' }, { status: 400 })
+      }
+
+      const organismo = await loadOrganismo(admin, organismoId)
+      await notifyMeetingInvites({
+        admin,
+        organismoId,
+        reunion,
+        organismoNombre: organismo?.nombre ?? 'el organismo',
+        inviterName: profile?.nombre_completo?.trim() || profile?.email || user.email || 'Un usuario',
+        appUrl: getPublicAppOrigin(request),
+        invitados: invitados.map((invitado) => ({
+          usuario_id: invitado.usuario_id,
+          email: invitado.email,
+          nombre: invitado.nombre ?? 'Usuario',
+          token_confirmacion: invitado.token_confirmacion,
+        })),
+      })
+
+      return NextResponse.json({ ok: true, sent: invitados.length })
     }
 
     if (body.reunionId && body.action === 'add_invites') {
@@ -486,7 +560,7 @@ export async function PATCH(request: Request) {
           email: member.email,
           nombre: member.nombre,
         })))
-        .select('id, usuario_id, email, nombre')
+        .select('id, usuario_id, email, nombre, token_confirmacion')
 
       if (insertError) throw insertError
 
@@ -507,11 +581,12 @@ export async function PATCH(request: Request) {
         },
         organismoNombre: organismo?.nombre ?? 'el organismo',
         inviterName,
-        appUrl: getBaseUrl(request),
+        appUrl: getPublicAppOrigin(request),
         invitados: (nuevosInvitados ?? []).map((invitado) => ({
           usuario_id: invitado.usuario_id as string | null,
           email: invitado.email ?? null,
           nombre: invitado.nombre ?? 'Usuario',
+          token_confirmacion: invitado.token_confirmacion,
         })),
       })
 
@@ -523,13 +598,34 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ ok: false, error: 'Sin permiso para actualizar la reunion.' }, { status: 403 })
       }
 
-      const { error } = await admin
+      const { data: existingMeeting, error: existingMeetingError } = await admin
+        .from('reuniones')
+        .select('id, proveedor_reunion, google_meet_space_name')
+        .eq('id', body.reunionId)
+        .eq('organismo_id', organismoId)
+        .maybeSingle()
+
+      if (existingMeetingError) throw existingMeetingError
+      if (!existingMeeting) return NextResponse.json({ ok: false, error: 'Reunion no encontrada.' }, { status: 404 })
+
+      if (
+        (body.estado === 'cancelada' || body.estado === 'finalizada') &&
+        existingMeeting.proveedor_reunion === 'google_meet' &&
+        existingMeeting.google_meet_space_name
+      ) {
+        await endActiveGoogleMeetConference(existingMeeting.google_meet_space_name)
+      }
+
+      const { data: updated, error } = await admin
         .from('reuniones')
         .update({ estado: body.estado })
         .eq('id', body.reunionId)
         .eq('organismo_id', organismoId)
+        .select('id')
+        .maybeSingle()
 
       if (error) throw error
+      if (!updated) return NextResponse.json({ ok: false, error: 'No se pudo actualizar la reunion.' }, { status: 409 })
       return NextResponse.json({ ok: true })
     }
 

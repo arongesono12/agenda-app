@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
 import { PUBLIC_REGISTRATION_ROLES, REGISTRATION_DEPARTAMENTOS } from '@/lib/registration-options'
+import { LEGAL_VERSION } from '@/lib/legal-config'
 import { supabase } from '@/lib/supabase'
 
 type PublicRole = {
@@ -201,6 +202,8 @@ export default function RegisterForm({
           departamento,
           organismoId: isSegesaEmail ? segesaOrganismo?.id : organismoId || undefined,
           invitacionToken,
+          acceptedLegal: accepted,
+          legalVersion: LEGAL_VERSION,
         }),
       })
 
@@ -494,7 +497,10 @@ export default function RegisterForm({
                   className="mt-1 h-4 w-4 rounded border-slate-300 accent-teal-600"
                 />
                 <span className="text-xs leading-5 text-slate-600">
-                  Confirmo que los datos son correctos y entiendo que el acceso queda sujeto a las politicas internas del sistema.
+                  Confirmo que los datos son correctos y acepto los{' '}
+                  <Link href="/terminos" target="_blank" className="font-semibold text-teal-700 hover:text-teal-900">Términos de uso</Link>
+                  {' '}y la{' '}
+                  <Link href="/privacidad" target="_blank" className="font-semibold text-teal-700 hover:text-teal-900">Política de privacidad</Link>.
                 </span>
               </label>
 

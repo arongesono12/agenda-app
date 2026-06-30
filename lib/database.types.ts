@@ -97,11 +97,8 @@ export type Database = {
           enlace_reunion: string | null
           ubicacion: string | null
           proveedor_reunion: string | null
-          zoom_meeting_id: string | null
-          zoom_meeting_uuid: string | null
-          zoom_start_url: string | null
-          zoom_password: string | null
-          zoom_host_id: string | null
+          google_meet_space_name: string | null
+          google_meet_code: string | null
           estado: string
           creada_por_usuario_id: string | null
           created_at: string
@@ -118,11 +115,8 @@ export type Database = {
           enlace_reunion?: string | null
           ubicacion?: string | null
           proveedor_reunion?: string | null
-          zoom_meeting_id?: string | null
-          zoom_meeting_uuid?: string | null
-          zoom_start_url?: string | null
-          zoom_password?: string | null
-          zoom_host_id?: string | null
+          google_meet_space_name?: string | null
+          google_meet_code?: string | null
           estado?: string
           creada_por_usuario_id?: string | null
           created_at?: string

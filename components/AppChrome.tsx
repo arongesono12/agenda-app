@@ -11,7 +11,7 @@ import AssignmentAlertToaster from '@/components/AssignmentAlertToaster'
 export default function AppChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const AUTH_ROUTES = ['/login', '/registro', '/recuperar-password', '/actualizar-password']
-  const PUBLIC_FULL_PAGE_ROUTES = ['/', '/planes']
+  const PUBLIC_FULL_PAGE_ROUTES = ['/', '/planes', '/privacidad', '/terminos', '/reuniones/confirmar']
   const isAuthRoute = AUTH_ROUTES.includes(pathname)
   const isPublicFullPageRoute = PUBLIC_FULL_PAGE_ROUTES.includes(pathname)
 

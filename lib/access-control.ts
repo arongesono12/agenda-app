@@ -17,7 +17,7 @@ const COMMON_AUTH_ROUTES = ['/perfil', '/configuracion', '/forbidden']
 const ORGANISMO_ROUTES = ['/seleccionar-organismo', '/organismos']
 
 // Rutas públicas (sin auth)
-export const PUBLIC_ROUTES = ['/', '/planes']
+export const PUBLIC_ROUTES = ['/', '/planes', '/privacidad', '/terminos']
 
 export function getLandingPathForRole(roleCode: string) {
   const normalized = roleCode.trim().toLowerCase()

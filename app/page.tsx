@@ -445,6 +445,10 @@ export default function LandingPage() {
           </div>
           <div className="mx-auto mt-5 max-w-[1560px] border-t border-white/70 pt-4 text-center lg:px-8">
             <p className="text-xs text-slate-500">Copyright 2026 SEGESA. Plataforma interna de control operativo.</p>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-xs">
+              <Link href="/privacidad" className="font-semibold text-slate-500 transition-colors hover:text-teal-700">Política de privacidad</Link>
+              <Link href="/terminos" className="font-semibold text-slate-500 transition-colors hover:text-teal-700">Términos y condiciones</Link>
+            </div>
           </div>
         </footer>
       </div>

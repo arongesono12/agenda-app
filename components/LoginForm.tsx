@@ -213,6 +213,11 @@ export default function LoginForm({ nextPath = '/' }: { nextPath?: string }) {
             </p>
           </div>
 
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-xs text-slate-500">
+            <Link href="/privacidad" className="font-semibold transition-colors hover:text-teal-700">Privacidad</Link>
+            <Link href="/terminos" className="font-semibold transition-colors hover:text-teal-700">Términos de uso</Link>
+          </div>
+
         </div>
       </section>
 

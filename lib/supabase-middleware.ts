@@ -94,6 +94,8 @@ export async function updateSession(request: NextRequest) {
   const isPasswordRecoveryRoute = pathname === '/recuperar-password' || pathname === '/actualizar-password'
   const isPasswordRecoveryCallback = pathname === '/auth/callback'
   const isPasswordRecoveryApi = pathname === '/api/auth/recovery' || pathname === '/api/auth/password'
+  const isMeetingConfirmationRoute = pathname === '/reuniones/confirmar'
+  const isMeetingConfirmationApi = pathname === '/api/reuniones/confirmar'
   const isRegisterApi = pathname === '/api/register'
   const isBootstrapApi = pathname === '/api/bootstrap/agenda-users'
   const isBillingWebhook = pathname === '/api/billing/webhook'
@@ -104,6 +106,8 @@ export async function updateSession(request: NextRequest) {
     !isPasswordRecoveryRoute &&
     !isPasswordRecoveryCallback &&
     !isPasswordRecoveryApi &&
+    !isMeetingConfirmationRoute &&
+    !isMeetingConfirmationApi &&
     !isRegisterApi &&
     !isBootstrapApi &&
     !isBillingWebhook &&

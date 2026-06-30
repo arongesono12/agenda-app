@@ -130,5 +130,3 @@ export async function POST(request: Request) {
     )
   }
 }
-
-export { SEGESA_ORGANISMO_ID }

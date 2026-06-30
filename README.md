@@ -94,9 +94,19 @@ En produccion, `NEXT_PUBLIC_APP_URL` debe contener el origen HTTPS publico, sin 
 | Responsable | `/responsable` | Consulta de carga individual por responsable |
 | Historial | `/historial` | Auditoria y bitacora de cambios |
 | Catalogos | `/catalogos` | Gestion de departamentos, responsables y valores base |
-| Reuniones | `/reuniones` | Programacion de reuniones del organismo con invitaciones y enlaces Zoom |
+| Reuniones | `/reuniones` | Programacion de reuniones del organismo con invitaciones y enlaces Google Meet |
 | Perfil | `/perfil` | Datos personales, avatar y contrasena |
 | Configuracion | `/configuracion` | Tema visual y preferencias personales |
+| Privacidad | `/privacidad` | Información pública sobre tratamiento de datos y derechos |
+| Términos | `/terminos` | Condiciones públicas de acceso y uso del servicio |
+
+## Documentos legales
+
+Las rutas `/privacidad` y `/terminos` son públicas y están enlazadas desde login, registro y footer. El registro exige aceptar ambos documentos y el backend guarda en los metadatos de Supabase Auth la versión y fecha aceptadas.
+
+La identidad mostrada se configura mediante `LEGAL_ENTITY_NAME`, `LEGAL_PRODUCT_NAME`, `LEGAL_ENTITY_ADDRESS`, `LEGAL_PRIVACY_EMAIL` y `LEGAL_SUPPORT_EMAIL`. Antes de producción se deben verificar la razón social, domicilio y existencia de los buzones publicados, y obtener revisión de un profesional cualificado en Guinea Ecuatorial.
+
+La Política de Privacidad describe el modelo multi-organismo, los datos tratados, cookies técnicas, proveedores, transferencias internacionales, conservación, seguridad y derechos de información, acceso, rectificación, cancelación y oposición conforme a la Ley Núm. 1/2016 de Protección de Datos Personales.
 
 ## Agenda diaria
 
@@ -397,39 +407,40 @@ Funciones principales:
 - cargar desde el backend los miembros activos del organismo seleccionado y sus correos;
 - buscar y seleccionar invitados por nombre o correo, conservando su usuario interno para alertas y confirmaciones;
 - agregar nuevos participantes a una reunion programada desde la accion `Participantes`;
+- reenviar convocatorias existentes con enlaces publicos de confirmacion renovados;
 - enviar alertas internas y correos de invitacion;
 - confirmar, rechazar o responder como tentativo;
+- permitir que invitados externos respondan sin iniciar sesion mediante un enlace individual firmado con `token_confirmacion`;
 - cancelar reuniones programadas;
 - abrir el enlace de acceso desde la tarjeta de reunion.
 
 Para reuniones virtuales o hibridas, el usuario puede:
 
 - escribir manualmente un enlace externo;
-- activar `Crear enlace automaticamente con Zoom`.
+- activar `Crear enlace automaticamente con Google Meet`.
 
-Cuando se activa Zoom, la API `/api/reuniones` crea la reunion en Zoom mediante Server-to-Server OAuth y guarda el `join_url` como enlace visible para invitados, alertas y correos. Para esto deben configurarse `ZOOM_ACCOUNT_ID`, `ZOOM_CLIENT_ID`, `ZOOM_CLIENT_SECRET` y opcionalmente `ZOOM_USER_ID`.
+Cuando se activa Google Meet, la API `/api/reuniones` crea un espacio mediante `spaces.create` y guarda su `meetingUri` como enlace visible para invitados confirmados, alertas y correos. La fecha, duracion, descripcion y lista de participantes continúan gestionadas por la agenda.
 
-### Sala integrada con Zoom Video SDK
+Google Meet REST API requiere OAuth 2.0 con el scope `https://www.googleapis.com/auth/meetings.space.created`. Una API key puede identificar el proyecto, pero no autoriza crear reuniones por si sola.
 
-Las reuniones virtuales o hibridas tambien muestran el boton `Entrar en la app`. Ese boton abre una sala de video dentro de la propia agenda usando `@zoom/videosdk-ui-toolkit`.
+La aplicacion admite dos formas de obtener el token OAuth:
+
+- una cuenta organizadora con `GOOGLE_MEET_CLIENT_ID`, `GOOGLE_MEET_CLIENT_SECRET` y `GOOGLE_MEET_REFRESH_TOKEN`;
+- una cuenta de servicio con delegacion de dominio mediante `GOOGLE_MEET_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_MEET_SERVICE_ACCOUNT_PRIVATE_KEY` y `GOOGLE_MEET_IMPERSONATED_USER`.
+
+`GOOGLE_MEET_API_KEY` es opcional y nunca sustituye uno de esos dos metodos OAuth. La API de Google Meet debe estar habilitada en el mismo proyecto de Google Cloud.
 
 Funcionamiento:
 
-1. El usuario pulsa `Entrar en la app`.
-2. La app solicita a `/api/reuniones/videosdk-token` un JWT temporal de Video SDK.
-3. El servidor valida que el usuario sea gestor de reuniones o invitado de esa reunion.
-4. El cliente monta el UI Toolkit en un modal con audio, video, chat, participantes, compartir pantalla, pizarra colaborativa, preview y ajustes.
-5. Al salir o destruirse la sesion, el Toolkit se limpia para permitir entrar de nuevo.
+1. El administrador programa la reunion y activa la generacion automatica.
+2. El backend obtiene un access token OAuth y crea el espacio de Google Meet.
+3. La agenda guarda el enlace y envia convocatorias individuales.
+4. Los invitados confirman mediante su token publico.
+5. Los usuarios acceden con `Entrar en Google Meet` o desde el enlace mostrado tras confirmar.
 
-La pizarra de Zoom queda habilitada dentro de la sala integrada para presentar ideas, planificar reuniones, dibujar esquemas y colaborar en tiempo real. Tambien se activa la exportacion de la pizarra desde el propio Toolkit cuando la cuenta de Zoom y el plan lo permitan. Las APIs REST de Zoom Whiteboard sirven para listar, crear, administrar o exportar pizarras y sesiones archivadas; no son necesarias para mostrar la pizarra durante una reunion en vivo dentro de la agenda.
+La agenda conserva `google_meet_space_name` (`spaces/{space}`) como identificador estable. `google_meet_code` se guarda solo como referencia auxiliar porque Google puede desvincularlo y reutilizarlo. Al cancelar o finalizar una reunion, el backend llama a `spaces.endActiveConference` para cerrar cualquier conferencia activa del espacio.
 
-Variables necesarias para Video SDK:
-
-- `ZOOM_VIDEO_SDK_KEY`
-- `ZOOM_VIDEO_SDK_SECRET`
-- `ZOOM_VIDEO_SDK_SESSION_PASSCODE`
-
-Si no se definen `ZOOM_VIDEO_SDK_KEY` y `ZOOM_VIDEO_SDK_SECRET`, el endpoint devuelve error y no permite abrir la sala integrada.
+Los correos de invitacion usan la URL publica de `NEXT_PUBLIC_APP_URL` y apuntan a `/reuniones/confirmar?token=...`. Esa pantalla es publica, muestra los datos de la convocatoria y permite confirmar, rechazar o marcar asistencia tentativa. El enlace de acceso a la reunion solo se muestra despues de confirmar.
 
 ## Perfil
 
@@ -579,7 +590,7 @@ Ejecutar en Supabase SQL Editor en este orden recomendado:
 12. `supabase/migration_historial_index.sql`
 13. `supabase/migration_auth_policies.sql`
 14. `supabase/migration_reuniones.sql`
-15. `supabase/migration_reuniones_zoom.sql`
+15. `supabase/migration_reuniones_google_meet.sql`
 16. `supabase/migration_calendario_eventos.sql`
 17. `supabase/migration_calendario_festivos_gq.sql`
 

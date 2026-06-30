@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { Poppins } from 'next/font/google'
-import '@zoom/videosdk-ui-toolkit/dist/videosdk-ui-toolkit.css'
 import './globals.css'
 import AppChrome from '@/components/AppChrome'
 

@@ -4,6 +4,7 @@ import { ORGANISMO_COOKIE } from '@/lib/organismo-access'
 import { PUBLIC_REGISTRATION_ROLE_CODES, PUBLIC_REGISTRATION_ROLES, REGISTRATION_DEPARTAMENTOS } from '@/lib/registration-options'
 import { emailsMatch, rejectRateLimited } from '@/lib/request-security'
 import { SEGESA_ORGANISMO_ID } from '@/lib/types'
+import { LEGAL_VERSION } from '@/lib/legal-config'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,8 @@ type RegisterPayload = {
   departamento?: string
   organismoId?: string
   invitacionToken?: string
+  acceptedLegal?: boolean
+  legalVersion?: string
 }
 
 type AdminClient = ReturnType<typeof createAdminSupabaseClient>
@@ -235,6 +238,13 @@ export async function POST(request: Request) {
     const requestedOrganismoId = body.organismoId?.trim() || null
     const invitacionToken = body.invitacionToken?.trim() || null
 
+    if (!body.acceptedLegal || body.legalVersion !== LEGAL_VERSION) {
+      return NextResponse.json(
+        { ok: false, error: 'Debes aceptar la Política de Privacidad y los Términos de uso vigentes.' },
+        { status: 400 }
+      )
+    }
+
     if (!email || !password) {
       return NextResponse.json(
         {
@@ -379,6 +389,8 @@ export async function POST(request: Request) {
         email_confirm: true,
         user_metadata: {
           full_name: fullName,
+          legal_accepted_at: new Date().toISOString(),
+          legal_version: LEGAL_VERSION,
         },
       })
 
