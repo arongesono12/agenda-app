@@ -5,6 +5,7 @@ import { getServerSessionProfile, getOrganismoIdFromRequest, getRoleCodeFromRequ
 import { ADMIN_ROLE_CODES, MANAGER_ROLE_CODES, READER_ROLE_CODES } from '@/lib/access-control'
 import { escapeHtml, sendAgendaEmail } from '@/lib/email/resend'
 import { applyTaskScope, buildTaskScope, isTaskScopeColumnError, type TaskScope } from '@/lib/task-scope'
+import type { Database } from '@/lib/database.types'
 
 export const dynamic = 'force-dynamic'
 
@@ -1105,7 +1106,7 @@ async function recordTaskReassignment({
   const action = previousResponsible ? 'reasignada' : 'asignada'
   const baseObservation = `Tarea ${action} por ${userLabel || 'Sistema'}.`
   const fullObservation = observation ? `${baseObservation}\n\nObservacion: ${observation}` : baseObservation
-  const historyInsert = {
+  const historyInsert: Database['public']['Tables']['historial']['Insert'] = {
     fecha: new Date().toISOString(),
     usuario: userLabel || 'Sistema',
     actor_usuario_id: userId,

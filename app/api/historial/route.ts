@@ -4,6 +4,7 @@ import { escapeHtml, sendAgendaEmail } from '@/lib/email/resend'
 import { createAdminSupabaseClient } from '@/lib/supabase-admin'
 import { getServerSessionProfile, getOrganismoIdFromRequest, getRoleCodeFromRequest } from '@/lib/server-access'
 import { buildTaskScope, isTaskScopeColumnError } from '@/lib/task-scope'
+import type { Database } from '@/lib/database.types'
 import type { Estado, TipoOrden } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -634,7 +635,7 @@ export async function POST(request: Request) {
     const shouldCloseTask = hasAssignments ? allAssignmentsCompleted : shouldComplete
     const nextTaskState = shouldCloseTask ? 'Completado' : nextProgress > 0 && task.estado === 'Pendiente' ? 'En Proceso' : task.estado
 
-    const historyInsert = {
+    const historyInsert: Database['public']['Tables']['historial']['Insert'] = {
       fecha: new Date().toISOString(),
       usuario: userLabel,
       actor_usuario_id: user.id,
